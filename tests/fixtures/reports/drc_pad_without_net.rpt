@@ -1,0 +1,25 @@
+** Drc report for my_board.kicad_pcb **
+** Created on 2026-10-06T16:49:53 **
+** Report includes: Errors, Warnings, Exclusions **
+
+** Found 2 DRC violations **
+[clearance]: Clearance violation ( clearance 0.2000 mm; actual 0.1000 mm)
+    Local override; error
+    @(54.0000 mm, 54.0000 mm): Track [/NET_A] on F.Cu, length 10.0000 mm
+    @(59.1750 mm, 54.7000 mm): Pad 1 [<no net>] of R3 on F.Cu
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(54.0000 mm, 54.0000 mm): Track [/NET_A] on F.Cu, length 10.0000 mm
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **

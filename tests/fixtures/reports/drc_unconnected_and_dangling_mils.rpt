@@ -1,0 +1,47 @@
+** Drc report for my_board.kicad_pcb **
+** Created on 2026-10-06T16:47:24 **
+** Report includes: Errors, Warnings **
+
+** Found 4 DRC violations **
+[copper_edge_clearance]: Board edge clearance violation (board setup constraints edge clearance 19.69 mils; actual 0.00 mils)
+    Rule: board setup constraints edge; error
+    @(1968.50 mils, 1968.50 mils): Segment on Edge.Cuts
+    @(2047.24 mils, 1972.44 mils): Track [/NET_A] on F.Cu, length 314.96 mils
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(2047.24 mils, 1972.44 mils): Track [/NET_A] on F.Cu, length 314.96 mils
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(2251.97 mils, 2318.90 mils): Track [/NET_B] on F.Cu, length 122.05 mils
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(2440.94 mils, 2559.06 mils): Track [/GND] on F.Cu, length 157.48 mils
+
+** Found 4 unconnected pads **
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(2250.98 mils, 2283.46 mils): Pad 1 [/NET_A] of R1 on F.Cu
+    @(2047.24 mils, 1972.44 mils): Track [/NET_A] on F.Cu, length 314.96 mils
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(2250.98 mils, 2283.46 mils): Pad 1 [/NET_A] of R1 on F.Cu
+    @(2723.43 mils, 2283.46 mils): Pad 1 [/NET_A] of R2 on F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(2315.94 mils, 2283.46 mils): Pad 2 [/NET_B] of R1 on F.Cu
+    @(2251.97 mils, 2318.90 mils): Track [/NET_B] on F.Cu, length 122.05 mils
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(2788.39 mils, 2283.46 mils): Pad 2 [/NET_B] of R2 on F.Cu
+    @(2315.94 mils, 2283.46 mils): Pad 2 [/NET_B] of R1 on F.Cu
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **
