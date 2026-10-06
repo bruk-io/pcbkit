@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  # No KiCad on the runner yet, so tests marked kicad or e2e are left out. Everything
+  # else (the unit tests and the integration tests on a faked machine) runs on the
+  # oldest and newest Python pcbkit supports: 3.9 is the one KiCad bundles.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Show the interpreter that will run the tests
+        run: uv run --python ${{ matrix.python-version }} python --version
+      - run: uv run --python ${{ matrix.python-version }} pytest tests -m "not kicad and not e2e" -q
