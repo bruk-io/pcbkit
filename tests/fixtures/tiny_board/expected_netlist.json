@@ -1,0 +1,50 @@
+{
+ "components": {
+  "D1": {
+   "fields": {
+    "Datasheet": "",
+    "Description": "LED Green 0603",
+    "Footprint": "LED_SMD:LED_0603_1608Metric",
+    "MPN": "GRN-0603",
+    "Manufacturer": "Acme"
+   },
+   "footprint": "LED_SMD:LED_0603_1608Metric",
+   "value": "Green"
+  },
+  "J1": {
+   "fields": {
+    "Datasheet": "",
+    "Description": "Supply header: 3V3 / GND",
+    "Footprint": "tiny:Header_1x02_P2.54mm",
+    "MPN": "HDR-1X02",
+    "Manufacturer": "Acme"
+   },
+   "footprint": "tiny:Header_1x02_P2.54mm",
+   "value": "Supply"
+  },
+  "R1": {
+   "fields": {
+    "Datasheet": "",
+    "Description": "Resistor 330 0603 1%",
+    "Footprint": "tiny:R_Vendored",
+    "MPN": "0603 330 1%"
+   },
+   "footprint": "tiny:R_Vendored",
+   "value": "330"
+  }
+ },
+ "nets": {
+  "/+3V3": [
+   "J1.1",
+   "R1.1"
+  ],
+  "/GND": [
+   "D1.1",
+   "J1.2"
+  ],
+  "/LED_A": [
+   "D1.2",
+   "R1.2"
+  ]
+ }
+}
