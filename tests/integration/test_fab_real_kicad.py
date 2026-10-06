@@ -394,7 +394,7 @@ def test_a_part_in_the_design_but_not_on_the_board_is_an_error(
 ) -> None:
     design = DESIGN + 'R("R3", "10k", "NET_A", "GND", "Block")\n'
     project = make_project(tmp_path, tiny, design=design)
-    with pytest.raises(bom.BomError, match="R3 are in design.py but not on the board"):
+    with pytest.raises(bom.BomError, match="parts that are not on the board: R3"):
         export_fab(project, render=False)
 
 

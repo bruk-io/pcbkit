@@ -88,8 +88,8 @@ def export_fab(project: Project, render: bool = True) -> FabResult:
     absent = [p["ref"] for p in bom.fitted(parts) if p["ref"] not in footprints]
     if absent:
         raise bom.BomError(
-            f"{', '.join(absent)} are in design.py but not on the board: "
-            "run `pcbkit build` again"
+            f"design.py has parts that are not on the board: {', '.join(absent)}. "
+            "Run `pcbkit build` again"
         )
     lines = bom.bom_lines(
         parts, {ref for ref, through in footprints.items() if through}, overrides
