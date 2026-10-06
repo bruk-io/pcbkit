@@ -136,8 +136,9 @@ provides:
 ```python
 pad(board, ref, num) -> PAD                  # pad `num` of the footprint `ref`
 ppos(board, ref, num) -> (x, y)              # that pad's centre, in layout mm
-track(board, pts, width, netname, layer=F_Cu) -> None
-                                             # a locked track through the points `pts`
+track(board, pts, width, netname, layer=None) -> None
+                                             # a locked track through the points `pts`;
+                                             # `layer` None means F_Cu
 via(board, x, y, netname, d=0.8, drill=0.4) -> None
                                              # a locked through-hole via
 keepout(board, x0, y0, x1, y1, tracks=True, vias=True, pours=True,
@@ -150,6 +151,13 @@ rect(x0, y0, x1, y1) -> list[(x, y)]         # a rectangle's corners, for `zone`
 clear_spot(board, near, net="GND", via_d=0.6, drill=0.3,
            reach=2.5, gap=0.25) -> (x, y)    # nearest spot a via and its track fit
 ```
+
+The module also has the outline and text helpers that placement uses (`add_line`,
+`add_arc`, `add_text`), `N(board, name)` for a net, and the engine's shields against
+pcbnew hazards on KiCad 10 (`remove`, `point_in_track`, `set_copper`). A layer argument
+that defaults to `None` means the layer the helper names in its docstring (F_Cu for
+`track`): that is how the module imports on a machine without KiCad. Any number may be a
+numpy scalar.
 
 Net names passed to these helpers have no leading `/`: `track(board, pts, 1.0, "VIN")`
 finds the net `/VIN`. Only the `NETCLASSES` patterns carry the `/`, because they are

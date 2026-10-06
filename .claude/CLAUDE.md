@@ -21,13 +21,33 @@ uv run pcbkit doctor                        # what is installed on this machine
 uv run pytest tests/unit -q                 # no KiCad needed
 uv run --python 3.9 pytest tests/unit -q    # the 3.9 floor
 uv run pytest -m "not kicad and not e2e" -q # everything CI runs
-uv run pytest tests/integration -m kicad    # needs a real KiCad 10 on this machine
+uv run pytest tests/integration -m kicad    # real KiCad, but only the tests that need no pcbnew
+.venv-kicad/bin/python -m pytest -m kicad -q  # real KiCad and pcbnew: see "Tests that need pcbnew"
 uv run ruff check . && uv run ruff format --check .
 ```
 
 `uv run --python 3.9 ...` recreates `.venv` on 3.9, and the next plain `uv run` flips it
 back to the pinned 3.14 (`.python-version`). Check `uv run python --version` before
 trusting a result.
+
+## Tests that need pcbnew
+
+`pcbnew` only imports under KiCad's own Python, which `uv run` never uses, so the tests
+that build and check real boards (`tests/integration/test_kicad_core.py`) run in a second,
+untracked environment, `.venv-kicad`, made on KiCad's interpreter with its site-packages
+visible:
+
+```
+KICAD_PY=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
+uv venv --python $KICAD_PY --system-site-packages .venv-kicad
+VIRTUAL_ENV=.venv-kicad uv pip install -e . pytest
+.venv-kicad/bin/python -m pytest -m kicad -q
+```
+
+In any other Python those modules skip themselves at import (`pytest.importorskip`), with
+the reason on the skip line, and CI skips them too. `kicad-cli` must be findable
+(`pcbkit doctor` says). Hazards that break a whole process, such as freeing a removed
+item, are shown in a child Python so they cannot take the test run down with them.
 
 ## Python 3.9 floor
 
@@ -52,10 +72,18 @@ pcbkit/cli.py         click group; one function per command; a stub fails with
 pcbkit/project.py     find pcbkit.toml, validate it, import the project's modules by path
 pcbkit/doctor.py      `pcbkit doctor`: the checks, fix hints and report text
 pcbkit/kicad/env.py   find KiCad, kicad-cli, KiCad's Python, Java, Freerouting, ngspice, ...
+pcbkit/kicad/sexp.py  parse and write KiCad s-expressions
+pcbkit/kicad/cli.py   kicad-cli wrappers (ERC, netlist, DRC, Gerbers, drill, positions, SVG,
+                      3D render) and the pure parsers for the ERC and DRC reports
+pcbkit/kicad/board.py pcbnew helpers (units, nets, tracks, vias, zones, keep-outs, text)
+                      and the shields for KiCad 10's hazards; imports without pcbnew
 docs/                 project-interface.md
 tests/unit/           one module each, nothing real touched; the fake machine is automatic
 tests/integration/    several modules together; the tests marked kicad need real KiCad
 tests/fake_machine.py, tests/conftest.py   the `machine` fixture: a fake PATH, HOME and OS
+tests/fake_pcbnew.py  a pcbnew stand-in (unit tests): the `fake_pcbnew` fixture installs it
+tests/tiny_board.py   builds a small real board and schematic, in production order
+tests/fixtures/reports/  real KiCad 10.0.6 ERC and DRC reports from generic boards
 ```
 
 ## Rules
@@ -75,6 +103,14 @@ tests/fake_machine.py, tests/conftest.py   the `machine` fixture: a fake PATH, H
   edit source in place to do that, delete `__pycache__` between runs: a `.pyc` is trusted
   by whole-second mtime and size, so an equal-size edit that is undone within the second
   is served stale and the next run tests the mistake, not the code.
+- pcbnew hazards (details in the `pcbkit/kicad/board.py` docstring): never call
+  `HitTest` (a unit test scans `pcbkit/` for it; use `board.point_in_track`); take items
+  off a board with `board.remove` and never let go of them; go through `board.mm` and
+  `board.pt` so numpy scalars become floats; write the stackup copper with
+  `board.set_copper` after the last `SaveBoard`. Layout millimetres and KiCad file
+  millimetres differ by (50, 50): reports and saved files hold the latter.
+- Report fixtures are real kicad-cli output on small generic boards. Make a new one by
+  running kicad-cli on one, then rename the board and anything specific.
 - Generated files in a board project (`kicad/`, `out/`, `golden/`, `fab/`) are never
   hand-edited.
 - Examples in docs and tests are generic (`my-board`, plain part references). Never paste
