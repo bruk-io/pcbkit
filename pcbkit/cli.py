@@ -1,6 +1,6 @@
 """The pcbkit command line.
 
-One function per command, in workflow order. Every command except ``doctor`` is a stub
+One function per command, in workflow order. A command that is not built yet is a stub
 that fails with "not implemented yet (WPn)", naming the work package that fills it in.
 
 Command functions are called ``<command>_cmd`` and registered under an explicit name, so
@@ -21,8 +21,9 @@ from typing import NoReturn
 
 import click
 
-from pcbkit import __version__, doctor
+from pcbkit import __version__, doctor, sch
 from pcbkit.kicad import env
+from pcbkit.project import load_project
 
 
 class _WorkflowGroup(click.Group):
@@ -102,9 +103,16 @@ def setup_cmd() -> None:
 def sch_cmd() -> None:
     """Generate the schematic, run ERC and export the netlist.
 
-    Not implemented yet (WP3).
+    Builds the project's own symbol and footprint libraries, draws the schematic from
+    design.py, checks it with KiCad's ERC and exports the netlist, all into kicad/.
+    Needs kicad-cli but not pcbnew. Exits 1 if ERC reports errors; warnings are listed
+    and do not fail it.
     """
-    _not_implemented("WP3")
+    proj = load_project()
+    result = sch.build_schematic(proj)
+    click.echo(sch.format_result(result, proj.root))
+    if result.erc.errors:
+        click.get_current_context().exit(1)
 
 
 @cli.command("build")

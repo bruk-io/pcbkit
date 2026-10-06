@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+import shutil
+import sys
 import uuid
 from collections.abc import Iterator
 from dataclasses import replace
@@ -10,12 +12,18 @@ from pathlib import Path
 
 import click
 import pytest
+from click.testing import CliRunner, Result
 
 from pcbkit import sch
+from pcbkit.cli import cli
 from pcbkit.design import Design, DesignError, load_design
+from pcbkit.kicad import env
+from pcbkit.kicad.env import Run
 from pcbkit.kicad.sexp import find, findall, parse
-from pcbkit.project import BoardConfig
-from tests.board_files import restored_imports
+from pcbkit.libs import ProjectLibs
+from pcbkit.project import BoardConfig, Project, load_project
+from tests.board_files import TOML, restored_imports, write_file
+from tests.fake_machine import FakeMachine
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "golden"
 STOCK = GOLDEN / "symbols"
@@ -379,3 +387,454 @@ def test_write_schematic_writes_the_stem_dot_kicad_sch(
     data = path.read_bytes()
     assert b"\r" not in data
     assert data.decode("utf-8") == make(golden)
+
+
+# --- reading an ERC report --------------------------------------------------------
+
+CLEAN_REPORT = """\
+ERC report (2026-10-06T11:51:26, Encoding UTF8)
+Report includes: Errors, Warnings
+
+***** Sheet /
+
+ ** ERC messages: 0  Errors 0  Warnings 0
+
+ ** Ignored checks:
+    - Global label only appears once in the schematic
+    - Four connection points are joined together
+"""
+
+ERROR_REPORT = """\
+ERC report (2026-10-06T16:29:10, Encoding UTF8)
+Report includes: Errors, Warnings
+
+***** Sheet /
+[pin_to_pin]: Pins of type Power output and Power output are connected
+    ; error
+    @(33.02 mm, 363.22 mm): Symbol #FLG02 Pin 1 [Power output, Line]
+    @(15.24 mm, 386.08 mm): Symbol #FLG99 Pin 1 [Power output, Line]
+[pin_to_pin]: Pins of type Power output and Power output are connected
+    ; error
+    @(116.84 mm, 363.22 mm): Symbol #FLG98 Pin 1 [Power output, Line]
+    @(15.24 mm, 386.08 mm): Symbol #FLG99 Pin 1 [Power output, Line]
+
+ ** ERC messages: 2  Errors 2  Warnings 0
+
+ ** Ignored checks:
+    - Global label only appears once in the schematic
+"""
+
+WARNING_REPORT = (
+    "ERC report (2026-10-06T16:25:42, Encoding UTF8)\n"
+    "Report includes: Errors, Warnings\n"
+    "\n"
+    "***** Sheet /\n"
+    "[footprint_link_issues]: The current configuration does not include "
+    "the footprint library 'mylib'\n"
+    "    ; warning\n"
+    "    @(30.48 mm, 27.94 mm): Symbol J1 [Conn_01x02]\n"
+    "\n"
+    " ** ERC messages: 1  Errors 0  Warnings 1\n"
+)
+
+
+def test_a_clean_report_has_no_errors_warnings_or_findings() -> None:
+    """Read the counts and find nothing to list."""
+    assert sch.parse_erc_report(CLEAN_REPORT) == sch.ErcReport(0, 0, ())
+
+
+def test_the_counts_and_every_finding_are_read_from_an_error_report() -> None:
+    """Take the counts from the summary line and each finding with where it is."""
+    report = sch.parse_erc_report(ERROR_REPORT)
+    assert (report.errors, report.warnings) == (2, 0)
+    assert len(report.violations) == 2
+    first = report.violations[0]
+    assert first.code == "pin_to_pin"
+    assert first.severity == "error"
+    assert first.message == "Pins of type Power output and Power output are connected"
+    assert first.where == (
+        "@(33.02 mm, 363.22 mm): Symbol #FLG02 Pin 1 [Power output, Line]",
+        "@(15.24 mm, 386.08 mm): Symbol #FLG99 Pin 1 [Power output, Line]",
+    )
+    assert report.violations[1].where[0].startswith("@(116.84 mm")
+
+
+def test_a_warning_is_counted_apart_from_errors() -> None:
+    """Report a warning as a warning."""
+    report = sch.parse_erc_report(WARNING_REPORT)
+    assert (report.errors, report.warnings) == (0, 1)
+    assert report.violations[0].severity == "warning"
+    assert report.violations[0].code == "footprint_link_issues"
+
+
+def test_a_report_with_no_summary_line_is_an_error() -> None:
+    """Refuse a file that is not an ERC report rather than call it clean."""
+    with pytest.raises(click.ClickException, match="no 'ERC messages' summary"):
+        sch.parse_erc_report("***** Sheet /\n")
+    with pytest.raises(click.ClickException, match="no 'ERC messages' summary"):
+        sch.parse_erc_report("")
+
+
+# --- running kicad-cli ------------------------------------------------------------
+
+NETLIST = "(export (version E))\n"
+
+
+class FakeKicadCli:
+    """Stand in for kicad-cli's `sch erc` and `sch export netlist`.
+
+    Each command writes the file kicad-cli would, with the text given, and records the
+    arguments and which project files existed at the time it ran. Anything else (the
+    `--version` that finds the tool) goes to the fake machine.
+    """
+
+    def __init__(self, machine: FakeMachine, erc_text: str = CLEAN_REPORT) -> None:
+        self.machine = machine
+        self.erc_text = erc_text
+        self.returncode = 0
+        self.write_files = True
+        self.calls: list[list[str]] = []
+        self.seen: dict[str, set[str]] = {}
+
+    def __call__(self, args: list[str], timeout: float = 20.0) -> Run:
+        """Answer one command the way ``pcbkit.kicad.env._run`` would."""
+        words = list(args)
+        if words[1:3] == ["sch", "erc"]:
+            kind, out, text = "erc", Path(words[words.index("-o") + 1]), self.erc_text
+        elif words[1:4] == ["sch", "export", "netlist"]:
+            kind, out, text = "netlist", Path(words[words.index("-o") + 1]), NETLIST
+        else:
+            return self.machine.run(args, timeout)
+        self.calls.append(words)
+        self.seen[kind] = {p.name for p in out.parent.iterdir()}
+        if self.write_files:
+            out.write_text(text, encoding="utf-8")
+        return Run(self.returncode, "wx assertion noise\n" if self.returncode else "")
+
+
+def install_kicad(
+    machine: FakeMachine, monkeypatch: pytest.MonkeyPatch
+) -> FakeKicadCli:
+    """Put a kicad-cli and KiCad's symbol libraries on the fake machine."""
+    shutil.copytree(STOCK, machine.linux_share / "symbols")
+    (machine.linux_share / "footprints").mkdir(parents=True)
+    machine.exe(
+        machine.usr_bin / "kicad-cli", output="KiCad 10.0.6\n", on_path="kicad-cli"
+    )
+    fake = FakeKicadCli(machine)
+    monkeypatch.setattr(env, "_run", fake)
+    return fake
+
+
+@pytest.fixture
+def kicad(machine: FakeMachine, monkeypatch: pytest.MonkeyPatch) -> FakeKicadCli:
+    """Return the fake kicad-cli, installed on the fake machine."""
+    return install_kicad(machine, monkeypatch)
+
+
+FOOTPRINTS_PY = f"""\
+from pathlib import Path
+
+from pcbkit.kicad.sexp import findall, parse
+
+LIB = "proj"
+
+
+def symbols():
+    text = Path({str(PROJECT_LIBS["proj"])!r}).read_text(encoding="utf-8")
+    return findall(parse(text), "symbol")
+"""
+
+
+def make_project(root: Path) -> Project:
+    """Make a project of the golden design, with the golden board's own symbol."""
+    write_file(root / "pcbkit.toml", TOML)
+    shutil.copy(GOLDEN / "design.py", root / "design.py")
+    write_file(root / "footprints.py", FOOTPRINTS_PY)
+    return load_project(root)
+
+
+def test_erc_is_run_on_the_schematic_and_the_report_is_read(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Pass kicad-cli the report and schematic paths, and parse what it wrote."""
+    kicad.erc_text = ERROR_REPORT
+    schematic = tmp_path / "x.kicad_sch"
+    report = tmp_path / "erc.rpt"
+    result = sch.run_erc("kicad-cli", schematic, report)
+    assert kicad.calls == [
+        ["kicad-cli", "sch", "erc", "-o", str(report), str(schematic)]
+    ]
+    assert (result.errors, result.warnings) == (2, 0)
+
+
+def test_a_stale_report_is_not_mistaken_for_a_new_one(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Delete the old report first, so a failed run cannot pass on yesterday's."""
+    report = tmp_path / "erc.rpt"
+    report.write_text(CLEAN_REPORT)
+    kicad.write_files = False
+    with pytest.raises(click.ClickException, match="could not run ERC"):
+        sch.run_erc("kicad-cli", tmp_path / "x.kicad_sch", report)
+
+
+def test_a_failing_erc_run_shows_what_kicad_cli_said(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Report the exit status and kicad-cli's own words."""
+    kicad.returncode = 3
+    with pytest.raises(click.ClickException, match="wx assertion noise"):
+        sch.run_erc("kicad-cli", tmp_path / "x.kicad_sch", tmp_path / "erc.rpt")
+
+
+def test_the_netlist_is_exported_in_kicad_s_expression_format(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Ask for the kicadsexpr format and write where told."""
+    net = tmp_path / "board.net"
+    sch.export_netlist("kicad-cli", tmp_path / "x.kicad_sch", net)
+    assert kicad.calls == [
+        [
+            "kicad-cli",
+            "sch",
+            "export",
+            "netlist",
+            "--format",
+            "kicadsexpr",
+            "-o",
+            str(net),
+            str(tmp_path / "x.kicad_sch"),
+        ]
+    ]
+    assert net.read_text() == NETLIST
+
+
+def test_a_netlist_export_that_writes_nothing_is_an_error(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Fail when the file is not there afterwards, whatever the exit status."""
+    kicad.write_files = False
+    with pytest.raises(click.ClickException, match="could not export the netlist"):
+        sch.export_netlist("kicad-cli", tmp_path / "x.kicad_sch", tmp_path / "b.net")
+
+
+# --- build_schematic --------------------------------------------------------------
+
+
+def test_build_writes_the_libraries_the_schematic_the_report_and_the_netlist(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Make every file of the sch step in kicad/ and report what was made."""
+    result = sch.build_schematic(make_project(tmp_path), DATE)
+    out = tmp_path / "kicad"
+    assert result.schematic == out / "my_board.kicad_sch"
+    assert result.netlist == out / "my_board.net"
+    assert result.erc_report == out / "erc.rpt"
+    assert result.parts == 9
+    assert result.libs.nickname == "proj"
+    assert (result.erc.errors, result.erc.warnings) == (0, 0)
+    assert sorted(p.name for p in out.iterdir()) == [
+        "erc.rpt",
+        "fp-lib-table",
+        "my_board.kicad_pro",
+        "my_board.kicad_sch",
+        "my_board.net",
+        "proj.kicad_sym",
+        "sym-lib-table",
+    ]
+
+
+def test_the_schematic_draws_the_design_with_the_projects_own_symbol(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Find the project library's symbol in the schematic, and nowhere else's."""
+    sch.build_schematic(make_project(tmp_path), DATE)
+    tree = parse((tmp_path / "kicad" / "my_board.kicad_sch").read_text())
+    names = [s[1] for s in findall(find(tree, "lib_symbols"), "symbol")]
+    assert "proj:Probe" in names
+    assert find(find(tree, "title_block"), "title") == ["title", "My Board"]
+
+
+def test_erc_sees_the_library_tables_and_project_file_already_written(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Write the tables and project file first: kicad-cli ignores the tables without."""
+    sch.build_schematic(make_project(tmp_path), DATE)
+    assert {"sym-lib-table", "fp-lib-table", "my_board.kicad_pro"} <= kicad.seen["erc"]
+    assert "my_board.kicad_sch" in kicad.seen["erc"]
+    assert {"my_board.kicad_sch", "erc.rpt"} <= kicad.seen["netlist"]
+
+
+def test_erc_errors_do_not_stop_the_netlist(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Export the netlist anyway and let the caller decide what the counts mean."""
+    kicad.erc_text = ERROR_REPORT
+    result = sch.build_schematic(make_project(tmp_path), DATE)
+    assert result.erc.errors == 2
+    assert result.netlist.is_file()
+
+
+def test_a_missing_kicad_cli_is_reported_before_anything_is_written(
+    machine: FakeMachine, tmp_path: Path
+) -> None:
+    """Say so and point at doctor, leaving kicad/ alone."""
+    project_ = make_project(tmp_path)
+    with pytest.raises(click.ClickException, match="kicad-cli not found.*doctor"):
+        sch.build_schematic(project_)
+    assert not (tmp_path / "kicad").exists()
+
+
+def test_missing_kicad_libraries_are_reported(
+    machine: FakeMachine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fail with the library message, not a traceback, when KiCad's share is absent."""
+    machine.exe(
+        machine.usr_bin / "kicad-cli", output="KiCad 10.0.6\n", on_path="kicad-cli"
+    )
+    with pytest.raises(click.ClickException, match="KiCad libraries not found"):
+        sch.build_schematic(make_project(tmp_path))
+
+
+def test_a_mistake_in_design_py_stops_the_build(
+    kicad: FakeKicadCli, tmp_path: Path
+) -> None:
+    """Fail on the design's own error before ERC is run."""
+    project_ = make_project(tmp_path)
+    (tmp_path / "design.py").write_text("X = 1\n")
+    with pytest.raises(DesignError, match="defines no parts"):
+        sch.build_schematic(project_)
+    assert kicad.calls == []
+
+
+# --- the command ------------------------------------------------------------------
+
+
+def invoke_sch(root: Path, monkeypatch: pytest.MonkeyPatch) -> Result:
+    """Run `pcbkit sch` with ``root`` as the current directory."""
+    monkeypatch.chdir(root)
+    return CliRunner().invoke(cli, ["sch"])
+
+
+def test_a_clean_run_prints_each_step_and_exits_0(
+    kicad: FakeKicadCli, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Show libraries, schematic, ERC counts and netlist."""
+    make_project(tmp_path)
+    result = invoke_sch(tmp_path, monkeypatch)
+    assert result.exit_code == 0
+    assert result.output.splitlines() == [
+        "libraries  proj: 1 symbol, 0 footprints",
+        f"schematic  kicad/my_board.kicad_sch ({9} parts)",
+        "ERC        0 errors, 0 warnings (kicad/erc.rpt)",
+        "netlist    kicad/my_board.net",
+    ]
+
+
+def test_errors_are_listed_and_the_exit_code_is_1(
+    kicad: FakeKicadCli, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """List each finding with where it is, still write the netlist, and exit 1."""
+    kicad.erc_text = ERROR_REPORT
+    make_project(tmp_path)
+    result = invoke_sch(tmp_path, monkeypatch)
+    assert result.exit_code == 1
+    assert "ERC        2 errors, 0 warnings (kicad/erc.rpt)" in result.output
+    assert (
+        "  error [pin_to_pin] Pins of type Power output and Power output are connected"
+        in result.output
+    )
+    assert "    @(33.02 mm, 363.22 mm): Symbol #FLG02 Pin 1" in result.output
+    assert "netlist    kicad/my_board.net" in result.output
+
+
+def test_warnings_are_listed_but_do_not_fail_the_run(
+    kicad: FakeKicadCli, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit 0 with a warning, and still show it."""
+    kicad.erc_text = WARNING_REPORT
+    make_project(tmp_path)
+    result = invoke_sch(tmp_path, monkeypatch)
+    assert result.exit_code == 0
+    assert "ERC        0 errors, 1 warning (kicad/erc.rpt)" in result.output
+    assert "  warning [footprint_link_issues]" in result.output
+
+
+def test_outside_a_project_the_command_says_what_to_do(
+    kicad: FakeKicadCli, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Name the missing pcbkit.toml, with exit code 1."""
+    result = invoke_sch(tmp_path, monkeypatch)
+    assert result.exit_code == 1
+    assert "no pcbkit.toml" in result.output
+
+
+def test_a_design_mistake_is_a_message_not_a_traceback(
+    kicad: FakeKicadCli, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Print the design error with exit code 1."""
+    make_project(tmp_path)
+    (tmp_path / "design.py").write_text("X = 1\n")
+    result = invoke_sch(tmp_path, monkeypatch)
+    assert result.exit_code == 1
+    assert "defines no parts" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_the_command_does_not_need_pcbnew(
+    kicad: FakeKicadCli, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run in a Python where pcbnew cannot be imported: sch is a tier 1 command."""
+    monkeypatch.setitem(sys.modules, "pcbnew", None)
+    make_project(tmp_path)
+    assert invoke_sch(tmp_path, monkeypatch).exit_code == 0
+
+
+# --- the printed result -----------------------------------------------------------
+
+
+def result_with(
+    erc: sch.ErcReport, libs: ProjectLibs | None = None
+) -> sch.SchematicResult:
+    """Return a SchematicResult for a project rooted at /p, with the given ERC."""
+    kicad_dir = Path("/p/kicad")
+    return sch.SchematicResult(
+        schematic=kicad_dir / "b.kicad_sch",
+        netlist=kicad_dir / "b.net",
+        erc_report=kicad_dir / "erc.rpt",
+        parts=1,
+        libs=libs or ProjectLibs("b"),
+        erc=erc,
+    )
+
+
+def test_a_project_without_libraries_prints_no_libraries_line() -> None:
+    """Leave the libraries line out when there is nothing of the project's own."""
+    text = sch.format_result(result_with(sch.ErcReport(0, 0)), Path("/p"))
+    assert text.splitlines() == [
+        "schematic  kicad/b.kicad_sch (1 part)",
+        "ERC        0 errors, 0 warnings (kicad/erc.rpt)",
+        "netlist    kicad/b.net",
+    ]
+
+
+def test_counts_use_the_singular_for_one() -> None:
+    """Write "1 error, 1 warning"."""
+    text = sch.format_result(result_with(sch.ErcReport(1, 1)), Path("/p"))
+    assert "ERC        1 error, 1 warning (kicad/erc.rpt)" in text
+
+
+def test_only_the_first_findings_are_listed() -> None:
+    """Stop at the limit and say how many more the report holds."""
+    findings = tuple(sch.Violation(f"c{i}", "error", f"m{i}") for i in range(5))
+    text = sch.format_result(result_with(sch.ErcReport(5, 0, findings)), Path("/p"), 3)
+    assert "[c2] m2" in text
+    assert "[c3]" not in text
+    assert "  ... and 2 more in kicad/erc.rpt" in text
+
+
+def test_a_path_outside_the_project_is_shown_in_full() -> None:
+    """Fall back to the whole path when it is not under the root."""
+    text = sch.format_result(result_with(sch.ErcReport(0, 0)), Path("/elsewhere"))
+    assert "schematic  /p/kicad/b.kicad_sch" in text
