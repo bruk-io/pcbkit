@@ -51,7 +51,7 @@ def entry_lines(text: str) -> Counter[str]:
 def test_the_fixtures_are_all_there() -> None:
     """Guard the parametrised tests below against an empty glob."""
     assert len(DRC_FILES) >= 6
-    assert len(ERC_FILES) >= 4
+    assert len(ERC_FILES) >= 5
 
 
 # --- DRC ---------------------------------------------------------------------------
@@ -234,6 +234,14 @@ def test_an_erc_entry_carries_severity_sheet_position_and_no_net() -> None:
     assert severities["unconnected_wire_endpoint"] == "warning"
     assert severities["no_connect_dangling"] == "warning"
     assert severities["label_dangling"] == "error"
+
+
+def test_erc_entries_are_grouped_by_sheet_under_one_set_of_totals() -> None:
+    report = erc_of("erc_two_sheets.rpt")
+    assert report.summary == "ERC messages: 8  Errors 8  Warnings 0"
+    assert [v.section for v in report.violations] == ["/"] * 4 + ["/Sub/"] * 4
+    assert report.categories == {"pin_not_connected": 8}
+    assert len(report.violations) == report.messages
 
 
 def test_erc_positions_come_out_in_millimetres_from_mils() -> None:

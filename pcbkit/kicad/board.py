@@ -18,9 +18,9 @@ with no KiCad. The helpers that need no pcbnew (``rect``, ``segment_distance``,
 
 Four pcbnew hazards on KiCad 10 are shielded here, so no caller has to remember them:
 
-* ``mm`` (and so ``pt``) turn numpy scalars into plain floats. pcbnew's ``FromMM``
-  checks ``type(x) in [int, float]``, so even ``np.float64``, which is a float
-  subclass, raises TypeError.
+* ``mm`` turns numpy scalars into plain floats, and so do ``pt`` and every helper built
+  on it. pcbnew's ``FromMM`` checks ``type(x) in [int, float]``, so even ``np.float64``,
+  which is a float subclass, raises TypeError.
 * ``remove`` keeps every removed item referenced for the life of the process. Letting
   Python free one breaks pcbnew's list wrappers for the whole process (see ``remove``).
 * ``point_in_track`` does pure geometry where ``PCB_TRACK.HitTest`` would be called.
@@ -238,8 +238,10 @@ def clear_spot(
 ) -> tuple[float, float]:
     """Return the nearest (x, y) to ``near`` where a via and a track to it clear copper.
 
-    "Clears" means ``gap`` mm from every item of another net than ``net``, and outside
-    every keep-out that bans vias. Raise SystemExit if nothing within ``reach`` fits.
+    "Clear" means ``gap`` mm from every item of a net other than ``net``, the usual
+    spacing from every hole, and outside every keep-out that bans vias. The candidates
+    lie on a 0.25 mm grid between 0.6 mm and ``reach`` from ``near``, nearest first.
+    Raise SystemExit if none fits.
     """
     pcbnew = _pcbnew()
     others = [t for t in board.GetTracks() if t.GetNetname() != "/" + net]
