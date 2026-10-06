@@ -31,14 +31,13 @@ WORKFLOW = [
 ]
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
-# is the independent record of who fills in what: `new` and `setup` are WP11, `build` is
-# WP4 (it chains sch and placement), route, promote and finalize are WP5, quote is WP6,
-# check, mutants and report are WP7, compare and shots are WP8. `sch` was WP3 and is
-# built (tests/unit/test_sch.py), so it has no row.
+# is the independent record of who fills in what: `new` and `setup` are WP11, route,
+# promote and finalize are WP5, quote is WP6, check, mutants and report are WP7, compare
+# and shots are WP8. `sch` (WP3) and `build` (WP4) are built (tests/unit/test_sch.py and
+# test_build.py), so they have no row.
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
-    "build": ("WP4", ["build"]),
     "route": ("WP5", ["route"]),
     "promote": ("WP5", ["promote"]),
     "finalize": ("WP5", ["finalize"]),
@@ -127,7 +126,7 @@ def test_every_command_has_help_that_names_what_it_does() -> None:
 
 def test_every_command_that_is_not_built_has_a_stub_test() -> None:
     """Fail when a command is added without a row in STUBS."""
-    assert set(cli.commands) - {"doctor", "sch"} == set(STUBS)
+    assert set(cli.commands) - {"doctor", "sch", "build"} == set(STUBS)
 
 
 @pytest.mark.parametrize("name", sorted(STUBS))
@@ -192,11 +191,16 @@ def test_stubs_do_not_need_pcbnew(monkeypatch: pytest.MonkeyPatch) -> None:
     """Say "not implemented yet" for a tier 2 stub even where pcbnew cannot import.
 
     The tier 2 commands will call require_pcbnew() first once they are implemented;
-    the stubs deliberately do not (see the cli module docstring).
+    the stubs deliberately do not (see the cli module docstring). Whichever tier 2
+    commands are still stubs are tried, so this needs no edit when one is built.
     """
     monkeypatch.setitem(sys.modules, "pcbnew", None)
-    result = invoke("build")
-    assert result.output.strip() == "Error: not implemented yet (WP4)"
+    tier2 = {"route", "promote", "finalize", "check", "mutants", "compare", "shots"}
+    stubs = sorted(tier2 & set(STUBS))
+    assert stubs
+    for name in stubs:
+        wp, argv = STUBS[name]
+        assert invoke(*argv).output.strip() == f"Error: not implemented yet ({wp})"
 
 
 # --- doctor -----------------------------------------------------------------------

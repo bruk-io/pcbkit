@@ -119,9 +119,25 @@ def sch_cmd() -> None:
 def build_cmd() -> None:
     """Generate the schematic and netlist, then place the board.
 
-    Not implemented yet (WP4).
+    Runs `pcbkit sch`, then builds kicad/<stem>.kicad_pcb: each footprint of the
+    netlist at its position in layout.py, the outline, the mounting holes and the
+    stackup. A part with no position is parked below the board and listed. ERC
+    findings are listed too: the board is placed anyway, and the exit code is 1 if ERC
+    reported errors. Needs pcbnew.
     """
-    _not_implemented("WP4")
+    env.require_pcbnew()
+    from pcbkit import place
+
+    proj = load_project()
+    result = sch.build_schematic(proj)
+    click.echo(sch.format_erc(result.erc, result.erc_report, proj.root))
+    placed = place.place_board(proj)
+    click.echo(f"placed {placed.placed}, missing: {placed.missing}")
+    if placed.missing:
+        click.echo("  (parked below the board: give each a position in layout.py)")
+    if result.erc.errors:
+        click.echo("ERC reported errors: fix them in design.py before routing.")
+        click.get_current_context().exit(1)
 
 
 @cli.command("route")
