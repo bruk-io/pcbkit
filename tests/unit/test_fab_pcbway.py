@@ -218,10 +218,10 @@ def lines_with_everything() -> list:
     return [
         bom_line(1, 3, "C1,C2,C3"),
         bom_line(2, 2, "R1,R2"),
-        bom_line(3, 1, "U1", "VQFN-24-1EP_4x4mm_P0.5mm"),
-        bom_line(4, 1, "U2", "LFBGA-100_8x8mm"),
-        bom_line(5, 1, "U3", "LQFP-48_7x7mm_P0.5mm"),
-        bom_line(6, 1, "U4", "SOT-23"),
+        bom_line(3, 1, "IC1", "VQFN-24-1EP_4x4mm_P0.5mm"),
+        bom_line(4, 1, "IC2", "LFBGA-100_8x8mm"),
+        bom_line(5, 1, "IC3", "LQFP-48_7x7mm_P0.5mm"),
+        bom_line(6, 1, "IC4", "SOT-23"),
         bom_line(7, 2, "A1", "Socket_2x22", through_hole=True),
         bom_line(8, 2, "J1,J2", "Header_1x03", through_hole=True),
         bom_line(9, 1, "J3", "Header_1x04", through_hole=True),
@@ -245,14 +245,14 @@ def test_soldering_the_through_hole_parts_yourself_leaves_their_lines_out() -> N
 
 def test_fine_pitch_parts_are_counted_by_package_family() -> None:
     a = pcbway.assembly_numbers(lines_with_everything(), self_solder_tht=True)
-    assert a.fine_pitch_refs == ("U1", "U2", "U3")  # VQFN, LFBGA and LQFP
+    assert a.fine_pitch_refs == ("IC1", "IC2", "IC3")  # VQFN, LFBGA, LQFP
     assert a.fine_pitch_parts == 3
 
 
 def test_a_fine_pitch_part_counts_its_quantity() -> None:
-    lines = [bom_line(1, 4, "U1,U2,U3,U4", "QFN-16_3x3mm")]
+    lines = [bom_line(1, 4, "IC1,IC2,IC3,IC4", "QFN-16_3x3mm")]
     a = pcbway.assembly_numbers(lines, self_solder_tht=False)
-    assert a.fine_pitch_parts == 4 and a.fine_pitch_refs == ("U1", "U2", "U3", "U4")
+    assert a.fine_pitch_parts == 4 and a.fine_pitch_refs == ("IC1", "IC2", "IC3", "IC4")
 
 
 def test_package_family_is_matched_whatever_the_case() -> None:
@@ -350,7 +350,7 @@ def test_the_quote_text_for_a_small_board(tmp_path: Path) -> None:
             "Assembly, 2 boards (the counts are per board)",
             "  Unique parts         6 (surface-mount lines only)",
             "  SMD placements       9",
-            "  BGA/QFP/QFN parts    3: U1, U2, U3",
+            "  BGA/QFP/QFN parts    3: IC1, IC2, IC3",
             "  Through-hole parts   0 for PCBWay (you solder them)",
             "  You solder           5 parts, 4 designators: A1, J1-J3",
             "",

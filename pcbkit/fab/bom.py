@@ -344,7 +344,7 @@ def parts_without_mpn(
     resistor table, because that is what lands in the BOM. A part is listed when its
     part number is empty, is still the stand-in that ``R`` makes up for a resistor,
     or has a space in it. The last is a heuristic: a real manufacturer part number is
-    one word, and one with a space is a description such as "PH 1x3 2.54mm male"; a
+    one word, and one with a space is a description such as "pin header 1x3 male"; a
     real part number that does contain a space can only be reported, not accepted.
     """
     over = overrides or Overrides()

@@ -46,7 +46,7 @@ def test_the_example_bom_py_loads_and_does_what_the_docs_say(tmp_path: Path) -> 
     source = code_blocks("python", "bom.py")[0]
     write_file(tmp_path / "bom.py", source)
     overrides = bom.load_overrides(tmp_path)
-    assert overrides.not_in_bom == ("J2 is a wire pad. H1 is a mounting hole.",)
+    assert overrides.not_in_bom == ("W1 is a wire pad. H1 is a mounting hole.",)
 
     header = "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
     parts = [

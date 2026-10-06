@@ -210,10 +210,10 @@ def test_the_stand_in_is_what_the_design_dsl_makes() -> None:
 
 
 def test_an_mpn_table_entry_replaces_the_fields_it_names() -> None:
-    parts = [make("J1", "H", sym="Conn", fp=HEADER3, mpn="PH 1x3", desc="generic")]
-    table = {"PH 1x3": {"mfr": "Acme", "mpn": "61300311121", "desc": "Header 1x3"}}
+    parts = [make("J1", "H", sym="Conn", fp=HEADER3, mpn="HDR 1x3", desc="generic")]
+    table = {"HDR 1x3": {"mfr": "Acme", "mpn": "AC-HDR-1X3", "desc": "Header 1x3"}}
     line = lines_of(parts, by_mpn=table)[0]
-    assert (line.mfr, line.mpn, line.desc) == ("Acme", "61300311121", "Header 1x3")
+    assert (line.mfr, line.mpn, line.desc) == ("Acme", "AC-HDR-1X3", "Header 1x3")
     assert line.value == "H"  # a field the entry does not name is kept
 
 
@@ -314,7 +314,7 @@ def test_a_resistor_value_the_table_lacks_is_reported_as_the_stand_in() -> None:
 
 
 def test_a_part_number_with_a_space_in_it_is_reported_as_a_description() -> None:
-    parts = [make("J1", "H", sym="Conn", fp=HEADER3, mpn="PH 1x3 2.54mm male")]
+    parts = [make("J1", "H", sym="Conn", fp=HEADER3, mpn="HDR 1x3 male")]
     [problem] = bom.parts_without_mpn(parts)
     assert "space" in problem.reason
 
@@ -330,13 +330,13 @@ def test_a_part_with_a_real_part_number_is_not_reported() -> None:
 
 def test_completeness_judges_what_the_bom_will_show_after_the_overrides() -> None:
     parts = [
-        make("J1", "H", sym="Conn", fp=HEADER3, mpn="PH 1x3 2.54mm male"),
+        make("J1", "H", sym="Conn", fp=HEADER3, mpn="HDR 1x3 male"),
         make("A1", "Socket", sym="Conn", fp="Lib:Socket", mpn=""),
     ]
     assert len(bom.parts_without_mpn(parts)) == 2
     fixed = Overrides(
-        by_mpn={"PH 1x3 2.54mm male": {"mpn": "61300311121"}},
-        by_ref={"A1": {"mpn": "PPTC221LFBN-RC"}},
+        by_mpn={"HDR 1x3 male": {"mpn": "AC-HDR-1X3"}},
+        by_ref={"A1": {"mpn": "AC-SOCKET-22"}},
     )
     assert bom.parts_without_mpn(parts, fixed) == []
 
@@ -502,7 +502,7 @@ def test_bom_py_names_are_read(tmp_path: Path) -> None:
     root = project_with(
         tmp_path,
         """
-        MPN_OVERRIDE = {"PH 1x3": {"mpn": "61300311121", "mfr": "Acme"}}
+        MPN_OVERRIDE = {"HDR 1x3": {"mpn": "AC-HDR-1X3", "mfr": "Acme"}}
         REF_OVERRIDE = {"A1": {"qty": 2}}
         NOT_IN_BOM = ["J9 is a wire pad."]
 
@@ -511,7 +511,7 @@ def test_bom_py_names_are_read(tmp_path: Path) -> None:
         """,
     )
     found = bom.load_overrides(root)
-    assert found.by_mpn == {"PH 1x3": {"mpn": "61300311121", "mfr": "Acme"}}
+    assert found.by_mpn == {"HDR 1x3": {"mpn": "AC-HDR-1X3", "mfr": "Acme"}}
     assert found.by_ref == {"A1": {"qty": 2}}
     assert found.not_in_bom == ("J9 is a wire pad.",)
     assert found.line is not None
@@ -548,8 +548,8 @@ def test_other_upper_case_names_in_bom_py_are_the_users_own(tmp_path: Path) -> N
     root = project_with(
         tmp_path,
         """
-        HEADER = {"mpn": "61300311121"}
-        MPN_OVERRIDE = {"PH 1x3": HEADER}
+        HEADER = {"mpn": "AC-HDR-1X3"}
+        MPN_OVERRIDE = {"HDR 1x3": HEADER}
         """,
     )
-    assert bom.load_overrides(root).by_mpn == {"PH 1x3": {"mpn": "61300311121"}}
+    assert bom.load_overrides(root).by_mpn == {"HDR 1x3": {"mpn": "AC-HDR-1X3"}}

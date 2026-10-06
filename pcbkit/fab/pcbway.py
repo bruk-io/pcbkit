@@ -120,7 +120,7 @@ def check_notes_file(path: Path) -> int:
 
 
 def compress_designators(refs: Iterable[str]) -> str:
-    """Return ``refs`` as one line: "A1, C11, C12, J1, J10-J34, J38, J39".
+    """Return ``refs`` as one line: "A1, C5, C6, J1, J3-J9, P1, P2".
 
     References are sorted by their letters, then their number. A run of three or more
     consecutive numbers with the same letters is written as a range; one or two stay

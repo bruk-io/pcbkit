@@ -456,7 +456,7 @@ REF_OVERRIDE = {
     },
 }
 
-NOT_IN_BOM = ["J2 is a wire pad. H1 is a mounting hole."]
+NOT_IN_BOM = ["W1 is a wire pad. H1 is a mounting hole."]
 
 
 def line(group):
@@ -486,7 +486,7 @@ the PCBWay order form. If they are not there it says to run `pcbkit finalize`.
 | Unique parts | With `--assembled`: the BOM lines the assembler places. All of them, or with `--self-solder-tht` the surface-mount ones only. |
 | SMD placements | The sum of the surface-mount lines' quantities, per board. |
 | BGA/QFP/QFN parts | Parts whose footprint name has `BGA`, `QFP` or `QFN` in it (so `LQFP`, `VQFN` and `LFBGA` count), with their references. Pitch is not looked at. |
-| Through-hole parts | The sum of the through-hole lines' quantities and the number of references, then the references with each run of three or more numbers written as a range (`J10-J34`). With `--self-solder-tht`, 0 for the assembler and these as the ones you solder. |
+| Through-hole parts | The sum of the through-hole lines' quantities and the number of references, then the references with each run of three or more numbers written as a range (`J3-J9`). With `--self-solder-tht`, 0 for the assembler and these as the ones you solder. |
 
 `--assembled N` adds the assembly numbers (they are per board; N is how many boards).
 `--self-solder-tht` needs `--assembled`. `--fab-qty N` is the number of bare boards and
