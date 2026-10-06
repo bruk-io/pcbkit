@@ -197,7 +197,7 @@ class CompareReport:
             if side.over:
                 biggest = side.over[0]
                 found.append(
-                    f"{side.layer}: {len(side.over)} piece(s) over "
+                    f"{side.layer}: {_count(len(side.over), 'piece')} over "
                     f"{self.tolerances.piece_mm2:g} mm2 only in {side.only_in} "
                     f"(largest {biggest.area_mm2:.3f} mm2 at "
                     f"({biggest.x_mm:.1f}, {biggest.y_mm:.1f}))"
@@ -398,6 +398,11 @@ def _fill_change(zone: ZoneChange) -> str:
     )
 
 
+def _count(number: int, noun: str) -> str:
+    """Return "1 piece" or "3 pieces"."""
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
 def _signed(value: float) -> str:
     """Return a change to one decimal place with its sign, and "0.0" for none."""
     text = f"{value:+.1f}"
@@ -459,8 +464,8 @@ def format_report(report: CompareReport, top: int = DEFAULT_TOP) -> str:
     for side in report.copper:
         lines.append(
             f"  {side.layer} only in {side.only_in}: total {side.total_mm2:.3f} mm2 "
-            f"in {side.pieces} pieces, {len(side.over)} over {tol.piece_mm2:g} mm2"
-            + ("  DIFFERENT" if side.over else "")
+            f"in {_count(side.pieces, 'piece')}, {len(side.over)} over "
+            f"{tol.piece_mm2:g} mm2" + ("  DIFFERENT" if side.over else "")
         )
         for piece in side.over[:top]:
             where = f"({piece.x_mm:.1f}, {piece.y_mm:.1f})"
@@ -473,7 +478,7 @@ def format_report(report: CompareReport, top: int = DEFAULT_TOP) -> str:
     found = report.differences
     lines.append("")
     if found:
-        lines.append(f"The boards differ: {len(found)} difference(s).")
+        lines.append(f"The boards differ: {_count(len(found), 'difference')}.")
     else:
         lines.append("The boards match: no differences.")
     return "\n".join(lines)

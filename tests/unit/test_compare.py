@@ -191,7 +191,7 @@ def test_copper_pieces_over_the_tolerance_are_a_difference() -> None:
     report = judge(copper=[side("F.Cu", "new", 1.6, 4, (big,)), *no_copper()[1:]])
     assert report.differs
     assert report.differences == [
-        "F.Cu: 1 piece(s) over 0.01 mm2 only in new (largest 1.500 mm2 at (12.3, 5.0))"
+        "F.Cu: 1 piece over 0.01 mm2 only in new (largest 1.500 mm2 at (12.3, 5.0))"
     ]
 
 
@@ -251,7 +251,7 @@ def test_the_text_report_marks_every_difference_and_counts_them() -> None:
         for line in lines
     )
     assert "      2.500 mm2 at (10.0, 20.0)" in text
-    assert lines[-1] == f"The boards differ: {len(report.differences)} difference(s)."
+    assert lines[-1] == "The boards differ: 5 differences."
     assert len(report.differences) == 5
 
 
@@ -449,7 +449,7 @@ def test_compare_exits_1_when_the_boards_differ(
     result = run_compare(boards)
     assert result.exit_code == 1
     assert "Vias    old 5  new 6  DIFFERENT" in result.output
-    assert result.output.splitlines()[-1] == "The boards differ: 1 difference(s)."
+    assert result.output.splitlines()[-1] == "The boards differ: 1 difference."
 
 
 def test_compare_json_prints_nothing_but_the_json_and_keeps_the_exit_code(

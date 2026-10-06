@@ -297,9 +297,50 @@ def compare_cmd(
 
 
 @cli.command("shots")
-def shots_cmd() -> None:
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    metavar="DIR",
+    help="Folder for the shots (default: out/shots in the project).",
+)
+@click.option(
+    "--pcb",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="FILE",
+    help="Board to shoot (default: the project's kicad/<stem>.kicad_pcb).",
+)
+@click.option(
+    "--region",
+    "names",
+    multiple=True,
+    metavar="NAME",
+    help="Only this region; repeat the option for more (default: every region).",
+)
+@click.option(
+    "--no-render", is_flag=True, help="Skip the 3D renders, which take the longest."
+)
+def shots_cmd(
+    out_dir: Path | None, pcb: Path | None, names: tuple[str, ...], no_render: bool
+) -> None:
     """Export crops and renders of named board regions for review.
 
-    Not implemented yet (WP8).
+    Saves each region as an SVG and a PNG, and three 3D renders. The regions are the
+    whole board, top and bottom, and the ones the project names in SHOTS in layout.py.
+    Needs rsvg-convert for the PNGs.
     """
-    _not_implemented("WP8")
+    env.require_pcbnew()
+    from pcbkit import shots
+
+    proj = load_project()
+    if pcb is None:
+        pcb = proj.kicad_dir / f"{proj.config.board.stem}.kicad_pcb"
+        if not pcb.is_file():
+            raise click.ClickException(
+                f"no board at {pcb}: run `pcbkit finalize`, or give a board with --pcb"
+            )
+    regions = shots.select_regions(shots.load_regions(proj), names)
+    result = shots.take_shots(
+        pcb, out_dir or proj.out_dir / "shots", regions, render=not no_render
+    )
+    click.echo(shots.format_result(result, proj.root))

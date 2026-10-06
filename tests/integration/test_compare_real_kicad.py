@@ -226,7 +226,7 @@ def test_a_moved_track_is_flagged_where_it_was_and_where_it_went(
     assert not side(report, "B.Cu", "old").over and not side(report, "B.Cu", "new").over
     result = run_compare(tiny.pcb, moved)
     assert result.exit_code == 1
-    assert "F.Cu only in old: total 2.888 mm2 in 1 pieces, 1 over 0.01 mm2" in (
+    assert "F.Cu only in old: total 2.888 mm2 in 1 piece, 1 over 0.01 mm2" in (
         result.output
     )
 
@@ -303,7 +303,7 @@ def test_a_sliver_below_the_tolerance_is_reported_but_not_flagged(
     assert not report.differs
     result = run_compare(tiny.pcb, nudged)
     assert result.exit_code == 0, result.output
-    assert "F.Cu only in old: total 0.006 mm2 in 1 pieces, 0 over 0.01 mm2" in (
+    assert "F.Cu only in old: total 0.006 mm2 in 1 piece, 0 over 0.01 mm2" in (
         result.output
     )
 
@@ -316,7 +316,7 @@ def test_the_piece_tolerance_is_configurable(
     assert run_compare(tiny.pcb, nudged, "--piece-tol", "0.01").exit_code == 0
     strict = run_compare(tiny.pcb, nudged, "--piece-tol", "0.005")
     assert strict.exit_code == 1
-    assert "F.Cu only in old: total 0.006 mm2 in 1 pieces, 1 over 0.005 mm2" in (
+    assert "F.Cu only in old: total 0.006 mm2 in 1 piece, 1 over 0.005 mm2" in (
         strict.output
     )
     report = compare.compare_boards(tiny.pcb, nudged, piece_tol_mm2=0.005)
