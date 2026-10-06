@@ -82,13 +82,23 @@ class SymbolLibs:
         if name not in self._cache:
             path = self.path(name)
             try:
-                self._cache[name] = parse(path.read_text(encoding="utf-8"))
+                tree = parse(path.read_text(encoding="utf-8"))
             except FileNotFoundError:
                 known = ", ".join(sorted(self.project)) or "none"
                 raise click.ClickException(
                     f"symbol library {name!r} not found: no file {path} "
                     f"(the project's own libraries: {known})"
                 ) from None
+            except ValueError as err:  # the S-expression parser's complaint
+                raise click.ClickException(
+                    f"symbol library {path} cannot be read: {err}"
+                ) from None
+            # the parser gives [] for text with an unclosed bracket, so check the head
+            if not tree or tree[0] != "kicad_symbol_lib":
+                raise click.ClickException(
+                    f"symbol library {path} is not a complete KiCad symbol library"
+                )
+            self._cache[name] = tree
         return self._cache[name]
 
     def raw_symbol(self, lib: str, name: str) -> Node:

@@ -345,6 +345,29 @@ def test_an_unknown_library_names_the_file_it_looked_for(golden: Design) -> None
     assert str(STOCK / "proj.kicad_sym") in err.value.message
 
 
+@pytest.mark.parametrize(
+    ("text", "complaint"),
+    [
+        ('(kicad_symbol_lib (symbol "R" (in_bom yes)', "is not a complete KiCad"),
+        ("(footprint (layer F.Cu))", "is not a complete KiCad symbol library"),
+        ("", "is not a complete KiCad symbol library"),
+        ('(kicad_symbol_lib (symbol "R)', "cannot be read: parse error"),
+    ],
+)
+def test_a_library_file_that_is_not_a_library_is_a_message(
+    golden: Design, tmp_path: Path, text: str, complaint: str
+) -> None:
+    """Say which file is broken, and how, rather than show a traceback."""
+    stock = tmp_path / "symbols"
+    shutil.copytree(STOCK, stock)
+    broken = stock / "Device.kicad_sym"
+    broken.write_text(text)
+    with pytest.raises(click.ClickException) as err:
+        sch.generate(golden, BOARD, stock, PROJECT_LIBS, DATE)
+    assert f"symbol library {broken} " in err.value.message
+    assert complaint in err.value.message
+
+
 def test_an_unknown_symbol_names_the_library_file(golden: Design) -> None:
     """Say which symbol is missing and where it was looked for."""
     bad = replace(golden, parts=(dict(golden.parts[0], sym="Device:Nope"),))
