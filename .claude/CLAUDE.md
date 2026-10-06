@@ -52,11 +52,20 @@ pcbkit/cli.py         click group; one function per command; a stub fails with
 pcbkit/project.py     find pcbkit.toml, validate it, import the project's modules by path
 pcbkit/doctor.py      `pcbkit doctor`: the checks, fix hints and report text
 pcbkit/kicad/env.py   find KiCad, kicad-cli, KiCad's Python, Java, Freerouting, ngspice, ...
+pcbkit/design.py      the design DSL (part, R, C, LED, FP) and load_design -> Design
+pcbkit/libs.py        the project's own symbol and footprint libraries, lib tables, project file
+pcbkit/sch.py         schematic generator, ERC, netlist; build_schematic is `pcbkit sch`
 docs/                 project-interface.md
 tests/unit/           one module each, nothing real touched; the fake machine is automatic
 tests/integration/    several modules together; the tests marked kicad need real KiCad
 tests/fake_machine.py, tests/conftest.py   the `machine` fixture: a fake PATH, HOME and OS
+tests/board_files.py, tests/netlist_norm.py   write a throwaway project; reduce a netlist
+tests/fixtures/       golden/ (schematic generator), tiny_board/ (real-KiCad `pcbkit sch`)
 ```
+
+`tests/fixtures/golden/expected.kicad_sch` was made by the generator that `sch.py` was
+moved from, and the port reproduces it byte for byte; regenerate it only if the generator
+is meant to change.
 
 ## Rules
 

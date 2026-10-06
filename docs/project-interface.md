@@ -107,6 +107,170 @@ How the file is read:
   never silently takes the default.
 - Every problem in the file is reported together, naming the file, the table and the key.
 
+## design.py
+
+The circuit: every part, and the net on each of its pins. You write it with a few calls
+from `pcbkit.design`. pcbkit draws the schematic from it (`pcbkit sch`), and the board is
+built from the netlist KiCad exports from that schematic, so schematic and board cannot
+drift apart.
+
+```python
+from __future__ import annotations
+
+from pcbkit.design import FP, LED, R, part
+
+BLOCK_ORDER = ["Supply", "Indicator"]
+NOTES = ["My board: 3V3 in, one LED.", "The LED draws about 5 mA."]
+
+B = "Supply"
+part(
+    "J1",
+    "Connector_Generic:Conn_01x02",
+    "3V3 in",
+    FP["HDR2"],
+    {"1": "+3V3", "2": "GND"},
+    "Acme",
+    "HDR-2",
+    "Supply header: 3V3 / GND",
+    B,
+)
+
+B = "Indicator"
+R("R1", "330", "+3V3", "LED_A", B)
+LED("D1", "Green", "LED_A", "GND", B, "GRN-0603", "Acme")
+```
+
+Nets are joined by name: pins that name the same net are connected, and no wire is drawn.
+A pin number the symbol does not have is an error. A pin of the symbol that you leave out,
+or give `None`, gets a no-connect flag, except on a part whose reference starts with `#`
+(a power flag, whose text is also hidden on the sheet) or whose symbol is in the
+`Mechanical` library.
+
+### The calls
+
+```python
+part(ref, sym, value, fp, pins, mfr="", mpn="", desc="", block="", dnp=False, bom=True)
+R(ref, value, a, b, block, mpn="", mfr="", fp=None, desc="")
+C(ref, value, a, b, block, size="C0603", mpn="", mfr="", desc="")
+LED(ref, color, anode, cathode, block, mpn, mfr)
+```
+
+- `part` makes one part. `ref` is unique in the design. `sym` is `Library:Name`, a symbol
+  of KiCad's stock libraries or of the project's own (see footprints.py below). `pins`
+  maps pin numbers, as strings, to net names. `block` names the group the part is drawn
+  in. `dnp` marks it do-not-populate; `bom=False` keeps it out of the bill of materials.
+- `R` makes a `Device:R` in the `FP["R0603"]` footprint, or in `fp`. `mpn` defaults to
+  `0603 <value> 1%` and `desc` to `Resistor <value> 0603 1%`.
+- `C` makes a `Device:C` whose footprint is the `FP` entry named by `size`. `desc`
+  defaults to `Ceramic capacitor <value> <size without its letter>`, so `0603` for the
+  default.
+- `LED` makes a `Device:LED` in `FP["LED0603"]`, with the anode on pin 2 and the cathode
+  on pin 1, as KiCad numbers it. `desc` is `LED <color> 0603`.
+- Positional order is part of the contract: the calls above are what existing designs
+  write.
+
+`FP` maps short keys to footprints. It is a plain dict that you can extend in your
+design.py (`FP["HDR3"] = "my_board:ServoHeader_1x03_P2.54mm"`); it starts from these
+entries each time the design is loaded:
+
+| Key | Footprint |
+|---|---|
+| `R0603` | `Resistor_SMD:R_0603_1608Metric` |
+| `C0603` | `Capacitor_SMD:C_0603_1608Metric` |
+| `C0805` | `Capacitor_SMD:C_0805_2012Metric` |
+| `C1206` | `Capacitor_SMD:C_1206_3216Metric` |
+| `LED0603` | `LED_SMD:LED_0603_1608Metric` |
+| `XH2` | `Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical` |
+| `XH3` | `Connector_JST:JST_XH_B3B-XH-A_1x03_P2.50mm_Vertical` |
+| `XH4` | `Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical` |
+| `XH5` | `Connector_JST:JST_XH_B5B-XH-A_1x05_P2.50mm_Vertical` |
+| `XH6` | `Connector_JST:JST_XH_B6B-XH-A_1x06_P2.50mm_Vertical` |
+| `XH10` | `Connector_JST:JST_XH_B10B-XH-A_1x10_P2.50mm_Vertical` |
+| `PH3` | `Connector_JST:JST_PH_B3B-PH-K_1x03_P2.00mm_Vertical` |
+| `ZH4` | `Connector_JST:JST_ZH_B4B-ZR_1x04_P1.50mm_Vertical` |
+| `QWIIC` | `Connector_JST:JST_SH_BM04B-SRSS-TB_1x04-1MP_P1.00mm_Vertical` |
+| `HDR2` | `Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical` |
+| `HDR8` | `Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical` |
+| `WIRE2` | `Connector_Wire:SolderWire-2sqmm_1x02_P7.8mm_D2mm_OD3.9mm` |
+
+### Names design.py can define
+
+All optional. The board's stem, title and revision are not here: they come from
+pcbkit.toml.
+
+| Name | Type | Default | Meaning |
+|---|---|---|---|
+| `BLOCK_ORDER` | list of strings | the blocks, in the order the parts first use them | The order the blocks are drawn on the sheet. |
+| `NOTES` | list of strings | `[]` | Lines of text under the blocks. The first is the heading. |
+| `BLOCK_WIDTHS` | dict of block to number | `{}` | Width in mm of a block that needs more or less than 130. |
+| `BLOCK_TITLES` | dict of block to string | `{}` | The heading of a block whose heading is not its name. |
+| `COMPANY` | string | `""` | The title block's company line; left out when empty. |
+| `COMMENT` | string | `""` | The title block's first comment; left out when empty. |
+
+Any other upper-case data the file defines (a pin table, say) is kept in the loaded
+`Design.constants`, for your own checks.
+
+pcbkit refuses, naming the file and the part: a design with no parts, a reference used
+twice, a part with no block or in a block missing from `BLOCK_ORDER`, a `BLOCK_ORDER`
+entry with no parts, a `BLOCK_WIDTHS` or `BLOCK_TITLES` key that is not a block, and a
+name above with the wrong type.
+
+pcbkit runs design.py afresh each time it needs the design, starting from an empty list
+of parts and the default `FP`, so nothing carries over from another board or from an
+earlier load. Modules your design.py imports from the project folder are run again too,
+so a block of parts may live in a module of its own.
+
+## footprints.py and footprints/
+
+Most parts come from KiCad's stock libraries. A part KiCad does not have goes in the
+project's own library, which `pcbkit sch` builds into `kicad/` from two places that can
+be used together: the hooks in `footprints.py`, and the `.kicad_mod` files in
+`footprints/` (copied unchanged, for example a stock footprint that a newer KiCad
+dropped). Both are optional.
+
+```python
+from __future__ import annotations
+
+from pcbkit.kicad.sexp import q
+
+LIB = "my_board"
+
+
+def symbols() -> list:
+    """Return the project's symbols (shortened: a real one also has pins and graphics)."""
+    return [["symbol", q("Thing"), ["in_bom", "yes"]]]
+
+
+def footprints() -> dict:
+    """Return the project's footprints by name (shortened in the same way)."""
+    return {"Pad": ["footprint", q("Pad"), ["layer", q("F.Cu")]]}
+```
+
+| Name | Returns | Meaning |
+|---|---|---|
+| `LIB` | string | The library nickname: the part before the colon in `my_board:Thing`. Default: the board's stem. Letters, digits, `_`, `-` and `.`. |
+| `symbols()` | list of nodes | Each `["symbol", q("Name"), ...]`, written to `kicad/<LIB>.kicad_sym`. Names must differ. |
+| `footprints()` | dict of name to node | Each `["footprint", q("Name"), ...]` whose name matches its key, written to `kicad/<LIB>.pretty/<Name>.kicad_mod`. |
+
+Nodes are the nested lists of `pcbkit.kicad.sexp`: `q("text")` marks a quoted string, a
+number is a number, and any other bare word is a string. A footprint that is both
+generated and vendored under one name is an error.
+
+`pcbkit sch` writes these files into `kicad/`:
+
+| File | What it is |
+|---|---|
+| `<stem>.kicad_sch` | The schematic. |
+| `<LIB>.kicad_sym` | The project's symbols. Only when `symbols()` returns some. |
+| `<LIB>.pretty/` | The project's footprints: generated, then vendored. Only when there are any. |
+| `sym-lib-table`, `fp-lib-table` | Tell KiCad where the project's libraries are. Empty when it has none. |
+| `<stem>.kicad_pro` | A minimal project file, written only when there is none. kicad-cli reads the two tables above only when the project file exists, and later stages save the design rules into it, so it is never overwritten. |
+| `erc.rpt` | The ERC report. |
+| `<stem>.net` | The netlist, in KiCad's S-expression format. |
+
+pcbkit overwrites the files it makes and does not delete ones it no longer makes. Delete
+`kicad/` for a clean rebuild.
+
 ## routing.py
 
 The routing engine imports `routing.py` and calls the hooks below that it defines. Only
