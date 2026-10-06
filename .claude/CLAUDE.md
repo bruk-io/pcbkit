@@ -77,6 +77,9 @@ pcbkit/kicad/cli.py   kicad-cli wrappers (ERC, netlist, DRC, Gerbers, drill, pos
                       3D render) and the pure parsers for the ERC and DRC reports
 pcbkit/kicad/board.py pcbnew helpers (units, nets, tracks, vias, zones, keep-outs, text)
                       and the shields for KiCad 10's hazards; imports without pcbnew
+pcbkit/design.py      the design DSL (part, R, C, LED, FP) and load_design -> Design
+pcbkit/libs.py        the project's own symbol and footprint libraries, lib tables, project file
+pcbkit/sch.py         schematic generator, ERC, netlist; build_schematic is `pcbkit sch`
 docs/                 project-interface.md
 tests/unit/           one module each, nothing real touched; the fake machine is automatic
 tests/integration/    several modules together; the tests marked kicad need real KiCad
@@ -84,7 +87,13 @@ tests/fake_machine.py, tests/conftest.py   the `machine` fixture: a fake PATH, H
 tests/fake_pcbnew.py  a pcbnew stand-in (unit tests): the `fake_pcbnew` fixture installs it
 tests/tiny_board.py   builds a small real board and schematic, in production order
 tests/fixtures/reports/  real KiCad 10.0.6 ERC and DRC reports from generic boards
+tests/board_files.py, tests/netlist_norm.py   write a throwaway project; reduce a netlist
+tests/fixtures/       golden/ (schematic generator), tiny_board/ (real-KiCad `pcbkit sch`)
 ```
+
+`tests/fixtures/golden/expected.kicad_sch` was made by the generator that `sch.py` was
+moved from, and the port reproduces it byte for byte; regenerate it only if the generator
+is meant to change.
 
 ## Rules
 

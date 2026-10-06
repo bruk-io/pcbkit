@@ -1,0 +1,5 @@
+[board]
+stem = "tiny_board"
+title = "Tiny Board"
+rev = "A"
+fab_name = "Tiny_Board_revA"

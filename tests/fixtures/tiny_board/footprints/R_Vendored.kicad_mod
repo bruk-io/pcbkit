@@ -1,0 +1,45 @@
+(footprint "R_Vendored"
+	(version 20241229)
+	(generator "pcbkit")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(descr "A two-pad 0603 resistor footprint, vendored into the project")
+	(property "Reference" "REF**"
+		(at 0 -1.43 0)
+		(layer "F.SilkS")
+		(uuid "00000000-0000-4000-8000-000000000101")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "R_Vendored"
+		(at 0 1.43 0)
+		(layer "F.Fab")
+		(uuid "00000000-0000-4000-8000-000000000102")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(pad "1" smd roundrect
+		(at -0.825 0)
+		(size 0.8 0.95)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+		(uuid "00000000-0000-4000-8000-000000000103")
+	)
+	(pad "2" smd roundrect
+		(at 0.825 0)
+		(size 0.8 0.95)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+		(uuid "00000000-0000-4000-8000-000000000104")
+	)
+	(embedded_fonts no)
+)
