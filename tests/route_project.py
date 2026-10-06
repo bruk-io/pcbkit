@@ -119,7 +119,7 @@ solid_pad_refs = {"J1"}
 
 def design_rules(ds):
     EVENTS.append("design_rules")
-    ds.m_TrackMinWidth = 300000  # 0.3 mm in nm: the generic rules say 0.2
+    ds.m_TrackMinWidth = 150000  # 0.15 mm in nm: the generic rules say 0.2
 
 
 def prerouted(board, api):

@@ -190,7 +190,7 @@ def test_pre_writes_the_net_classes_and_rules_into_the_project_file(
         for p in saved["net_settings"]["netclass_patterns"]
     } == {("/+3V3", "Power")}
     rules = saved["board"]["design_settings"]["rules"]
-    assert rules["min_track_width"] == 0.3  # the project's design_rules hook won
+    assert rules["min_track_width"] == 0.15  # the project's design_rules hook won
     assert rules["min_clearance"] == 0.2
     assert rules["min_via_diameter"] == 0.6
     assert rules["min_through_hole_diameter"] == 0.2
