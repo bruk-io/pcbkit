@@ -624,8 +624,8 @@ def _plural(count: int, noun: str) -> str:
 
 
 def _mm(value: float) -> str:
-    """Return a position in millimetres as KiCad prints it: 4 places, trimmed."""
-    return f"{round(value, 4) + 0.0:.4f}".rstrip("0").rstrip(".")
+    """Return a position in millimetres as an ERC report prints it: 2 decimals."""
+    return f"{round(value, 2) + 0.0:.2f}"
 
 
 def format_erc(erc: ErcReport, report: Path, root: Path, limit: int = 20) -> str:

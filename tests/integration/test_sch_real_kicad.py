@@ -14,6 +14,7 @@ the project's libraries.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -107,7 +108,13 @@ def test_an_erc_error_exits_1_and_is_listed(board: Path) -> None:
     assert result.exit_code == 1, result.output
     assert "ERC        1 error, 0 warnings (kicad/erc.rpt)" in result.output
     assert "[pin_to_pin] Pins of type Power output and Power output" in result.output
-    assert "#FLG01" in result.output
+    # each place is printed as the report has it: two decimals, in millimetres
+    place = r"@\(\d+\.\d\d mm, \d+\.\d\d mm\)"
+    assert re.search(
+        rf"^    {place}: Symbol #FLG01 Pin 1 \[Power output, Line\]$",
+        result.output,
+        flags=re.MULTILINE,
+    )
     assert (board / "kicad" / "tiny_board.net").is_file()
 
 

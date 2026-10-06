@@ -5,7 +5,7 @@
 the board it is given, adds the text and saves the board in place:
 
 1. the project's fixed labels (``LABELS``), each at its spot or the nearest one that
-   is clear of pads, drawn silkscreen and every label placed before it;
+   is clear of pads, the parts' own silkscreen and the labels before it;
 2. a function label beside each connector in ``CONN_LABELS``;
 3. whatever the project's ``extra(board, api)`` draws, if it has that hook;
 4. a reference designator for every part, on the silkscreen where there is room around

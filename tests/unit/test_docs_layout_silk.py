@@ -53,7 +53,7 @@ SILK_SAMPLES: dict[str, Any] = {
     "LABELS": [("A", 1.0, 2.0, 1.0, 90.0)],
     "CONN_LABELS": {"J1": "TEXT"},
     "HIDE_REF": {"H1"},
-    "KEEP_REF": {"A1"},
+    "KEEP_REF": {"U1"},
     "extra": lambda board, api: None,
     "COMPANY": "Acme",
     "COMMENTS": ["one"],
@@ -87,7 +87,7 @@ def test_each_documented_silk_name_reaches_the_pass() -> None:
     data = silk.read_silk(module)
     assert data.labels == [("A", 1.0, 2.0, 1.0, 90.0)]
     assert data.conn_labels == {"J1": "TEXT"}
-    assert (data.hide_ref, data.keep_ref) == (frozenset({"H1"}), frozenset({"A1"}))
+    assert (data.hide_ref, data.keep_ref) == (frozenset({"H1"}), frozenset({"U1"}))
     assert data.extra is SILK_SAMPLES["extra"]
     assert (data.company, data.comments, data.date) == ("Acme", ["one"], "2026-01-02")
 

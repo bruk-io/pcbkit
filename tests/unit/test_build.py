@@ -127,7 +127,7 @@ def test_erc_errors_are_listed_the_board_is_placed_and_the_exit_code_is_1(
     assert stages.calls == ["sch", "place"]
     assert "ERC        1 error, 1 warning (kicad/erc.rpt)" in result.output
     assert "  error [pin_not_connected] Pin not connected" in result.output
-    assert "    @(10.5 mm, 20 mm): Symbol R1 Pin 1" in result.output
+    assert "    @(10.50 mm, 20.00 mm): Symbol R1 Pin 1" in result.output
     assert "placed 3, missing: []" in result.output
     assert result.output.rstrip().endswith("fix them in design.py before routing.")
 

@@ -80,6 +80,13 @@ def test_text_that_is_not_a_netlist_is_a_message_naming_the_file(text: str) -> N
         place.parse_netlist(text, "kicad/x.net")
 
 
+def test_a_component_without_its_schematic_id_is_a_message() -> None:
+    """Each part has to carry the id that links its footprint to the schematic."""
+    without = NETLIST.replace('(tstamps "aaaaaaaa-0000-4000-8000-000000000001")', "")
+    with pytest.raises(click.ClickException, match="a component has no ref, value or"):
+        place.parse_netlist(without, "kicad/x.net")
+
+
 def test_an_unclosed_netlist_is_a_message_not_a_parse_error() -> None:
     cut = NETLIST[: NETLIST.index("(nets")]
     with pytest.raises(click.ClickException, match="not a KiCad netlist"):

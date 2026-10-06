@@ -131,10 +131,15 @@ def parse_netlist(text: str, source: str = "netlist") -> Netlist:
         )
     components: dict[str, Component] = {}
     for comp in findall(parts, "comp"):
-        footprint = find(comp, "footprint")
-        tstamp = find(comp, "tstamps")
-        components[str(find(comp, "ref")[1])] = Component(
-            value=str(find(comp, "value")[1]),
+        ref, value = find(comp, "ref"), find(comp, "value")
+        footprint, tstamp = find(comp, "footprint"), find(comp, "tstamps")
+        if ref is None or value is None or tstamp is None:
+            raise click.ClickException(
+                f"{source} is not a KiCad netlist: a component has no ref, value or "
+                "tstamps. Run `pcbkit sch` to make it again."
+            )
+        components[str(ref[1])] = Component(
+            value=str(value[1]),
             footprint=str(footprint[1]) if footprint else "",
             tstamp=str(tstamp[1]),
         )
@@ -207,11 +212,7 @@ def read_layout(module: ModuleType) -> Layout:
     ``W``, ``H`` and ``P`` are required. ``CORNER_R`` (default 0), ``HOLES`` (default
     none) and ``outline`` are optional.
     """
-    width, height = _number(module, "W"), _number(module, "H")
-    if width <= 0 or height <= 0:
-        raise ProjectError(
-            f"layout.py: W and H should be above 0, got {width}, {height}"
-        )
+    width, height = layout_size(module)
     corner = _number(module, "CORNER_R", 0.0)
     if not 0 <= corner <= min(width, height) / 2:
         raise ProjectError(

@@ -157,7 +157,7 @@ def test_a_text_that_differs_in_place_layer_or_content_is_not() -> None:
 
 
 def test_two_of_a_kind_in_one_run_are_not_a_second_run() -> None:
-    """The J2 and J3 marks are both "+": equal texts at different places, or twice."""
+    """Two polarity marks are both "+": equal texts at different places, or twice."""
     assert silk.stacked([], [A, A]) == []
     assert silk.stacked([B], [B, A, A]) == []
 
@@ -198,7 +198,7 @@ def test_every_name_is_read() -> None:
         silk_module(
             LABELS=[("A", 1, 2.5, 1.0, 90), ["B", 3, 4, 0.8, 0]],
             CONN_LABELS={"J1": "SUPPLY"},
-            HIDE_REF=["J2", "J3"],
+            HIDE_REF=["TP1", "TP2"],
             KEEP_REF=("U1",),
             COMPANY="Acme",
             COMMENTS=["one", "two"],
@@ -209,7 +209,7 @@ def test_every_name_is_read() -> None:
     )
     assert data.labels == [("A", 1, 2.5, 1.0, 90), ("B", 3, 4, 0.8, 0)]
     assert data.conn_labels == {"J1": "SUPPLY"}
-    assert data.hide_ref == frozenset({"J2", "J3"})
+    assert data.hide_ref == frozenset({"TP1", "TP2"})
     assert data.keep_ref == frozenset({"U1"})
     assert (data.company, data.comments, data.date) == (
         "Acme",
@@ -233,8 +233,8 @@ BAD_SILK = [
     ({"HIDE_REF": 5}, r"HIDE_REF should be a set of references"),
     ({"KEEP_REF": [1, 2]}, r"KEEP_REF should hold only references"),
     (
-        {"HIDE_REF": {"J1", "J2"}, "KEEP_REF": {"J2", "J3"}},
-        r"both HIDE_REF and KEEP_REF: J2",
+        {"HIDE_REF": {"J1", "TP2"}, "KEEP_REF": {"TP2", "TP3"}},
+        r"both HIDE_REF and KEEP_REF: TP2",
     ),
     ({"extra": "nope"}, r"extra should be a function"),
     ({"COMPANY": 5}, r"COMPANY and DATE should be strings"),
@@ -292,12 +292,12 @@ def test_moved_references_and_warnings_are_listed_under_it() -> None:
         Path("/p/kicad/b.kicad_pcb"),
         3,
         ["C31", "D2"],
-        ["no room for label J38 LIDAR", "label collides: 5V"],
+        ["no room for label J4 SENSOR", "label collides: 5V"],
     )
     assert silk.format_result(result, Path("/p")).splitlines() == [
         "silk       kicad/b.kicad_pcb: 3 text(s) added",
         "  refs moved to fab (see assembly drawing): C31 D2",
-        "  warning: no room for label J38 LIDAR",
+        "  warning: no room for label J4 SENSOR",
         "  warning: label collides: 5V",
     ]
 

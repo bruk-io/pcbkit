@@ -27,6 +27,7 @@ from tests.board_files import TOML, restored_imports, write_file
 from tests.fake_machine import FakeMachine
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "golden"
+REPORTS = Path(__file__).resolve().parents[1] / "fixtures" / "reports"
 STOCK = GOLDEN / "symbols"
 PROJECT_LIBS = {"proj": GOLDEN / "proj.kicad_sym"}
 BOARD = BoardConfig(
@@ -859,15 +860,28 @@ def test_a_finding_is_listed_with_its_severity_code_message_and_places() -> None
     assert lines[5].startswith("    @(116.84 mm, 363.22 mm): Symbol #FLG98")
 
 
-def test_positions_are_written_as_kicad_does_without_trailing_zeros() -> None:
-    """Show 76.2 and 100 and 0, not 76.20 or 100.0000 or -0, whatever the unit read."""
+def test_positions_have_two_decimals_whatever_unit_the_report_used() -> None:
+    """Write 76.20 and 100.00 and 0.00, as an ERC report does: not 76.2, not -0."""
     from_mils = parse_erc(
         ERROR_REPORT.replace("33.02 mm", "1300 mils").replace("15.24 mm", "600 mils")
     )
     text = sch.format_erc(from_mils, Path("/p/erc.rpt"), Path("/p"))
     assert "@(33.02 mm, 363.22 mm): Symbol #FLG02" in text
     assert "@(15.24 mm, 386.08 mm): Symbol #FLG99" in text
-    assert sch._mm(76.2) == "76.2"
-    assert sch._mm(100.0) == "100"
-    assert sch._mm(-0.00001) == "0"
-    assert sch._mm(0.0) == "0"
+    assert sch._mm(76.2) == "76.20"
+    assert sch._mm(100.0) == "100.00"
+    assert sch._mm(-0.00001) == "0.00"
+    assert sch._mm(0.0) == "0.00"
+
+
+@pytest.mark.parametrize("name", ["erc_errors_and_warnings.rpt", "erc_two_sheets.rpt"])
+def test_every_position_line_of_a_real_report_is_printed_as_the_report_has_it(
+    name: str,
+) -> None:
+    """Compare with real KiCad 10 reports, line by line (this is how it printed)."""
+    text = (REPORTS / name).read_text(encoding="utf-8")
+    shown = sch.format_erc(parse_erc(text), Path("/p/erc.rpt"), Path("/p"), limit=99)
+    printed = [line.strip() for line in shown.splitlines() if "@(" in line]
+    in_report = [line.strip() for line in text.splitlines() if "@(" in line.strip()[:3]]
+    assert printed == in_report
+    assert printed
