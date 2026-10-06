@@ -495,12 +495,20 @@ under 0.15 mm, the least a fab house prints.
 
 #### Once per board
 
-Running the pass twice on one board draws every text again, on top of the first. So
-`apply_silk` refuses a board that already carries the text it is about to add: it raises
-`SilkError` (a click error: the command prints it and exits 1), says what it found, and
-writes nothing. Run it on the board as the router left it. `pcbkit finalize` starts from
-the golden route every time, so it never meets this. Texts of the board's own that the
-pass would not draw on top of (a logo, a note) are fine.
+The pass never removes a text. Run twice on one board it leaves the first run's labels where
+they were and draws the new ones beside them, or exactly on top of them. So `apply_silk`
+refuses a board that has had the pass: it raises `SilkError` (a click error: the command
+prints it and exits 1), says why, and writes nothing. It looks for two signs:
+
+- The title block already has a title. The pass writes one every time and no other stage
+  does, so this catches a second run even after `silk.py` was edited and every label moved.
+  A board titled by hand is refused too: clear the title to go on.
+- The pass would draw a text exactly on one that is already there: the same text, on
+  the same layer, in the same place.
+
+Run it on the board as the router left it. `pcbkit finalize` starts from the golden route
+every time, so it never meets this. Texts of the board's own that the pass does not draw
+on top of (a logo, a note) are fine.
 
 ## Fab outputs
 

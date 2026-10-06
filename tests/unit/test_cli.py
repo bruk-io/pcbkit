@@ -192,13 +192,13 @@ def test_stubs_do_not_need_pcbnew(monkeypatch: pytest.MonkeyPatch) -> None:
 
     The tier 2 commands will call require_pcbnew() first once they are implemented;
     the stubs deliberately do not (see the cli module docstring). Whichever tier 2
-    commands are still stubs are tried, so this needs no edit when one is built.
+    commands are still stubs are tried, so this needs no edit when one is built. When
+    the last one is built the loop has nothing to try and the test can be deleted:
+    each built command has its own test that it needs pcbnew.
     """
     monkeypatch.setitem(sys.modules, "pcbnew", None)
     tier2 = {"route", "promote", "finalize", "check", "mutants", "compare", "shots"}
-    stubs = sorted(tier2 & set(STUBS))
-    assert stubs
-    for name in stubs:
+    for name in sorted(tier2 & set(STUBS)):
         wp, argv = STUBS[name]
         assert invoke(*argv).output.strip() == f"Error: not implemented yet ({wp})"
 

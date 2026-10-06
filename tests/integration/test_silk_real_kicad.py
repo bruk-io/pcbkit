@@ -14,6 +14,7 @@ In any other Python these tests are skipped.
 from __future__ import annotations
 
 import shutil
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,13 @@ def texts_of(board: Any) -> dict[str, list[Any]]:
         if item.GetClass() == "PCB_TEXT":
             found.setdefault(item.GetText(), []).append(item)
     return found
+
+
+def set_title(path: Path, title: str) -> None:
+    """Set the title block's title of a saved board, as someone in the GUI could."""
+    board = load(path)
+    board.GetTitleBlock().SetTitle(title)
+    pcbnew.SaveBoard(str(path), board)
 
 
 def layer_of(item: Any) -> str:
@@ -245,11 +253,21 @@ def test_a_text_drawn_with_the_module_function_is_counted_and_guarded_too(
     result = silk.apply_silk(load_project(project))
     assert result.texts == 4
     assert "RAW" in texts_of(load(result.pcb))
+    set_title(result.pcb, "")  # leave the stacking rule to find the second run
     with pytest.raises(silk.SilkError, match="already carries"):
         silk.apply_silk(load_project(project))
 
 
 # --- running the pass twice --------------------------------------------------------
+
+# Every label of SILK edited: a text moved, a text moved, a text reworded. The edits
+# differ in length, not just in digits: Python trusts a cached .pyc whose size and
+# whole-second mtime match, and the edit comes within a second of the first write.
+MOVED = (
+    SILK.replace('("TINY", 20.0, 20.0, 1.0, 0)', '("TINY", 25.25, 18.5, 1.0, 0)')
+    .replace('("V1", 33.0, 6.0, 0.8, 90)', '("V1", 33.5, 7.25, 0.8, 90)')
+    .replace('"J1": "SUPPLY 3V3/G"', '"J1": "SUPPLY"')
+)
 
 
 def test_a_second_run_is_refused_and_writes_nothing(project: Path) -> None:
@@ -259,14 +277,50 @@ def test_a_second_run_is_refused_and_writes_nothing(project: Path) -> None:
     with pytest.raises(silk.SilkError) as refused:
         silk.apply_silk(proj)
     message = refused.value.message
-    assert "tiny_board.kicad_pcb already carries silkscreen text" in message
-    assert "3 of the 3 texts" in message
+    assert (
+        "tiny_board.kicad_pcb has a title in its title block ('Tiny Board')" in message
+    )
+    assert "has had the pass already" in message
     assert "Nothing was written" in message
     assert isinstance(refused.value, click.ClickException)
     assert pcb_of(project).read_bytes() == once
 
 
-def test_without_the_guard_the_second_run_draws_every_text_again(
+def test_a_second_run_after_editing_silk_py_is_refused_too(project: Path) -> None:
+    """Moved labels would not land on the old ones: the old ones would stay beside."""
+    silk.apply_silk(load_project(project))
+    once = pcb_of(project).read_bytes()
+    (project / "silk.py").write_text(MOVED, encoding="utf-8")
+    sys.modules.pop("silk")  # a new process would read the edited file; so does this
+    with pytest.raises(silk.SilkError, match="has had the pass already"):
+        silk.apply_silk(load_project(project))
+    assert pcb_of(project).read_bytes() == once
+
+
+def test_a_board_titled_by_hand_is_refused_and_told_how_to_go_on(project: Path) -> None:
+    set_title(pcb_of(project), "Mine")
+    with pytest.raises(silk.SilkError, match=r"\('Mine'\).*clear the title"):
+        silk.apply_silk(load_project(project))
+
+
+def test_with_the_title_gone_a_rerun_that_would_stack_every_text_is_still_refused(
+    project: Path,
+) -> None:
+    """The second sign: the pass would draw 3 texts on exactly the 3 already there."""
+    proj = load_project(project)
+    silk.apply_silk(proj)
+    set_title(pcb_of(project), "")
+    once = pcb_of(project).read_bytes()
+    with pytest.raises(silk.SilkError) as refused:
+        silk.apply_silk(proj)
+    assert (
+        "already carries silkscreen text from an earlier run" in refused.value.message
+    )
+    assert "3 of the 3 texts" in refused.value.message
+    assert pcb_of(project).read_bytes() == once
+
+
+def test_without_either_sign_the_second_run_draws_every_text_again(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """What the guard stops: the whole pass done again on a board that has had it.
@@ -277,9 +331,31 @@ def test_without_the_guard_the_second_run_draws_every_text_again(
     """
     proj = load_project(project)
     first = silk.apply_silk(proj)
+    set_title(pcb_of(project), "")
     monkeypatch.setattr(silk, "stacked", lambda before, after: [])
     second = silk.apply_silk(proj)
     assert (first.texts, second.texts) == (3, 3)
+
+
+def test_without_the_title_sign_an_edited_rerun_leaves_the_old_labels_beside_the_new(
+    project: Path,
+) -> None:
+    """The hazard the title sign covers and stacking cannot: the pass removes nothing.
+
+    With every label moved or reworded, no new text lands on an old one, so the
+    stacking sign sees nothing, and the board ends up with both sets.
+    """
+    silk.apply_silk(load_project(project))
+    set_title(pcb_of(project), "")
+    (project / "silk.py").write_text(MOVED, encoding="utf-8")
+    sys.modules.pop("silk")  # a new process would read the edited file; so does this
+    result = silk.apply_silk(load_project(project))  # not refused: nothing stacks
+    assert result.texts == 3
+    texts = texts_of(load(result.pcb))
+    for name in ("TINY", "V1"):
+        places = {tuple(kb.to_local(t.GetPosition())) for t in texts[name]}
+        assert len(texts[name]) == len(places) == 2, name  # the old and the new
+    assert "SUPPLY 3V3/G" in texts and "SUPPLY" in texts
 
 
 def test_text_that_was_already_on_the_board_does_not_trip_the_guard(

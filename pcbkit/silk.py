@@ -21,8 +21,9 @@ Placement is greedy and in that order, so what comes first gets the best spot an
 comes later keeps clear of it. Every text the pass adds is also an obstacle for the
 texts after it. The geometry is in layout millimetres (``pcbkit.kicad.board``).
 
-Running the pass twice on one board would draw every label on top of itself, so it
-refuses a board that carries its text already: see ``SilkError``.
+Running the pass twice on one board would draw every label again beside, or on top
+of, the first run's, because the pass never removes a text. So it refuses a board that
+has had it already: see ``apply_silk`` and ``SilkError``.
 """
 
 from __future__ import annotations
@@ -642,8 +643,11 @@ def apply_silk(proj: Project, pcb: Path | None = None) -> SilkResult:
     ``layout.py`` gives the board size, and its ``silk.py`` (optional) says what to
     draw; see the module docstring. Needs pcbnew.
 
-    Raise SilkError, and leave the file as it is, if the board already carries the
-    texts this pass would add: they would be drawn twice, on top of each other.
+    Raise SilkError, and leave the file as it is, if the board has had the pass already.
+    Two signs are looked for. The pass always writes the title block's title, and no
+    other stage does, so a board with a title has had it: that catches a second run
+    whatever was edited in between. A board with no title is also refused if the pass
+    would draw a text exactly on one already there (same text, layer and place).
     """
     import pcbnew
 
@@ -658,6 +662,15 @@ def apply_silk(proj: Project, pcb: Path | None = None) -> SilkResult:
     width, height = layout_size(layout)
     data = read_silk(project.import_optional_project_module(proj.root, "silk"))
     board = pcbnew.LoadBoard(str(path))
+    title = board.GetTitleBlock().GetTitle()
+    if title:
+        raise SilkError(
+            f"{path.name} has a title in its title block ({title!r}), which only this "
+            "pass writes: the board has had the pass already (or was titled by hand: "
+            "clear the title). Running the pass again leaves the first run's labels "
+            "beside the new ones. Run it on a board that has not had it: the routed "
+            "board, before silk. Nothing was written."
+        )
     before = board_texts(board)
     silk = Silk(board, width, height)
     absent = sorted(set(data.conn_labels) - set(silk.footprints))
