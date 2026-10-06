@@ -47,7 +47,8 @@ SYMBOL_LIB_VERSION = 20241209
 GENERATOR = "pcbkit"
 GENERATOR_VERSION = "9.0"
 
-# A seed project file for kicad-cli. KiCad rewrites it in full the first time it saves.
+# A seed project file for kicad-cli. KiCad fills in the rest, keeping what is there, the
+# first time it saves (pcbnew.SaveBoard does), so what it needs is only this much.
 PROJECT_FILE_VERSION = 3
 
 

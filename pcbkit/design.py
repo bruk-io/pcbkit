@@ -116,7 +116,8 @@ class Design:
 
 # The live state a design.py writes to while it runs. Boards extend FP in place
 # (``from pcbkit.design import FP`` binds this very dict), so reset() empties and
-# refills both and never rebinds them.
+# refills both and never rebinds them. PARTS is empty again once load_design returns:
+# read ``load_design(path).parts`` for a board's parts, never this list.
 FP: dict[str, str] = dict(DEFAULT_FP)
 PARTS: list[Part] = []
 
