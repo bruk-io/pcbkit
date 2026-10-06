@@ -283,12 +283,12 @@ COMMENT = "A comment"
 
 
 def test_other_upper_case_data_is_kept_as_constants(tmp_path: Path) -> None:
-    """Keep DEVKIT-style tables; leave out the DSL's own names and lower-case names."""
+    """Keep pin-table-style data; leave out the DSL's own names and lower-case names."""
     source = (
         BASIC
         + """
 from pcbkit.design import FP
-DEVKIT = {"1": "+3V3", "2": None}
+PIN_TABLE = {"1": "+3V3", "2": None}
 LEGS = ["FL", "FR"]
 PROJECT = "my_board"
 helper = 5
@@ -299,7 +299,7 @@ def HELPER():
     loaded = load_design(write_project(tmp_path, source))
     assert loaded.constants == {
         "B": "Supply",
-        "DEVKIT": {"1": "+3V3", "2": None},
+        "PIN_TABLE": {"1": "+3V3", "2": None},
         "LEGS": ["FL", "FR"],
         "PROJECT": "my_board",
     }

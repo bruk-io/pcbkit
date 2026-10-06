@@ -170,7 +170,7 @@ LED(ref, color, anode, cathode, block, mpn, mfr)
   write.
 
 `FP` maps short keys to footprints. It is a plain dict that you can extend in your
-design.py (`FP["HDR3"] = "my_board:ServoHeader_1x03_P2.54mm"`); it starts from these
+design.py (`FP["HDR3"] = "my_board:Header_1x03_P2.54mm"`); it starts from these
 entries each time the design is loaded:
 
 | Key | Footprint |

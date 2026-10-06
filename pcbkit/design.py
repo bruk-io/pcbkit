@@ -27,7 +27,7 @@ Besides its parts, a design.py may define these module-level names, all optional
 - ``BLOCK_TITLES``: ``{block: heading}`` for a block headed other than by its name.
 - ``COMPANY`` and ``COMMENT``: title-block text, left out of the sheet when empty.
 
-Any other upper-case data it defines (``DEVKIT = {...}``) is kept in
+Any other upper-case data it defines (``PIN_TABLE = {...}``) is kept in
 ``Design.constants``. The board's stem, title and revision are not defined here: they
 come from pcbkit.toml.
 """
@@ -48,7 +48,7 @@ from pcbkit import project
 
 # The footprints a board can name by short key. Generic ones only: stock KiCad library
 # names for the common resistor, capacitor, LED and JST sizes. A board adds its own in
-# its design.py (``FP["HDR3"] = "myboard:ServoHeader_1x03_P2.54mm"``).
+# its design.py (``FP["HDR3"] = "myboard:Header_1x03_P2.54mm"``).
 DEFAULT_FP = {
     "R0603": "Resistor_SMD:R_0603_1608Metric",
     "C0603": "Capacitor_SMD:C_0603_1608Metric",
