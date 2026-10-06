@@ -311,7 +311,15 @@ def load_footprint(fpid: str, folders: dict[str, Path]) -> Any:
     lib, colon, name = fpid.partition(":")
     if not colon or not lib or not name:
         raise click.ClickException(f"footprint {fpid!r} should be written Library:Name")
-    folder = folders.get(lib) or env.footprints_dir() / f"{lib}.pretty"
+    own = lib in folders
+    folder = folders[lib] if own else env.footprints_dir() / f"{lib}.pretty"
+    if not folder.is_dir():
+        where = (
+            "the project has no footprints of its own (footprints.py, footprints/)"
+            if own
+            else f"KiCad has no footprint library called {lib}"
+        )
+        raise click.ClickException(f"footprint {fpid} not found: {where} ({folder})")
     try:
         footprint = pcbnew.FootprintLoad(str(folder), name)
     except (OSError, RuntimeError) as err:  # pcbnew raises IO_ERROR as one of these
