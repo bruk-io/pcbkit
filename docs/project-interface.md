@@ -349,3 +349,19 @@ solid_pad_refs = {"CN1"}
 
 These helper signatures are part of the contract: if one changes, this page changes
 with it.
+
+## layout.py and silk.py
+
+To be written with `pcbkit build` and the silkscreen engine (WP4).
+
+## Fab outputs
+
+To be written with `pcbkit finalize`'s exports and `pcbkit quote` (WP6).
+
+## Checks: specs.py, circuits.py, checks/ and mutants.py
+
+To be written with `pcbkit check`, `pcbkit mutants` and `pcbkit report` (WP7).
+
+## Comparing boards and taking shots
+
+To be written with `pcbkit compare` and `pcbkit shots` (WP8).
