@@ -19,8 +19,17 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: System :: Hardware",
 ]
+# numpy, scipy, pillow and matplotlib serve the routing clean-up and the copper,
+# stitching and coupling checks; openpyxl writes the fab house's BOM workbook. The
+# lower bounds keep versions with wheels for KiCad's Python 3.9; uv.lock forks newer
+# ones for later Pythons.
 dependencies = [
     "click>=8.1",
+    "matplotlib>=3.7",
+    "numpy>=1.24",
+    "openpyxl>=3.1",
+    "pillow>=10",
+    "scipy>=1.10",
     "tomli>=2; python_version < '3.11'",
 ]
 
