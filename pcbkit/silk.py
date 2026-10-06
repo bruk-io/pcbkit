@@ -622,14 +622,15 @@ def _title_block(board: Any, config: Any, data: SilkData) -> None:
 class SilkResult:
     """What ``apply_silk`` did to the board.
 
-    ``labels`` is the number of texts it added to the board (labels and whatever the
-    project's ``extra`` drew). ``moved_to_fab`` lists, sorted, the references that had
-    no room on the silkscreen and went to the fab layer (the assembly drawing).
-    ``warnings`` are things that did not fit: look at each.
+    ``texts`` is the number of texts it added to the board itself (labels, and whatever
+    the project's ``extra`` drew; reference designators are footprint text and are not
+    counted). ``moved_to_fab`` lists, sorted, the references that had no room on the
+    silkscreen and went to the fab layer (the assembly drawing). ``warnings`` are things
+    that did not fit: look at each.
     """
 
     pcb: Path
-    labels: int
+    texts: int
     moved_to_fab: list[str]
     warnings: list[str]
 
@@ -705,7 +706,7 @@ def format_result(result: SilkResult, root: Path) -> str:
         shown = str(result.pcb.relative_to(root))
     except ValueError:
         shown = str(result.pcb)
-    lines = [f"silk       {shown}: {result.labels} text(s) added"]
+    lines = [f"silk       {shown}: {result.texts} text(s) added"]
     if result.moved_to_fab:
         lines.append(
             "  refs moved to fab (see assembly drawing): "

@@ -1,9 +1,9 @@
 """Integration: `pcbkit build` placement on a tiny project, with real KiCad and pcbnew.
 
-The project is tests/fixtures/tiny_board (a header and a resistor from the project's
-own library, a stock LED) with a mounting hole added and a layout.py written here. It
-needs KiCad's own Python (``import pcbnew``) and kicad-cli: see the head of
-tests/integration/test_kicad_core.py for how to make .venv-kicad, then run
+The project is tests/tiny_project.py's: tests/fixtures/tiny_board (a header and a
+resistor from the project's own library, a stock LED) with two mounting holes and a
+layout.py. It needs KiCad's own Python (``import pcbnew``) and kicad-cli: see the
+head of tests/integration/test_kicad_core.py for how to make .venv-kicad, then run
 
     .venv-kicad/bin/python -m pytest -m kicad -q
 
@@ -32,36 +32,17 @@ from pcbkit import place, sch  # noqa: E402
 from pcbkit.cli import cli  # noqa: E402
 from pcbkit.kicad import board as kb  # noqa: E402
 from pcbkit.place import PlaceResult  # noqa: E402
-from pcbkit.project import Project, ProjectError, load_project  # noqa: E402
+from pcbkit.project import ProjectError, load_project  # noqa: E402
 from tests.board_files import restored_imports  # noqa: E402
-
-pytestmark = pytest.mark.kicad
-
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "tiny_board"
-
-# Two mounting holes and a resistor whose reference starts with H (a part, not a hole)
-# on top of the fixture's header, resistor and LED.
-HOLE_PART = """
-part("H1", "Mechanical:MountingHole", "M3", "MountingHole:MountingHole_3.2mm_M3",
-     {}, block=B, bom=False)
-"""
-EXTRA_PARTS = (
-    HOLE_PART
-    + HOLE_PART.replace('"H1"', '"H2"')
-    + '\nR("HR1", "1k", "+3V3", "GND", B)\n'
+from tests.tiny_project import (  # noqa: E402
+    EXTRA_PARTS,
+    HOLE_PART,
+    LAYOUT,
+    make_project,
+    run_stages,
 )
 
-# J1, R1 and HR1 have positions, the LED D1 has none: it is parked and reported.
-LAYOUT = """\
-W, H = 40.0, 24.0
-CORNER_R = 2.0
-HOLES = [(4.0, 4.0), (36.0, 20.0)]
-P = {
-    "J1": (10.0, 8.0, 0),
-    "R1": (26.0, 12.0, 90),
-    "HR1": (18.0, 18.0, 180),
-}
-"""
+pytestmark = pytest.mark.kicad
 
 
 @pytest.fixture(autouse=True)
@@ -69,24 +50,6 @@ def clean_imports() -> Iterator[None]:
     """Keep project modules and sys.path entries from outliving a test."""
     with restored_imports():
         yield
-
-
-def make_project(
-    root: Path, layout: str = LAYOUT, extra_design: str = EXTRA_PARTS
-) -> Path:
-    """Copy the tiny board into ``root``, add the holes and a layout.py; return root."""
-    shutil.copytree(FIXTURE, root, ignore=shutil.ignore_patterns("expected_*"))
-    with open(root / "design.py", "a", encoding="utf-8") as handle:
-        handle.write(extra_design)
-    (root / "layout.py").write_text(layout, encoding="utf-8")
-    return root
-
-
-def run_stages(root: Path) -> tuple[Project, PlaceResult]:
-    """Run the schematic build and the placement the way `pcbkit build` does."""
-    proj = load_project(root)
-    sch.build_schematic(proj)
-    return proj, place.place_board(proj)
 
 
 @pytest.fixture(scope="module")
