@@ -342,6 +342,32 @@ def test_a_run_that_exits_before_routing_is_not_a_stall(tmp_path: Path) -> None:
     assert not world.killed
 
 
+def test_an_interrupt_while_waiting_ends_the_process_and_goes_on(
+    tmp_path: Path,
+) -> None:
+    """End the router on Ctrl-C (it is in a group of its own), then let it propagate."""
+    world = World(tmp_path / "fr.log", {})
+    sleeps = []
+
+    def sleep_then_interrupt(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise KeyboardInterrupt
+        world.sleep(seconds)
+
+    with pytest.raises(KeyboardInterrupt):
+        fr.watch(
+            world,
+            world.log,
+            90.0,
+            900.0,
+            clock=world.clock,
+            sleep=sleep_then_interrupt,
+            kill=world.kill,
+        )
+    assert world.killed
+
+
 def test_a_missing_log_is_waited_for(tmp_path: Path) -> None:
     """Treat a log that does not exist yet as empty, not as an error."""
     world = World(tmp_path / "fr.log", {}, exit_at=5.0)
@@ -619,10 +645,13 @@ def test_the_loop_fails_twice_then_succeeds_and_stops_at_the_first_clean_try() -
     assert rig.log == ["run", "post", "drc"] * 3  # the fourth run never happened
     assert rig.restored == []  # the clean board is the one in place
     assert rig.said == [
+        "try 1/6: running Freerouting",
         "post done",
         "try 1/6: 2 copper problems (clearance 2), 0 s",
+        "try 2/6: running Freerouting",
         "post done",
         "try 2/6: 2 copper problems (unconnected_items 1, shorting_items 1), 0 s",
+        "try 3/6: running Freerouting",
         "post done",
         "try 3/6: clean, 0 s",
     ]
@@ -700,7 +729,10 @@ def test_a_stall_is_a_failed_try_in_a_full_route() -> None:
     assert result.clean
     assert [a.status for a in result.attempts] == [fr.STALLED, fr.CLEAN]
     assert rig.log == ["run", "run", "post", "drc"]
-    assert rig.said[0] == "try 1/3: stalled: no start in 90 s"
+    assert rig.said[:2] == [
+        "try 1/3: running Freerouting",
+        "try 1/3: stalled: no start in 90 s",
+    ]
     assert not result.fell_back
 
 
@@ -710,7 +742,7 @@ def test_a_run_with_no_session_is_a_failed_try() -> None:
     rig = Rig([nothing, finished()], [{}])
     result = rig.loop(tries=2)
     assert [a.status for a in result.attempts] == [fr.NO_RESULT, fr.CLEAN]
-    assert rig.said[0] == (
+    assert rig.said[1] == (
         "try 1/2: no result: exited with code 1 without writing b.ses"
     )
 
@@ -736,9 +768,11 @@ def test_an_eco_stall_falls_back_to_a_full_route_without_using_a_try() -> None:
     assert result.fell_back
     assert rig.fell_back == 1
     assert rig.log == ["run", "fall back", "run", "post", "drc"]
-    assert rig.said[:2] == [
+    assert rig.said[:4] == [
+        "try 1/1: running Freerouting",
         "the eco run stalled: no start in 90 s",
         "routing the whole board instead of keeping the old route",
+        "try 1/1: running Freerouting",
     ]
     assert len(result.attempts) == 1
 

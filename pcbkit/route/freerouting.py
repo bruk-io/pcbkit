@@ -4,7 +4,7 @@ Freerouting is the autorouter: ``java -jar freerouting.jar -de board.dsn -do boa
 -mp PASSES`` reads the Specctra DSN that ``pre`` wrote and writes a session file that
 ``post`` imports. Two things about it cost hours before they became code here:
 
-* **Its result differs from run to run.** The same DSN once left a net unrouted and
+* **Its result can differ from run to run.** The same DSN once left a net unrouted and
   routed fully on the next run. ``route_loop`` runs it again until a try's copper is
   clean (no unconnected pad, clearance, short, crossing, hole or edge problem), keeps
   the first such try, prints the problems of every try, and gives up after a set
@@ -47,8 +47,8 @@ HARD_TIMEOUT_S = 900.0
 POLL_S = 0.5
 KILL_GRACE_S = 5.0
 
-# What a DRC report entry must not be, for a try's copper to count as clean: route.sh's
-# list, in its order.
+# The DRC categories that count as copper problems; a try is clean when none of them
+# has an entry. route.sh's list, in its order.
 COPPER_CATEGORIES = (
     "unconnected_items",
     "clearance",
@@ -235,21 +235,16 @@ def stop(
     proc.wait()
 
 
-def watch(
+def _wait(
     proc: Any,
     log: Path,
     stall_timeout_s: float,
-    hard_timeout_s: float = HARD_TIMEOUT_S,
-    clock: Callable[[], float] = time.monotonic,
-    sleep: Callable[[float], None] = time.sleep,
-    kill: Callable[[Any], None] | None = None,
+    hard_timeout_s: float,
+    clock: Callable[[], float],
+    sleep: Callable[[float], None],
+    end: Callable[[Any], None],
 ) -> tuple[str, int | None, str]:
-    """Wait for ``proc``, killing it if it stalls or runs too long.
-
-    Return (outcome, returncode, detail). ``kill`` ends the process; it defaults to
-    ``stop`` on the real process group.
-    """
-    end = kill or stop
+    """Poll ``proc`` and its log until it exits, stalls or runs out of time."""
     start = clock()
     started = False
     while True:
@@ -273,6 +268,31 @@ def watch(
             end(proc)
             return TIMED_OUT, None, f"still running after {hard_timeout_s:g} s"
         sleep(POLL_S)
+
+
+def watch(
+    proc: Any,
+    log: Path,
+    stall_timeout_s: float,
+    hard_timeout_s: float = HARD_TIMEOUT_S,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+    kill: Callable[[Any], None] | None = None,
+) -> tuple[str, int | None, str]:
+    """Wait for ``proc``, killing it if it stalls or runs too long.
+
+    Return (outcome, returncode, detail). ``kill`` ends the process; it defaults to
+    ``stop`` on the real process group. The router runs in a group of its own, so a
+    Ctrl-C at the terminal does not reach it: if the wait is interrupted, the process
+    is ended before the interrupt goes on, and nothing is left routing in the
+    background.
+    """
+    end = kill or stop
+    try:
+        return _wait(proc, log, stall_timeout_s, hard_timeout_s, clock, sleep, end)
+    except BaseException:
+        end(proc)
+        raise
 
 
 def run_router(
@@ -414,6 +434,7 @@ def route_loop(
     while len(attempts) < tries:
         number = len(attempts) + 1
         began = clock()
+        say(f"try {number}/{tries}: running Freerouting")
         ran = run()
         if ran.outcome == STALLED and fall_back is not None:
             say(f"the eco run stalled: {ran.detail}")

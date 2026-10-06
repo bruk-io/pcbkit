@@ -9,9 +9,11 @@ Nothing here needs KiCad or Java, but it uses POSIX process groups, as pcbkit do
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -200,6 +202,31 @@ def test_an_old_session_file_is_not_mistaken_for_the_runs(files: RouteFiles) -> 
     result = run(files, "sys.exit(0)")
     assert not result.ses_written
     assert not files.ses.exists()
+
+
+def test_ctrl_c_while_waiting_does_not_leave_the_router_running(
+    files: RouteFiles,
+) -> None:
+    """Stop the router when the wait is interrupted: it would not get the Ctrl-C."""
+    pid_file = files.kicad / "child.pid"
+    interrupt = threading.Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGINT))
+    interrupt.start()
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            run(
+                files,
+                f"""
+                import os
+                open({str(pid_file)!r}, "w").write(str(os.getpid()))
+                print("INFO  Starting auto-routing...")
+                time.sleep(60)
+                """,
+                stall_timeout_s=30.0,
+                hard_timeout_s=60.0,
+            )
+    finally:
+        interrupt.cancel()
+    assert not alive(int(pid_file.read_text()))
 
 
 def test_a_killed_process_is_reaped_and_not_left_a_zombie(files: RouteFiles) -> None:

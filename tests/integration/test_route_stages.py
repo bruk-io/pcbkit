@@ -476,6 +476,29 @@ def test_eco_unlocks_copper_on_the_moved_parts_nets_and_near_them(
     assert f"kept {result.kept} routed pieces from {golden}" in summary
 
 
+@pytest.mark.parametrize(("reach", "led_unlocked"), [(1.0, False), (20.0, True)])
+def test_eco_unlock_reach_comes_from_pcbkit_toml(
+    project: Project, reach: float, led_unlocked: bool
+) -> None:
+    """Free the copper within [route] eco_unlock_reach_mm of a moved part."""
+    toml = project.root / "pcbkit.toml"
+    toml.write_text(
+        toml.read_text("utf-8").replace(
+            "stall_timeout_s = 60",
+            f"stall_timeout_s = 60\neco_unlock_reach_mm = {reach}",
+        ),
+        "utf-8",
+    )
+    proj = load_project(project.root)
+    golden = make_golden(proj)
+    move(proj, "R2", 14.0, 24.0)  # 16 mm from the LED's wire, which is on another net
+    eco_stage.eco(proj, golden)
+    tracks, _, _ = items(route_files(proj).prerouted)
+    led = [t for t in tracks if t.GetNetname() == "/LED_A"]
+    assert len(led) == 1
+    assert (not led[0].IsLocked()) is led_unlocked
+
+
 def test_eco_never_copies_ground_copper(project: Project) -> None:
     """Leave ground to the pours: copied ground fragments can hang the router."""
     golden = make_golden(project)
