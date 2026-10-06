@@ -352,7 +352,155 @@ with it.
 
 ## layout.py and silk.py
 
-To be written with `pcbkit build` and the silkscreen engine (WP4).
+`layout.py` says where everything goes on the board. `pcbkit build` reads it, after the
+schematic, and writes `kicad/<stem>.kicad_pcb` (and an identical `kicad/placed.kicad_pcb`).
+`silk.py` says what text the silkscreen pass adds; it is optional. Coordinates in both are
+millimetres from the board's top-left corner, with y pointing down.
+
+### layout.py
+
+| Name | Type | Default | Meaning |
+|---|---|---|---|
+| `W`, `H` | number | required | The board's width and height. With an `outline` function they are the board's bounding box: the silkscreen pass keeps text 0.6 mm off these edges, and parts without a position are parked below `H`. |
+| `P` | dict | required | Where each part goes: `{ref: (x, y, rot)}`. `rot` is in degrees, counter-clockwise as KiCad shows it. |
+| `CORNER_R` | number | `0` | Radius of the outline's corners, from 0 (square) to half the shorter side. |
+| `HOLES` | list | `[]` | The position `(x, y)` of each mounting hole. |
+| `outline` | function | none | `outline(board, api)` draws the board outline itself, instead of the rectangle `W` by `H`. |
+
+```python
+from __future__ import annotations
+
+W, H = 40.0, 24.0
+CORNER_R = 2.0
+HOLES = [(4.0, 4.0), (36.0, 20.0)]
+P = {
+    "J1": (10.0, 8.0, 0),
+    "R1": (26.0, 12.0, 90),
+}
+```
+
+- A part called `H1`, `H2`, ... (an `H` and a number, nothing else) is a mounting hole: it
+  goes to `HOLES[n - 1]` with rotation 0, whatever `P` says about it. There must be
+  a position for each. A reference such as `HR1` or `HS1` is an ordinary part.
+- A part of the design that has no entry in `P` is still put on the board, but parked
+  below it: at x = 5, 16 mm under the bottom edge for the first, and 6 mm lower for each
+  next. `pcbkit build` prints them as `missing`. An entry in `P` for a part the design
+  does not have is ignored.
+- The outline is a rectangle on `Edge.Cuts`, with quarter-circle corners of radius
+  `CORNER_R`. For any other shape, define `outline(board, api)`. `api` is the
+  `pcbkit.kicad.board` module (see "The `api` argument" under routing.py), so
+  `api.add_line(board, x0, y0, x1, y1)` and `api.add_arc(board, cx, cy, sx, sy, ex, ey)`
+  draw on `Edge.Cuts` in layout millimetres:
+
+```python
+def outline(board, api):
+    """Draw a board with one corner cut off."""
+    api.add_line(board, 0, 0, 30, 0)
+    api.add_line(board, 30, 0, 40, 10)
+    api.add_line(board, 40, 10, 40, 24)
+    api.add_line(board, 40, 24, 0, 24)
+    api.add_line(board, 0, 24, 0, 0)
+```
+
+- Each footprint is loaded from the project's own library (`kicad/<LIB>.pretty`, see
+  footprints.py) when its id starts with `<LIB>:`, and from KiCad's stock libraries
+  otherwise. A footprint that is not there stops the build, naming it.
+- The stackup is written into the board from `[stackup]`: the outer copper is
+  `copper_mm`, the board is `thickness_mm` thick, and the FR4 core between the coppers is
+  `thickness_mm` less 0.16 mm, whatever the copper weight.
+
+### silk.py
+
+The silkscreen pass runs on the routed board (`pcbkit finalize` does it, after the pours
+are filled). It adds text in this order, and each text it adds is something the ones
+after it keep clear of: pads, the parts' own silkscreen and the board edge are in the way
+from the start.
+
+1. `LABELS`, at their spots.
+2. `CONN_LABELS`, beside their parts.
+3. Whatever `extra(board, api)` draws.
+4. A reference designator for every part, on the silkscreen where there is room round its
+   courtyard.
+5. The assembly drawing: a reference with no room on the silkscreen goes to the fab layer
+   (`F.Fab`), and one that overlaps another fab text, or sits on a through-hole pad, is
+   moved to a clear spot or shrunk.
+
+Values are never printed, and the board's title block is filled in.
+
+| Name | Type | Default | Meaning |
+|---|---|---|---|
+| `LABELS` | list of `(text, x, y, size, rot)` | `[]` | Fixed labels. `x`, `y` is the text's centre, `size` its height in mm and `rot` 0 or 90. A label whose spot is taken moves to the nearest free one within 1.5 mm; if none is free it is drawn at its spot anyway, with a warning. |
+| `CONN_LABELS` | dict of ref to text | `{}` | A function label beside each part named: below its courtyard, above it, or to a side, whichever is free first. A reference that is not on the board is an error. |
+| `HIDE_REF` | set of references | `set()` | Parts whose reference is not printed on the silkscreen but kept on `F.Fab`. A reference that is not on the board is a warning. |
+| `KEEP_REF` | set of references | `set()` | Parts whose reference text is left where its footprint has it, and whose fab texts the assembly pass does not move: for a footprint that draws its own labels. A part in both sets is an error. |
+| `extra` | function | none | `extra(board, api)` draws what only this board needs. |
+| `COMPANY` | string | `""` | The title block's company. |
+| `COMMENTS` | list of strings | `[]` | The title block's comments, up to nine. |
+| `DATE` | string | `""` | The title block's date. Left empty unless you set it, so that running the pass on another day does not change the board. |
+
+The title block's title and revision come from `[board]` in pcbkit.toml. Any other name
+in silk.py is yours: `extra` can read it.
+
+```python
+from __future__ import annotations
+
+from pcbkit.silk import iloc
+
+LABELS = [("My Board", 20.0, 20.0, 1.0, 0)]
+CONN_LABELS = {"J1": "3V3 / GND"}
+HIDE_REF = {"H1", "H2"}
+COMPANY = "Acme"
+COMMENTS = ["2 layer, 1.6 mm FR4"]
+DATE = "2026-01-02"
+
+
+def extra(board, api):
+    """Number J1's pins on the silkscreen, beside each pad."""
+    for pad in api.footprints["J1"].Pads():
+        x, y = iloc(pad)
+        if not api.place(pad.GetNumber(), [(x + 2.0, y), (x - 2.0, y)], 0.8):
+            api.warn(f"no room for the mark of J1 pin {pad.GetNumber()}")
+```
+
+#### The `api` argument of `extra`
+
+`extra` is called after `LABELS` and `CONN_LABELS`, so it sees them as obstacles, and the
+reference designators are placed afterwards and keep clear of what it draws. `api` holds
+the state of the pass:
+
+```python
+api.board                                    # the pcbnew board (also the first argument)
+api.footprints                               # {ref: footprint} of every part on the board
+api.obstacles                                # Boxes: what text keeps clear of, in layout mm
+api.width, api.height                        # the board's size, W and H of layout.py
+api.text(text, x, y, size=0.8, rot=0, layer=None, bold=False) -> text
+                                             # add a text centred on (x, y), on F.SilkS
+                                             # unless `layer` (a pcbnew layer id) says
+                                             # otherwise; later texts keep clear of it
+api.free(x, y, text, size, vertical=False) -> bool
+                                             # would that text touch nothing?
+api.place(text, candidates, size=0.8, bold=False) -> bool
+                                             # add the text at the first free candidate,
+                                             # each (x, y) or (x, y, rot); False if none
+api.warn(message) -> None                    # report something that did not fit
+```
+
+`pcbkit.silk` also has the functions behind these, for code that wants them directly:
+`add_text(board, text, x, y, size, rot, layer, bold, obstacles)`, `text_box(x, y, text,
+size, vertical)` (the box a text is taken to fill), `bbox_of(item)` and `iloc(item)` (a
+board item's box and position in layout millimetres), and the `Boxes` class. A text
+added with any of them counts, and is guarded, like one added with `api.text`.
+`pcbkit.silk.add_text` is not `api.add_text` of the routing hooks: its stroke is never
+under 0.15 mm, the least a fab house prints.
+
+#### Once per board
+
+Running the pass twice on one board draws every text again, on top of the first. So
+`apply_silk` refuses a board that already carries the text it is about to add: it raises
+`SilkError` (a click error: the command prints it and exits 1), says what it found, and
+writes nothing. Run it on the board as the router left it. `pcbkit finalize` starts from
+the golden route every time, so it never meets this. Texts of the board's own that the
+pass would not draw on top of (a logo, a note) are fine.
 
 ## Fab outputs
 
