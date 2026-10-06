@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from openpyxl import load_workbook
 
 from pcbkit import design
 from pcbkit.design import Part
@@ -402,8 +403,6 @@ def test_the_csv_has_a_header_then_a_row_per_line_with_crlf_endings(
 
 def read_sheet(path: Path) -> list[list[Any]]:
     """Return every cell of the workbook's only sheet, row by row."""
-    from openpyxl import load_workbook
-
     book = load_workbook(path)
     assert book.sheetnames == ["BOM"]
     return [list(row) for row in book["BOM"].iter_rows(values_only=True)]
