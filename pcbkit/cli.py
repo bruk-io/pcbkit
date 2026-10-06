@@ -243,14 +243,57 @@ def quote_cmd(
 
 
 @cli.command("compare")
-@click.argument("old", type=click.Path(path_type=Path))
-@click.argument("new", type=click.Path(path_type=Path))
-def compare_cmd(old: Path, new: Path) -> None:
+@click.argument("old", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True, help="Print the report as JSON.")
+@click.option(
+    "--piece-tol",
+    type=click.FloatRange(min=0),
+    default=0.01,
+    show_default=True,
+    metavar="MM2",
+    help="Copper on one board only is a difference when a piece is larger than this.",
+)
+@click.option(
+    "--fill-tol",
+    type=click.FloatRange(min=0),
+    default=0.5,
+    show_default=True,
+    metavar="MM2",
+    help="A zone's fill is a difference when it moved by this much or more.",
+)
+@click.option(
+    "--top",
+    type=click.IntRange(min=0),
+    default=8,
+    show_default=True,
+    metavar="N",
+    help="Pieces to list for each layer and board in the text report.",
+)
+def compare_cmd(
+    old: Path, new: Path, as_json: bool, piece_tol: float, fill_tol: float, top: int
+) -> None:
     """Compare the copper of two boards; exit 1 if they differ.
 
-    Not implemented yet (WP8).
+    Compares the number and length of tracks, the number of vias, each zone's filled
+    area, and the copper itself on F.Cu and B.Cu: what exists on one board only,
+    judged piece by piece. Exits 0 when the boards match, 1 when they differ and 2
+    when a file cannot be read as a board.
     """
-    _not_implemented("WP8")
+    env.require_pcbnew()
+    import json
+
+    from pcbkit import compare
+
+    report = compare.compare_boards(
+        old, new, piece_tol_mm2=piece_tol, fill_tol_mm2=fill_tol
+    )
+    if as_json:
+        click.echo(json.dumps(compare.report_to_dict(report), indent=2))
+    else:
+        click.echo(compare.format_report(report, top=top))
+    if report.differs:
+        click.get_current_context().exit(1)
 
 
 @cli.command("shots")
