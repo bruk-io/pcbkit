@@ -12,6 +12,7 @@ tests/integration/test_kicad_core.py, whose header says how to make that environ
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -329,6 +330,45 @@ def test_the_dense_box_is_what_makes_the_lattice(project: Project) -> None:
     inside = [v for v in vias if 22.0 <= v[0] < 38.0 and 4.0 <= v[1] < 12.0]
     assert inside  # the base grid is still there
     assert not [v for v in inside if on_lattice(v, 22.0, 4.0, 2.0)]
+
+
+def test_post_leaves_no_two_layer_ground_further_than_the_gap_limit_from_a_via(
+    project: Project,
+) -> None:
+    """Fill the gaps: every point with ground on both layers is near a ground via."""
+    pre_stage.pre(project)
+    write_session(project)
+    post_stage.post(project)
+    board = pcbnew.LoadBoard(str(route_files(project).pcb))
+    top, bottom = (
+        next(
+            z
+            for z in board.Zones()
+            if z.GetNetname() == "/GND" and z.GetLayer() == layer
+        ).GetFilledPolysList(layer)
+        for layer in (pcbnew.F_Cu, pcbnew.B_Cu)
+    )
+    anchors = [
+        kb.to_local(t.GetPosition())
+        for t in board.GetTracks()
+        if t.GetClass() == "PCB_VIA" and t.GetNetname() == "/GND"
+    ] + [
+        kb.to_local(p.GetPosition())
+        for f in board.GetFootprints()
+        for p in f.Pads()
+        if p.GetNetname() == "/GND" and p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH
+    ]
+    limit = project.config.stitch.gap_limit_mm
+    worst = 0.0
+    for ix in range(80):
+        for iy in range(60):
+            x, y = 0.25 + ix * 0.5, 0.25 + iy * 0.5  # the grid fill_gaps looks at
+            point = kb.pt(x, y)
+            if top.Contains(point) and bottom.Contains(point):
+                nearest = min(math.hypot(x - ax, y - ay) for ax, ay in anchors)
+                worst = max(worst, nearest)
+    assert worst <= limit + 0.05, f"{worst:.2f} mm from the nearest ground via"
+    assert worst > limit / 2  # the grid alone would not have done it
 
 
 def test_post_gives_the_solid_pad_refs_a_solid_ground_connection(
