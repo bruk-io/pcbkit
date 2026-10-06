@@ -119,6 +119,18 @@ def hatch_pour(board: Any) -> None:
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
 
 
+def add_arc_track(board: Any) -> None:
+    """Add a semicircular arc track, radius 2 mm, on NET_B and clear of other copper."""
+    arc = pcbnew.PCB_ARC(board)
+    arc.SetStart(kb.pt(2, 5))
+    arc.SetMid(kb.pt(4, 3))
+    arc.SetEnd(kb.pt(6, 5))
+    arc.SetWidth(kb.mm(0.25))
+    arc.SetLayer(pcbnew.F_Cu)
+    arc.SetNet(kb.N(board, "NET_B"))
+    board.Add(arc)
+
+
 def add_keepout(board: Any) -> None:
     """Add a rule area that bans nothing it could change: no copper moves."""
     kb.keepout(board, 10, 3, 14, 6, tracks=False, vias=False, pours=False)
@@ -273,6 +285,19 @@ def test_a_track_cut_in_two_is_flagged_by_the_count_alone(
     assert [line.split(":")[0] for line in report.differences] == ["tracks"]
 
 
+def test_an_arc_track_counts_as_a_track_with_its_arc_length(
+    tiny: TinyBoard, edited: Callable[[Edit], Path]
+) -> None:
+    """Count and measure arcs too: a route is not only straight segments."""
+    report = compare.compare_boards(tiny.pcb, edited(add_arc_track))
+    assert (report.old_tracks.count, report.new_tracks.count) == (2, 3)
+    added = report.new_tracks.length_mm - report.old_tracks.length_mm
+    assert added == pytest.approx(3.14159265 * 2, abs=0.001)  # half a circle of r = 2
+    assert report.tracks_differ and not report.vias_differ
+    (arc,) = side(report, "F.Cu", "new").over
+    assert arc.area_mm2 > 1.0  # the copper of the arc: it is judged as copper too
+
+
 def test_a_keep_out_that_only_one_board_has_is_flagged_though_no_copper_moves(
     tiny: TinyBoard, edited: Callable[[Edit], Path]
 ) -> None:
@@ -321,6 +346,22 @@ def test_the_piece_tolerance_is_configurable(
     )
     report = compare.compare_boards(tiny.pcb, nudged, piece_tol_mm2=0.005)
     assert report.tolerances.piece_mm2 == 0.005 and report.differs
+
+
+def test_the_track_length_tolerance_is_configurable(
+    tiny: TinyBoard, edited: Callable[[Edit], Path]
+) -> None:
+    """Let a caller decide how far apart two total lengths may be before they differ."""
+    split = edited(split_net_b)
+    assert compare.compare_boards(tiny.pcb, split).tolerances.length_mm == 0.001
+    # The count differs whatever the length tolerance is.
+    report = compare.compare_boards(tiny.pcb, split, length_tol_mm=5.0)
+    assert report.tolerances.length_mm == 5.0 and report.tracks_differ
+    # And a moved track keeps the length: a tolerance of 0 would only flag real change.
+    same_length = compare.compare_boards(
+        tiny.pcb, edited(shift_net_b(1.0)), length_tol_mm=0.0
+    )
+    assert not same_length.tracks_differ
 
 
 def test_the_fill_tolerance_is_configurable(
