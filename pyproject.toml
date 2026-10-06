@@ -1,0 +1,70 @@
+[project]
+name = "pcbkit"
+version = "0.1.0.dev0"
+description = "PCB as Python: generate, route, check and export KiCad boards from code."
+readme = "README.md"
+# 3.9, not Bruk's usual 3.14: KiCad's pcbnew module only imports under the Python
+# bundled with KiCad (3.9.13 in KiCad 10 on macOS). Code must run on 3.9 and 3.14.
+requires-python = ">=3.9"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Bruk Habtu" }]
+keywords = ["kicad", "pcb", "eda", "freerouting"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    "click>=8.1",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+pcbkit = "pcbkit.cli:cli"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pcbkit"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+# ANN and D401 turn two house rules into checks: type hints on every function and
+# imperative-mood docstrings. ANN401 stays off because pcbnew ships no type stubs, so
+# `Any` is the honest annotation for its objects.
+select = ["E", "F", "W", "I", "B", "UP", "C4", "ANN", "D401"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.isort]
+# Every module must run on 3.9, where `X | Y` and `list[str]` in annotations only work
+# as strings.
+required-imports = ["from __future__ import annotations"]
+known-first-party = ["pcbkit"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "kicad: needs a real KiCad install (kicad-cli, and pcbnew importable in the running Python)",
+    "e2e: slow end-to-end run with real KiCad, Freerouting and ngspice",
+]
