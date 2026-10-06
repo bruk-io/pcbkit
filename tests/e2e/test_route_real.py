@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from click.testing import CliRunner
 
 pcbnew = pytest.importorskip(
     "pcbnew",
@@ -32,6 +33,7 @@ import numpy  # noqa: E402, F401  (loaded now, so restored_imports never unloads
 import scipy.spatial  # noqa: E402, F401
 
 from pcbkit import sch  # noqa: E402
+from pcbkit.cli import cli  # noqa: E402
 from pcbkit.kicad import cli as kicad_cli  # noqa: E402
 from pcbkit.kicad import env  # noqa: E402
 from pcbkit.project import Project  # noqa: E402
@@ -151,6 +153,26 @@ def test_route_promote_finalize_and_eco_on_a_small_board(
     assert again.eco.kept > 0
     assert again.clean, "\n".join(said)
     assert drc_counts(project) == (0, 0, 0)
+
+
+def test_the_three_commands_through_the_cli(
+    project: Project, recorder: Recorder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run route, promote and finalize as the user does, from the project folder."""
+    monkeypatch.chdir(project.root)
+    routed = CliRunner().invoke(cli, ["route"])
+    assert routed.exit_code == 0, routed.output
+    assert "clean" in routed.output
+    assert "DRC: 0 violations, 0 unconnected pads, 0 footprint errors" in routed.output
+
+    promoted = CliRunner().invoke(cli, ["promote"])
+    assert promoted.exit_code == 0, promoted.output
+    assert "promoted to golden/" in promoted.output
+
+    finalized = CliRunner().invoke(cli, ["finalize", "--no-render"])
+    assert finalized.exit_code == 0, finalized.output
+    assert "BOM lines: 6 total parts: 6" in finalized.output
+    assert recorder.exports == [False]
 
 
 def test_a_stalled_eco_run_falls_back_to_the_whole_board(
