@@ -364,4 +364,121 @@ To be written with `pcbkit check`, `pcbkit mutants` and `pcbkit report` (WP7).
 
 ## Comparing boards and taking shots
 
-To be written with `pcbkit compare` and `pcbkit shots` (WP8).
+Two commands for looking at boards rather than building them. Both need pcbnew, so run
+them in the project's `.venv` (`pcbkit setup` makes it).
+
+### pcbkit compare
+
+```
+pcbkit compare OLD NEW [--json] [--piece-tol MM2] [--fill-tol MM2] [--top N]
+```
+
+Compares the routed copper of two board files and says what moved. It takes any two
+`.kicad_pcb` files, so it does not need a project: use it to check that a refactor, a new
+KiCad or a rebuilt route changed nothing, or to see what a re-route did.
+
+| What | Measured as | A difference when |
+|---|---|---|
+| Tracks | how many track segments (arcs included) and their total length | the counts differ, or the lengths differ by more than 0.001 mm |
+| Vias | how many vias | the counts differ |
+| Zones | each zone's filled area | the fill moved by `--fill-tol` or more, or only one board has the zone |
+| Copper | what F.Cu and B.Cu have on one board only, in pieces | a piece is larger than `--piece-tol` |
+
+- A zone is matched across the boards by its net, its first layer and its outline area to
+  0.1 mm2. Zones that share all three are one entry, and a zone's fill is added up over
+  every layer it fills, so a pour that a router split into pieces still compares as one.
+  A keep-out area is an entry with no fill: one that only one board has is a difference
+  even though it moves no copper.
+- The copper comparison turns each outer layer into polygons and subtracts each board's
+  from the other's. What is left on one board only is judged **piece by piece**, not as a
+  layer total: refilling a pour twice leaves a few hundredths of a square millimetre of
+  slivers, in pieces far smaller than any real change, and a layer total would call that a
+  difference. The totals are printed for information. A piece's area is the area inside
+  its outer outline, so a thin ring (a track made a little wider) counts as the whole area
+  it surrounds: that can over-report a change, never hide one.
+- Only copper and its numbers are compared. Silkscreen, fab layers, footprint properties
+  and the 3D model do not count, so a board that differs only in a label matches.
+- Positions are layout millimetres, so a piece reported at (15.0, 10.0) is where
+  `layout.py` coordinates would put it.
+- `--piece-tol` (default 0.01) and `--fill-tol` (default 0.5) are in mm2. `--top` (default
+  8) is how many pieces the text report lists for each layer and board; `--json` always
+  lists them all.
+
+The exit code says the result: **0** the boards match, **1** they differ, **2** a file is
+not a KiCad board (or could not be read), so a script can tell "different" from "broken".
+With `--json` the report is printed as JSON and nothing else goes to standard output:
+`identical`, `differences` (one sentence each), `tolerances`, `tracks`, `vias`, `zones` (a
+fill of `null` means the board has no such zone) and `copper` (for each layer and side:
+the total, the number of pieces and `over_tolerance`, each with its area and position).
+
+A change of one track, as the text report shows it:
+
+```
+pcbkit compare
+  old  before.kicad_pcb
+  new  after.kicad_pcb
+  a copper piece over 0.01 mm2 is a difference, and so is a zone fill that moved by 0.5 mm2 or more
+
+Tracks  old 2 (14.0 mm)  new 2 (14.0 mm)  same
+Vias    old 1  new 1  same
+
+Zone fill, mm2 (a zone is matched by net, first layer and outline area)
+  net       layer  outline    old    new  change
+  keep-out  F.Cu       6.0    0.0    0.0     0.0
+  keep-out  F.Cu      18.0    0.0    0.0     0.0
+  /GND      B.Cu     570.4  543.0  543.0     0.0
+
+Copper on one board only (the layer totals include slivers: they are for information)
+  F.Cu only in old: total 2.888 mm2 in 1 piece, 1 over 0.01 mm2  DIFFERENT
+          2.888 mm2 at (15.0, 10.0)
+  F.Cu only in new: total 3.135 mm2 in 1 piece, 1 over 0.01 mm2  DIFFERENT
+          3.135 mm2 at (15.0, 11.0)
+  B.Cu only in old: total 0.000 mm2 in 0 pieces, 0 over 0.01 mm2
+  B.Cu only in new: total 0.000 mm2 in 0 pieces, 0 over 0.01 mm2
+
+The boards differ: 2 differences.
+```
+
+### pcbkit shots
+
+```
+pcbkit shots [--out DIR] [--pcb FILE] [--region NAME]... [--no-render]
+```
+
+Pictures of the board for a review, in the folder `out/shots/` (or `--out`): for each
+region an SVG and a PNG of it, and three 3D renders, `render_iso.png` (angled),
+`render_top.png` and `render_bottom.png`. It shoots the project's board,
+`kicad/<stem>.kicad_pcb`, or the one named by `--pcb`. `--region` takes only the regions
+named (repeat it for several); `--no-render` skips the renders, which take the longest.
+It needs kicad-cli, and rsvg-convert for the PNGs: without rsvg-convert it stops before
+doing anything and says how to install it.
+
+A region is one side of the board, cut to a box. The top view shows `F.Cu`, `F.SilkS`,
+`F.CrtYd`, `F.Fab` and `Edge.Cuts`, the bottom view the `B.` equivalents. The bottom view is
+not mirrored: a point has the same x on both sides. There are always two regions,
+`board_top` and `board_bottom`, the whole board at 1800 pixels wide. The project adds its
+own with `SHOTS` in layout.py.
+
+#### SHOTS in layout.py
+
+Optional. A dict of region name to `(side, x0, y0, x1, y1)`, with the box in layout
+millimetres (from the board's top-left corner, y down, as everywhere in layout.py):
+
+```python
+SHOTS = {
+    "input": ("top", 0, 0, 30, 20),
+    "input_back": ("bottom", 0, 0, 30, 20),
+    "regulator": ("top", 40, 5, 60, 25, 2400),
+}
+```
+
+| Value | Meaning |
+|---|---|
+| name | The file name: `input.svg` and `input.png`. Letters, digits, `_`, `-` and `.`, starting with a letter, digit or `_`. A name starting `render_` is kept for the 3D renders. A region called `board_top` or `board_bottom` replaces the whole-board shot of that name. |
+| side | `"top"` or `"bottom"`. |
+| x0, y0, x1, y1 | The corners of the box, with `x0 < x1` and `y0 < y1`, in mm. |
+| width in pixels | Optional sixth value, a whole number from 100 to 10000. The default is 1600; the height follows from the box. |
+
+Every problem in `SHOTS` is reported together, naming layout.py and the region, and
+nothing is exported until it is right.
+
