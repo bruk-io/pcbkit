@@ -189,8 +189,11 @@ def test_the_default_table_is_for_0603_resistors_only() -> None:
 
 
 def test_the_default_table_is_for_resistors_only() -> None:
-    cap = make("C1", "10k", sym="Device:C", fp=C0603, mpn="")
-    assert lines_of([cap])[0].mpn == ""
+    # a capacitor symbol in a resistor footprint, with no part number and a value the
+    # table knows: only its symbol keeps it from getting a resistor's part number
+    odd = make("C1", "10k", sym="Device:C", fp=R0603, mpn="")
+    assert lines_of([odd])[0].mpn == ""
+    assert lines_of([make("R1", "10k", mpn="")])[0].mpn == "RC0603FR-0710KL"
 
 
 def test_the_stand_in_is_what_the_design_dsl_makes() -> None:

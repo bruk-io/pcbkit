@@ -18,6 +18,7 @@ from pcbkit.fab import docs, gerbers
 from pcbkit.kicad import env
 from pcbkit.kicad.env import Run
 from tests.fake_machine import FakeMachine
+from tests.unit.test_kicad_cli import fake_run, writes_files
 
 # --- the zip -------------------------------------------------------------------------
 
@@ -34,6 +35,25 @@ def test_the_zip_holds_every_file_in_the_folder_sorted_and_flat(tmp_path: Path) 
         assert archive.namelist() == names
         assert archive.read("a-F_Cu.gbr") == b"a-F_Cu.gbr"
         assert archive.getinfo("a-F_Cu.gbr").compress_type == zipfile.ZIP_DEFLATED
+
+
+def test_a_stale_file_in_the_gerber_folder_is_neither_kept_nor_zipped(
+    machine: FakeMachine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    kicad = str(
+        machine.exe(machine.usr_bin / "kicad-cli", "10.0.6", on_path="kicad-cli")
+    )
+    calls = fake_run(monkeypatch, kicad, write=writes_files("b-F_Cu.gbr", "b-PTH.drl"))
+    folder = tmp_path / "gerbers"
+    folder.mkdir()
+    (folder / "old-F_Cu.gbr").write_text("from an earlier run", encoding="utf-8")
+    written = gerbers.export(tmp_path / "b.kicad_pcb", folder, tmp_path / "out.zip")
+    assert [p.name for p in written] == ["b-F_Cu.gbr", "b-PTH.drl", "out.zip"]
+    assert not (folder / "old-F_Cu.gbr").exists()
+    with zipfile.ZipFile(tmp_path / "out.zip") as archive:
+        assert archive.namelist() == ["b-F_Cu.gbr", "b-PTH.drl"]
+    # the Gerbers are plotted first, then the drill files, into the same folder
+    assert [c.args[3] for c in calls] == ["gerbers", "drill"]
 
 
 # --- the fake tools ------------------------------------------------------------------
