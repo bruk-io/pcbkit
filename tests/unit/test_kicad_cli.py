@@ -498,6 +498,29 @@ def test_an_export_into_a_folder_that_ends_up_empty_raises(
         cli.export_gerbers(tmp_path / "b.kicad_pcb", tmp_path / "g")
 
 
+def test_a_stale_report_from_an_earlier_run_cannot_pass_for_this_one(
+    monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
+) -> None:
+    """The tool exits 0 but writes nothing: the old clean report must not count."""
+    report = tmp_path / "drc.rpt"
+    report.write_text((FIXTURES / "drc_clean.rpt").read_text(encoding="utf-8"))
+    fake_run(monkeypatch, kicad, output="Done.\n")
+    with pytest.raises(cli.KicadCliError, match="wrote nothing at"):
+        cli.drc(tmp_path / "b.kicad_pcb", report)
+    assert not report.exists()
+
+
+def test_a_fresh_report_replaces_a_stale_one(
+    monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
+) -> None:
+    report = tmp_path / "drc.rpt"
+    report.write_text((FIXTURES / "drc_clean.rpt").read_text(encoding="utf-8"))
+    fake_run(monkeypatch, kicad, write=writes_report("drc_clearance_and_holes.rpt"))
+    result = cli.drc(tmp_path / "b.kicad_pcb", report)
+    assert not result.report.clean
+    assert result.report.categories["clearance"] == 1
+
+
 def test_violations_in_a_report_are_results_not_failures(
     monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
 ) -> None:

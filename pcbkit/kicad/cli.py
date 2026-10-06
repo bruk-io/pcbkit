@@ -240,10 +240,16 @@ def run_cli(
     """Run ``kicad-cli`` with ``args`` and return the run, or raise KicadCliError.
 
     ``expect`` names what the command must leave behind: a file it writes, or a folder
-    it exports into. A run that exits 0 but leaves one of them missing (or a folder
-    empty) raises too, so a quiet failure cannot pass as an export.
+    it exports into. A file left by an earlier run is deleted first, so one that
+    exists afterwards was written by this run: a quiet failure cannot pass as an
+    export, and a stale report cannot read as a clean one. A run that exits 0 but
+    leaves a file missing, or a folder empty, raises too. A folder is not cleared
+    (it may hold other work): files already in it stay, and are listed with the new.
     """
     command = (kicad_cli_path(), *map(str, args))
+    for path in expect:
+        if Path(path).is_file():
+            Path(path).unlink()
     done = env._run(list(command), timeout=timeout)
     name = f"kicad-cli {_subcommand(command[1:])}"
     if done.returncode != 0:  # env._run reports a timeout or a launch failure as -1
