@@ -24,7 +24,9 @@ from click.testing import CliRunner, Result
 from pcbkit import libs, sch
 from pcbkit.cli import cli
 from pcbkit.design import load_design
+from pcbkit.kicad import cli as kicad_cli
 from pcbkit.kicad import env
+from pcbkit.kicad.cli import ErcReport
 from pcbkit.project import load_project
 from tests.board_files import restored_imports
 from tests.netlist_norm import normalise
@@ -125,23 +127,24 @@ def test_a_design_that_names_a_pin_the_symbol_lacks_is_a_message(board: Path) ->
 # If a future KiCad stops needing them, these fail and that code can go.
 
 
-def prepare(board: Path) -> tuple[Path, str]:
-    """Do what `pcbkit sch` does before ERC; return the schematic and kicad-cli."""
+def prepare(board: Path) -> Path:
+    """Do what `pcbkit sch` does before ERC; return the schematic."""
     proj = load_project(board)
     design = load_design(board / "design.py")
     made = libs.write_project_libs(proj)
-    schematic = sch.write_schematic(
+    return sch.write_schematic(
         design, proj.config.board, proj.kicad_dir, env.symbols_dir(), made.symbol_libs
     )
-    tool = env.find_kicad_cli()
-    assert tool is not None
-    return schematic, tool.path
+
+
+def erc_of(board: Path, schematic: Path) -> ErcReport:
+    """Run ERC with kicad-cli, the way `pcbkit sch` does, and return the report."""
+    return kicad_cli.erc(schematic, board / "kicad" / "erc.rpt").report
 
 
 def test_control_with_everything_in_place_erc_is_clean(board: Path) -> None:
     """Show the baseline the next controls are measured against."""
-    schematic, cli_path = prepare(board)
-    report = sch.run_erc(cli_path, schematic, board / "kicad" / "erc.rpt")
+    report = erc_of(board, prepare(board))
     assert (report.errors, report.warnings) == (0, 0)
 
 
@@ -157,10 +160,10 @@ def test_control_without_the_project_file_or_the_table_erc_loses_the_library(
     board: Path, missing: str, codes: set[str]
 ) -> None:
     """See ERC warn that the project's library is missing."""
-    schematic, cli_path = prepare(board)
+    schematic = prepare(board)
     (board / "kicad" / missing).unlink()
-    report = sch.run_erc(cli_path, schematic, board / "kicad" / "erc.rpt")
+    report = erc_of(board, schematic)
     assert report.errors == 0
     assert report.warnings >= 1
-    assert {v.code for v in report.violations} == codes
+    assert {v.category for v in report.violations} == codes
     assert any("'tiny'" in v.message for v in report.violations)

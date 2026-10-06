@@ -521,6 +521,39 @@ def test_a_fresh_report_replaces_a_stale_one(
     assert result.report.categories["clearance"] == 1
 
 
+def test_a_stale_erc_report_cannot_pass_for_this_one(
+    monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
+) -> None:
+    """The tool exits 0 but writes nothing: the old clean report must not count."""
+    report = tmp_path / "erc.rpt"
+    report.write_text((FIXTURES / "erc_clean.rpt").read_text(encoding="utf-8"))
+    fake_run(monkeypatch, kicad, output="Done.\n")
+    with pytest.raises(
+        cli.KicadCliError, match="kicad-cli sch erc ran but wrote nothing"
+    ):
+        cli.erc(tmp_path / "b.kicad_sch", report)
+    assert not report.exists()
+
+
+def test_a_failing_erc_run_raises_with_the_tools_own_words(
+    monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
+) -> None:
+    fake_run(monkeypatch, kicad, returncode=3, output="wx assertion noise\n")
+    with pytest.raises(cli.KicadCliError) as raised:
+        cli.erc(tmp_path / "b.kicad_sch", tmp_path / "erc.rpt")
+    assert "kicad-cli sch erc failed (exit 3)" in raised.value.message
+    assert "wx assertion noise" in raised.value.message
+
+
+def test_a_netlist_export_that_writes_nothing_raises(
+    monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
+) -> None:
+    """Whatever the exit status, the file has to be there afterwards."""
+    fake_run(monkeypatch, kicad, output="Done.\n")
+    with pytest.raises(cli.KicadCliError, match="export netlist ran but wrote nothing"):
+        cli.export_netlist(tmp_path / "b.kicad_sch", tmp_path / "b.net")
+
+
 def test_violations_in_a_report_are_results_not_failures(
     monkeypatch: pytest.MonkeyPatch, kicad: str, tmp_path: Path
 ) -> None:

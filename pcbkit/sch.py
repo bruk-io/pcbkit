@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import copy
 import datetime
-import re
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -29,7 +28,9 @@ from typing import Any
 import click
 
 from pcbkit.design import Design, DesignError, Part, load_design
+from pcbkit.kicad import cli as kicad_cli
 from pcbkit.kicad import env
+from pcbkit.kicad.cli import ErcReport, ReportError
 from pcbkit.kicad.sexp import QStr, dump, find, findall, parse, q, walk
 from pcbkit.libs import ProjectLibs, write_project_libs
 from pcbkit.project import BoardConfig, Project
@@ -54,8 +55,6 @@ NAMESPACE = uuid.UUID("5b0f3c2e-8d1a-4c77-9a53-5b1d0c0ffee5")
 SEED_BLOCK_BOX = "auto:210"
 SEED_BLOCK_TITLE = "auto:212"
 SEED_NOTE = "auto:218"
-
-KICAD_CLI_TIMEOUT = 600.0  # seconds; ERC of a large sheet takes a few
 
 
 # --- symbol libraries -------------------------------------------------------------
@@ -561,82 +560,6 @@ def write_schematic(
 
 # --- ERC and the netlist ----------------------------------------------------------
 
-# The line that ends the findings in kicad-cli's text report, for example
-# "** ERC messages: 2  Errors 2  Warnings 0".
-_ERC_SUMMARY = re.compile(r"ERC messages:\s*(\d+)\s+Errors\s+(\d+)\s+Warnings\s+(\d+)")
-_ERC_HEAD = re.compile(r"^\[(\w+)\]: (.*)$")
-
-
-@dataclass(frozen=True)
-class Violation:
-    """One ERC finding: its rule, severity, message and where it is on the sheet."""
-
-    code: str
-    severity: str
-    message: str
-    where: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ErcReport:
-    """The outcome of an ERC run: the counts, and every finding in the report."""
-
-    errors: int
-    warnings: int
-    violations: tuple[Violation, ...] = ()
-
-
-def parse_erc_report(text: str) -> ErcReport:
-    """Read the counts and findings from the text report kicad-cli writes."""
-    summary = _ERC_SUMMARY.search(text)
-    if summary is None:
-        raise click.ClickException("the ERC report has no 'ERC messages' summary line")
-    raw: list[dict[str, Any]] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        match = _ERC_HEAD.match(line)
-        if match:
-            raw.append(
-                {
-                    "code": match.group(1),
-                    "message": match.group(2),
-                    "severity": "",
-                    "where": [],
-                }
-            )
-        elif raw and stripped.startswith(";"):
-            raw[-1]["severity"] = stripped.lstrip("; ").strip()
-        elif raw and stripped.startswith("@("):
-            raw[-1]["where"].append(stripped)
-    found = tuple(
-        Violation(r["code"], r["severity"], r["message"], tuple(r["where"]))
-        for r in raw
-    )
-    return ErcReport(int(summary.group(2)), int(summary.group(3)), found)
-
-
-def run_erc(kicad_cli: str, schematic: Path, report: Path) -> ErcReport:
-    """Run kicad-cli's ERC on ``schematic``, save the text report and parse it."""
-    report.unlink(missing_ok=True)
-    args = [kicad_cli, "sch", "erc", "-o", str(report), str(schematic)]
-    run = env._run(args, timeout=KICAD_CLI_TIMEOUT)
-    if run.returncode != 0 or not report.is_file():
-        reason = run.error or run.output.strip() or f"exit code {run.returncode}"
-        raise click.ClickException(f"kicad-cli could not run ERC: {reason}")
-    return parse_erc_report(report.read_text(encoding="utf-8"))
-
-
-def export_netlist(kicad_cli: str, schematic: Path, netlist: Path) -> None:
-    """Export the schematic's netlist (KiCad S-expression format) to ``netlist``."""
-    netlist.unlink(missing_ok=True)
-    args = [kicad_cli, "sch", "export", "netlist", "--format", "kicadsexpr"]
-    run = env._run(
-        [*args, "-o", str(netlist), str(schematic)], timeout=KICAD_CLI_TIMEOUT
-    )
-    if run.returncode != 0 or not netlist.is_file():
-        reason = run.error or run.output.strip() or f"exit code {run.returncode}"
-        raise click.ClickException(f"kicad-cli could not export the netlist: {reason}")
-
 
 @dataclass(frozen=True)
 class SchematicResult:
@@ -656,11 +579,10 @@ def build_schematic(
     """Make the project's libraries and schematic, run ERC and export the netlist.
 
     Everything lands in the project's kicad/ folder. A failed ERC does not stop the
-    netlist being written; the caller decides what the counts mean.
+    netlist being written; the caller decides what the counts mean. ERC and the
+    netlist export are run by ``pcbkit.kicad.cli``.
     """
-    tool = env.find_kicad_cli()
-    if tool is None:
-        raise click.ClickException("kicad-cli not found: run `pcbkit doctor`")
+    kicad_cli.kicad_cli_path()  # no kicad-cli: say so before anything is written
     stock = env.symbols_dir()
     board = proj.config.board
     design = load_design(proj.root / "design.py")
@@ -669,10 +591,23 @@ def build_schematic(
         design, board, proj.kicad_dir, stock, libs.symbol_libs, date
     )
     report = proj.kicad_dir / "erc.rpt"
-    erc = run_erc(tool.path, schematic, report)
+    erc = _run_erc(schematic, report)
     netlist = proj.kicad_dir / f"{board.stem}.net"
-    export_netlist(tool.path, schematic, netlist)
+    kicad_cli.export_netlist(schematic, netlist)
     return SchematicResult(schematic, netlist, report, len(design.parts), libs, erc)
+
+
+def _run_erc(schematic: Path, report: Path) -> ErcReport:
+    """Run ERC on ``schematic`` and return the parsed report.
+
+    A report that cannot be read is a message for the user, not a traceback.
+    """
+    try:
+        return kicad_cli.erc(schematic, report).report
+    except ReportError as err:
+        raise click.ClickException(
+            f"cannot read the ERC report {report}: {err}"
+        ) from err
 
 
 def _shown(path: Path, root: Path) -> str:
@@ -686,6 +621,32 @@ def _shown(path: Path, root: Path) -> str:
 def _plural(count: int, noun: str) -> str:
     """Return "1 error" or "2 errors"."""
     return f"{count} {noun}" + ("" if count == 1 else "s")
+
+
+def _mm(value: float) -> str:
+    """Return a position in millimetres as KiCad prints it: 4 places, trimmed."""
+    return f"{round(value, 4) + 0.0:.4f}".rstrip("0").rstrip(".")
+
+
+def format_erc(erc: ErcReport, report: Path, root: Path, limit: int = 20) -> str:
+    """Return the ERC counts and the first ``limit`` findings, each with where it is.
+
+    ``report`` is the ERC report file the counts came from. The first line names it,
+    and when there are more findings than ``limit`` the last line says how many more
+    it holds.
+    """
+    lines = [
+        f"ERC        {_plural(erc.errors, 'error')}, {_plural(erc.warnings, 'warning')}"
+        f" ({_shown(report, root)})"
+    ]
+    for found in erc.violations[:limit]:
+        lines.append(f"  {found.severity} [{found.category}] {found.message}")
+        for (x, y), item in zip(found.positions, found.items):
+            lines.append(f"    @({_mm(x)} mm, {_mm(y)} mm): {item}")
+    if len(erc.violations) > limit:
+        more = len(erc.violations) - limit
+        lines.append(f"  ... and {more} more in {_shown(report, root)}")
+    return "\n".join(lines)
 
 
 def format_result(result: SchematicResult, root: Path, limit: int = 20) -> str:
@@ -704,16 +665,6 @@ def format_result(result: SchematicResult, root: Path, limit: int = 20) -> str:
     lines.append(
         f"schematic  {_shown(result.schematic, root)} ({_plural(result.parts, 'part')})"
     )
-    erc = result.erc
-    lines.append(
-        f"ERC        {_plural(erc.errors, 'error')}, {_plural(erc.warnings, 'warning')}"
-        f" ({_shown(result.erc_report, root)})"
-    )
-    for found in erc.violations[:limit]:
-        lines.append(f"  {found.severity} [{found.code}] {found.message}")
-        lines.extend(f"    {where}" for where in found.where)
-    if len(erc.violations) > limit:
-        more = len(erc.violations) - limit
-        lines.append(f"  ... and {more} more in {_shown(result.erc_report, root)}")
+    lines.append(format_erc(result.erc, result.erc_report, root, limit))
     lines.append(f"netlist    {_shown(result.netlist, root)}")
     return "\n".join(lines)
