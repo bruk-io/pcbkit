@@ -237,9 +237,34 @@ def quote_cmd(
 ) -> None:
     """Print every number the PCBWay quote form asks for.
 
-    Not implemented yet (WP6).
+    Reads the files `pcbkit finalize` exported (out/fab, else fab): the Gerber zip for
+    the board (layers, size, thickness, copper, finish, smallest track, space and hole)
+    and the BOM for the assembly (unique parts, SMD placements, BGA/QFP/QFN parts,
+    through-hole parts and their designators). With --assembled the assembly numbers
+    are printed too; --self-solder-tht leaves the through-hole parts out of them. With
+    --notes the order notes must fit the form's 600 characters, or the command fails
+    and says by how many it is over.
     """
-    _not_implemented("WP6")
+    from pcbkit.fab import pcbway
+
+    if self_solder_tht and assembled is None:
+        raise click.UsageError(
+            "--self-solder-tht only applies to assembly: add --assembled N"
+        )
+    if assembled is not None and fab_qty is not None and assembled > fab_qty:
+        raise click.UsageError(
+            f"--assembled {assembled} is more than --fab-qty {fab_qty}: you cannot "
+            "assemble more boards than you have made"
+        )
+    notes_chars = pcbway.check_notes_file(notes) if notes is not None else None
+    result = pcbway.build_quote(
+        load_project(),
+        assembled=assembled,
+        fab_qty=fab_qty,
+        self_solder_tht=self_solder_tht,
+        notes_chars=notes_chars,
+    )
+    click.echo(pcbway.format_quote(result))
 
 
 @cli.command("compare")
