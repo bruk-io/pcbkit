@@ -15,6 +15,9 @@ autorouter:
 
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -57,12 +60,31 @@ def edge_strips(
     ]
 
 
-def export_dsn(pcb: Path, dsn: Path) -> None:
-    """Export the Specctra DSN of the board at ``pcb``; raise if pcbnew refuses."""
+@contextmanager
+def _working_directory(path: Path) -> Iterator[None]:
+    """Make ``path`` the current directory for the length of the block."""
+    previous = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+def export_dsn(pcb: Path, dsn: Path, root: Path) -> None:
+    """Export the Specctra DSN of the board at ``pcb``; raise if pcbnew refuses.
+
+    pcbnew writes the file name it is given into the DSN as the design's name, so the
+    export is made from ``root`` with a name relative to it (``kicad/<stem>.dsn``): the
+    file then does not hold the path of the machine it was made on, and a DSN kept in
+    ``golden/`` is the same wherever the project is checked out.
+    """
     import pcbnew
 
     board = pcbnew.LoadBoard(str(pcb))
-    if not pcbnew.ExportSpecctraDSN(board, str(dsn)):
+    with _working_directory(root):
+        done = pcbnew.ExportSpecctraDSN(board, os.path.relpath(dsn, root))
+    if not done:
         raise click.ClickException(
             f"pcbnew could not export the Specctra DSN of {pcb.name}"
         )
@@ -91,7 +113,7 @@ def pre(project: Project) -> PreResult:
     for x0, y0, x1, y1 in edge_strips(width, height):
         kb.keepout(board, x0, y0, x1, y1, pours=False)
     save_both(board, files.pcb, files.prerouted)
-    export_dsn(files.pcb, files.dsn)
+    export_dsn(files.pcb, files.dsn, project.root)
     return PreResult(files.pcb, files.prerouted, files.dsn)
 
 

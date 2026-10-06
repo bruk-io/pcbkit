@@ -222,5 +222,5 @@ def eco(project: Project, base: Path) -> EcoResult:
         new.Add(copy)
         kept += 1
     pre_stage.save_both(new, files.pcb, files.prerouted)
-    pre_stage.export_dsn(files.pcb, files.dsn)
+    pre_stage.export_dsn(files.pcb, files.dsn, project.root)
     return EcoResult(changed, len(new_copper), kept, unlocked, dropped, base)

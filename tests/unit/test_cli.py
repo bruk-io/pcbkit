@@ -32,16 +32,14 @@ WORKFLOW = [
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
 # is the independent record of who fills in what: `new` and `setup` are WP11, `build` is
-# WP4 (it chains sch and placement), route, promote and finalize are WP5, quote is WP6,
-# check, mutants and report are WP7, compare and shots are WP8. `sch` was WP3 and is
-# built (tests/unit/test_sch.py), so it has no row.
+# WP4 (it chains sch and placement), quote is WP6, check, mutants and report are WP7,
+# compare and shots are WP8. `sch` was WP3 and is built (tests/unit/test_sch.py), and
+# route, promote and finalize were WP5 (tests/unit/test_route_*.py): no row for them.
+BUILT = {"doctor", "sch", "route", "promote", "finalize"}
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
     "build": ("WP4", ["build"]),
-    "route": ("WP5", ["route"]),
-    "promote": ("WP5", ["promote"]),
-    "finalize": ("WP5", ["finalize"]),
     "check": ("WP7", ["check"]),
     "mutants": ("WP7", ["mutants"]),
     "report": ("WP7", ["report"]),
@@ -54,8 +52,6 @@ STUBS = {
 # still reach the stub (a usage error would exit 2, and the message would differ).
 WITH_OPTIONS = [
     ("WP11", ["new", "my-board", "--from", "blinky"]),
-    ("WP5", ["route", "--eco", "golden", "--tries", "6", "--passes", "40"]),
-    ("WP5", ["finalize", "--no-render"]),
     ("WP7", ["check", "-k", "copper and not stitching"]),
     (
         "WP6",
@@ -127,7 +123,7 @@ def test_every_command_has_help_that_names_what_it_does() -> None:
 
 def test_every_command_that_is_not_built_has_a_stub_test() -> None:
     """Fail when a command is added without a row in STUBS."""
-    assert set(cli.commands) - {"doctor", "sch"} == set(STUBS)
+    assert set(cli.commands) - BUILT == set(STUBS)
 
 
 @pytest.mark.parametrize("name", sorted(STUBS))

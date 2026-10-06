@@ -146,18 +146,37 @@ def build_cmd() -> None:
 def route_cmd(eco: Path | None, tries: int | None, passes: int | None) -> None:
     """Pre-route, run Freerouting, fill zones and run DRC.
 
-    Not implemented yet (WP5).
+    Starts from the placed board that `pcbkit build` wrote. Runs the project's
+    routing.py hooks, then Freerouting, and after each run fills the pours and runs DRC:
+    it stops at the first try with no copper problem, and otherwise gives up after
+    --tries tries and leaves the best board. Then it adds the silkscreen and shows the
+    DRC with schematic parity. A Freerouting run that never starts routing is killed
+    after [route] stall_timeout_s; with --eco that falls back to routing the whole
+    board. Exits 1 if no try was clean.
     """
-    _not_implemented("WP5")
+    env.require_pcbnew()
+    proj = load_project()
+    from pcbkit.route import flow
+
+    result = flow.route(proj, eco=eco, tries=tries, passes=passes)
+    if not result.clean:
+        click.get_current_context().exit(1)
 
 
 @cli.command("promote")
 def promote_cmd() -> None:
     """Save the routed board as the golden route.
 
-    Not implemented yet (WP5).
+    Copies the route that `pcbkit route` made (prerouted.kicad_pcb, its project file,
+    the session file and the DSN) into golden/, which `pcbkit finalize` rebuilds from.
+    It first runs DRC with schematic parity on the finished board and refuses to
+    promote one that has any violation, unconnected pad or footprint error.
     """
-    _not_implemented("WP5")
+    env.require_pcbnew()
+    proj = load_project()
+    from pcbkit.route import flow
+
+    flow.promote(proj)
 
 
 @cli.command("finalize")
@@ -167,9 +186,15 @@ def promote_cmd() -> None:
 def finalize_cmd(no_render: bool) -> None:
     """Rebuild from the golden route, run DRC and export the fab files.
 
-    Not implemented yet (WP5).
+    Copies golden/ into kicad/, imports the route, fills the pours, adds the
+    silkscreen, runs DRC with schematic parity and exports the fab files and
+    documents into out/. If DRC is not clean it stops before the export and exits 1.
     """
-    _not_implemented("WP5")
+    env.require_pcbnew()
+    proj = load_project()
+    from pcbkit.route import flow
+
+    flow.finalize(proj, render=not no_render)
 
 
 @cli.command("check")
