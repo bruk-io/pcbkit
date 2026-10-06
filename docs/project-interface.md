@@ -448,10 +448,10 @@ MPN_OVERRIDE = {
 }
 
 REF_OVERRIDE = {
-    "A1": {  # one reference that is two parts: a socket made of two strips
+    "BT1": {  # one reference that is two parts: a battery holder bought as two clips
         "mfr": "Acme",
-        "mpn": "AC-SOCKET-22",
-        "desc": "1x22 socket",
+        "mpn": "AC-CLIP-18650",
+        "desc": "18650 cell clip",
         "qty": 2,
     },
 }

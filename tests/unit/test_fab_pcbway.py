@@ -222,7 +222,7 @@ def lines_with_everything() -> list:
         bom_line(4, 1, "IC2", "LFBGA-100_8x8mm"),
         bom_line(5, 1, "IC3", "LQFP-48_7x7mm_P0.5mm"),
         bom_line(6, 1, "IC4", "SOT-23"),
-        bom_line(7, 2, "A1", "Socket_2x22", through_hole=True),
+        bom_line(7, 2, "BT1", "Clip_18650", through_hole=True),
         bom_line(8, 2, "J1,J2", "Header_1x03", through_hole=True),
         bom_line(9, 1, "J3", "Header_1x04", through_hole=True),
     ]
@@ -233,7 +233,7 @@ def test_assembling_everything_counts_every_line_as_unique() -> None:
     assert a.unique_parts == 9
     assert a.smd_placements == 3 + 2 + 1 + 1 + 1 + 1
     assert a.through_hole_parts == 2 + 2 + 1
-    assert a.through_hole_refs == ("A1", "J1", "J2", "J3")
+    assert a.through_hole_refs == ("BT1", "J1", "J2", "J3")
 
 
 def test_soldering_the_through_hole_parts_yourself_leaves_their_lines_out() -> None:
@@ -352,7 +352,7 @@ def test_the_quote_text_for_a_small_board(tmp_path: Path) -> None:
             "  SMD placements       9",
             "  BGA/QFP/QFN parts    3: IC1, IC2, IC3",
             "  Through-hole parts   0 for PCBWay (you solder them)",
-            "  You solder           5 parts, 4 designators: A1, J1-J3",
+            "  You solder           5 parts, 4 designators: BT1, J1-J3",
             "",
             "Notes: 120 of 600 characters",
         ]
@@ -367,7 +367,7 @@ def test_a_quote_without_self_soldering_lists_the_through_hole_parts_plainly(
     text = pcbway.format_quote(quote_for(tmp_path, assembled=1))
     assert "Assembly, 1 board (the counts are per board)" in text
     assert "  Unique parts         9\n" in text
-    assert "  Through-hole parts   5 parts, 4 designators: A1, J1-J3" in text
+    assert "  Through-hole parts   5 parts, 4 designators: BT1, J1-J3" in text
     assert "you solder" not in text.lower()
     assert "Quantity             not given (use --fab-qty N)" in text
 

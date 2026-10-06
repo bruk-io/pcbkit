@@ -52,9 +52,9 @@ def test_the_example_bom_py_loads_and_does_what_the_docs_say(tmp_path: Path) -> 
     parts = [
         part("J5", "HDR 1x3 male", header, "North"),
         part("J6", "HDR 1x3 male", header, "South"),
-        part("A1", "2x socket", "Lib:Socket_2x22"),
+        part("BT1", "2x clip", "Lib:Clip_18650"),
     ]
-    socket, headers = bom.bom_lines(parts, {"J5", "J6", "A1"}, overrides)
+    socket, headers = bom.bom_lines(parts, {"J5", "J6", "BT1"}, overrides)
     # the MPN table: both headers are one line, bought as the real part
     assert (headers.refs, headers.mfr, headers.mpn) == (
         ("J5", "J6"),
@@ -64,7 +64,7 @@ def test_the_example_bom_py_loads_and_does_what_the_docs_say(tmp_path: Path) -> 
     assert headers.desc == "Pin header 1x3 2.54mm vertical"
     assert headers.value == "Header 3-pin"  # the line hook
     # the reference table: one reference, two parts
-    assert (socket.refs, socket.mpn, socket.qty) == (("A1",), "AC-SOCKET-22", 2)
+    assert (socket.refs, socket.mpn, socket.qty) == (("BT1",), "AC-CLIP-18650", 2)
     assert socket.value == "v"  # the hook left it alone
 
 

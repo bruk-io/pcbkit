@@ -152,10 +152,10 @@ def test_smd_lines_come_first_then_through_hole_each_sorted_by_reference() -> No
         make("RN1", "4x1k", sym="Device:R_Network", fp=C0603, mpn="ARRAY"),
         make("R12", "47k", mpn="OTHER-R"),
         make("J10", "Hdr", sym="Conn", fp=HEADER3, mpn="HDR-3"),
-        make("A1", "Socket", sym="Conn", fp="Lib:Socket", mpn="SOCKET"),
+        make("BT1", "Holder", sym="Conn", fp="Lib:Holder", mpn="HOLDER"),
     ]
-    lines = lines_of(parts, through_hole={"J2", "J10", "A1"})
-    assert [line.refs[0] for line in lines] == ["C2", "C10", "R12", "RN1", "A1", "J2"]
+    lines = lines_of(parts, through_hole={"J2", "J10", "BT1"})
+    assert [line.refs[0] for line in lines] == ["C2", "C10", "R12", "RN1", "BT1", "J2"]
     assert [line.through_hole for line in lines] == [False] * 4 + [True] * 2
     assert [line.item for line in lines] == [1, 2, 3, 4, 5, 6]
     assert lines[-1].refs == ("J2", "J10")  # numbers sort as numbers: J2 before J10
@@ -218,13 +218,13 @@ def test_an_mpn_table_entry_replaces_the_fields_it_names() -> None:
 
 
 def test_a_reference_entry_wins_over_an_mpn_entry_and_can_set_the_quantity() -> None:
-    parts = [make("A1", "Socket", sym="Conn", fp="Lib:Socket", mpn="2x HDR")]
+    parts = [make("BT1", "Holder", sym="Conn", fp="Lib:Holder", mpn="2x CLIP")]
     line = lines_of(
         parts,
-        by_mpn={"2x HDR": {"mpn": "FROM-MPN-TABLE"}},
-        by_ref={"A1": {"mpn": "HDR-22", "mfr": "Acme", "qty": 2}},
+        by_mpn={"2x CLIP": {"mpn": "FROM-MPN-TABLE"}},
+        by_ref={"BT1": {"mpn": "CLIP-18650", "mfr": "Acme", "qty": 2}},
     )[0]
-    assert (line.mpn, line.mfr, line.qty) == ("HDR-22", "Acme", 2)
+    assert (line.mpn, line.mfr, line.qty) == ("CLIP-18650", "Acme", 2)
 
 
 def test_a_quantity_override_counts_in_the_group_total() -> None:
@@ -331,12 +331,12 @@ def test_a_part_with_a_real_part_number_is_not_reported() -> None:
 def test_completeness_judges_what_the_bom_will_show_after_the_overrides() -> None:
     parts = [
         make("J1", "H", sym="Conn", fp=HEADER3, mpn="HDR 1x3 male"),
-        make("A1", "Socket", sym="Conn", fp="Lib:Socket", mpn=""),
+        make("BT1", "Holder", sym="Conn", fp="Lib:Holder", mpn=""),
     ]
     assert len(bom.parts_without_mpn(parts)) == 2
     fixed = Overrides(
         by_mpn={"HDR 1x3 male": {"mpn": "AC-HDR-1X3"}},
-        by_ref={"A1": {"mpn": "AC-SOCKET-22"}},
+        by_ref={"BT1": {"mpn": "AC-CLIP-18650"}},
     )
     assert bom.parts_without_mpn(parts, fixed) == []
 
@@ -503,7 +503,7 @@ def test_bom_py_names_are_read(tmp_path: Path) -> None:
         tmp_path,
         """
         MPN_OVERRIDE = {"HDR 1x3": {"mpn": "AC-HDR-1X3", "mfr": "Acme"}}
-        REF_OVERRIDE = {"A1": {"qty": 2}}
+        REF_OVERRIDE = {"BT1": {"qty": 2}}
         NOT_IN_BOM = ["J9 is a wire pad."]
 
         def line(group):
@@ -512,7 +512,7 @@ def test_bom_py_names_are_read(tmp_path: Path) -> None:
     )
     found = bom.load_overrides(root)
     assert found.by_mpn == {"HDR 1x3": {"mpn": "AC-HDR-1X3", "mfr": "Acme"}}
-    assert found.by_ref == {"A1": {"qty": 2}}
+    assert found.by_ref == {"BT1": {"qty": 2}}
     assert found.not_in_bom == ("J9 is a wire pad.",)
     assert found.line is not None
     assert found.line(None) == {"value": "Header"}  # type: ignore[arg-type]
