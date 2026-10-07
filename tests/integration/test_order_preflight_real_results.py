@@ -13,6 +13,7 @@ and a group that is switched on is only ever deselected by ``-k``.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -65,10 +66,17 @@ def make_project(root: Path, groups: str = "[]") -> Path:
     return root
 
 
-def check(root: Path, expression: str | None = None) -> None:
-    """Run the checks as ``pcbkit check`` does, and require that they all passed."""
+def run_checks(
+    root: Path, expression: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run the checks as ``pcbkit check`` does, and return what pytest did."""
     argv = runner.command(root, expression, ["-q", "--no-header"])
-    done = subprocess.run(argv, cwd=root, capture_output=True, text=True, timeout=300)
+    return subprocess.run(argv, cwd=root, capture_output=True, text=True, timeout=300)
+
+
+def check(root: Path, expression: str | None = None) -> None:
+    """Run the checks, and require that they all passed."""
+    done = run_checks(root, expression)
     assert done.returncode == 0, done.stdout + done.stderr
 
 
@@ -123,6 +131,26 @@ def test_a_run_that_deselected_every_check_group_no_longer_passes_the_gate(
         "outputs: the last run was partial (pcbkit check -k?): "
         "run pcbkit check with no -k"
     ]
+
+
+def test_a_full_run_with_check_groups_on_is_never_read_as_partial(
+    tmp_path: Path,
+) -> None:
+    """The names the plugin writes for the built-in groups are the ones in the config.
+
+    This project has no board, so the checks of both groups fail or error, whatever
+    machine this runs on. Each still leaves a result under its group's name, and the
+    gate must call the run failed, never partial.
+    """
+    root = make_project(tmp_path / "board", groups='["kicad", "outputs"]')
+    assert run_checks(root).returncode != 0
+    written = json.loads((root / "out" / "checks" / "results.json").read_text())
+    assert written["groups"] == ["kicad", "outputs"]
+    groups = {entry["group"] for entry in written["checks"].values()}
+    assert groups == {"project", "kicad", "outputs"}
+    lines = preflight(root).stdout.splitlines()
+    assert lines and lines[0].startswith("FAILED: ")
+    assert not [line for line in lines if line.startswith("INCOMPLETE")], lines
 
 
 @pytest.mark.parametrize(
