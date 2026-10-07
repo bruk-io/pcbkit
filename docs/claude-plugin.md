@@ -48,8 +48,9 @@ description at the top of it. You can also run one by name, with the plugin's na
 Two of these behave differently from the rest:
 
 - `review-board` runs in a forked conversation, because the renders and DRC listings it reads
-  are noisy. You wait for it, and only its findings come back. It may run `pcbkit shots` and
-  nothing else, and has no edit tools.
+  are noisy. You wait for it, and only its findings come back. It is told to edit nothing and
+  to run no command but `pcbkit shots`, which it may run without asking you; its frontmatter
+  also lists `Edit`, `Write` and `NotebookEdit` under `disallowed-tools`.
 - `order-pcbway` is marked so that Claude never loads it by itself. Ask Claude to order your
   boards and it tells you to run the skill yourself. That is on purpose: an order costs
   money.
