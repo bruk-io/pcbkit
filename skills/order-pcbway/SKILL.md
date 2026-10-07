@@ -6,19 +6,20 @@ description: >-
   /pcbkit:order-pcbway; Claude never starts an order on its own.
 disable-model-invocation: true
 argument-hint: "[boards to make] [boards to assemble]"
+arguments: [make, assemble]
 ---
 
 # Ordering from PCBWay
 
-Arguments given: $ARGUMENTS (boards to make, then boards to assemble). If either is
-missing, ask. Assembling fewer boards than you make is normal and allowed.
+Boards to make: "$make". Boards to assemble: "$assemble". If either is empty, ask.
+Assembling fewer boards than you make is normal and allowed.
 
 ## Before the browser
 
 1. Run `python3 "${CLAUDE_SKILL_DIR}/scripts/preflight.py"` in the project folder. It
-   compares the fab files and the check results with every source of the board. Anything
-   but an `OK:` line means they are stale, missing or failing: show the user what it
-   printed and stop. An order made from stale files is paid for.
+   compares the fab files and the check results with every source of the board. If it
+   exits non-zero they are stale, missing or failing: show the user what it printed and
+   stop. An order made from stale files is paid for.
 2. Ask what the assembler needs to know that the files do not say: parts the user supplies
    themselves, parts to leave unfitted, polarity beyond the assembly drawing, parts that
    must not be substituted. Write the answer, 600 characters at most, to `order-notes.txt`

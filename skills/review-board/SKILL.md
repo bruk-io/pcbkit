@@ -35,7 +35,9 @@ user named a focus (region names, or a concern), it is here: $ARGUMENTS
    - slivers: thin spikes or slits of copper between a track and a pour edge;
    - anything else a layout reviewer would flag, marked as lower confidence.
 4. Reply with findings only, most serious first, at most twelve. For each: where (layout
-   millimetres: x, y from the board's top-left corner; a DRC position minus 50), what you saw,
-   which picture shows it, why it matters, and which file would change it (layout.py for a
-   position, routing.py for a hand route or keep-out). If you find nothing, say what you
-   looked at. Do not paste image data or report listings into the reply.
+   millimetres, x and y from the board's top-left corner: a DRC position is offset, and
+   `${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/references/kicad10-quirks.md` says by how
+   much), what you saw, which picture shows it, why it matters, and which file would
+   change it (layout.py for a position, routing.py for a hand route or keep-out). If you
+   find nothing, say what you looked at. Do not paste image data or report listings into
+   the reply.
