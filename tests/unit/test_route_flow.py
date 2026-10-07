@@ -66,6 +66,7 @@ class Stages:
         self.run_args: list[tuple[int, float]] = []
         self.render: list[bool] = []
         self.said: list[str] = []
+        self.without_mpn: list[str] = []
         self.tries_made = 0
         monkeypatch.setattr(pre_stage, "pre", self.pre)
         monkeypatch.setattr(eco_stage, "eco", self.eco)
@@ -75,6 +76,7 @@ class Stages:
         monkeypatch.setattr(kicad_cli, "drc", self.drc)
         silk = types.ModuleType("pcbkit.silk")
         silk.apply_silk = self.apply_silk  # type: ignore[attr-defined]
+        silk.format_result = self.format_silk  # type: ignore[attr-defined]
         fab = types.ModuleType("pcbkit.fab")
         fab.export_fab = self.export_fab  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "pcbkit.silk", silk)
@@ -129,15 +131,22 @@ class Stages:
         Path(report).write_text(f"report {len(self.drc_args)}", encoding="utf-8")
         return SimpleNamespace(report=shown)
 
-    def apply_silk(self, proj: Project, pcb: Path | None = None) -> None:
-        """Record the silkscreen stage."""
+    def apply_silk(self, proj: Project, pcb: Path | None = None) -> Any:
+        """Record the silkscreen stage and return a result for format_silk."""
         self.calls.append("silk")
+        return SimpleNamespace(texts=3)
+
+    def format_silk(self, result: Any, root: Path) -> str:
+        """Describe the silkscreen result, as pcbkit.silk.format_result does."""
+        return f"silk: {result.texts} text(s) added"
 
     def export_fab(self, proj: Project, render: bool = True) -> Any:
         """Record the fab export and its render flag."""
         self.calls.append("export")
         self.render.append(render)
-        return SimpleNamespace(bom_lines=55, total_parts=116, files=[])
+        return SimpleNamespace(
+            bom_lines=55, total_parts=116, files=[], without_mpn=self.without_mpn
+        )
 
     def say(self, text: str) -> None:
         """Collect what the flow says."""
@@ -211,15 +220,29 @@ def test_finalize_without_renders_asks_the_export_to_skip_them(stages: Stages) -
     assert stages.render == [False]
 
 
-def test_finalize_reports_the_post_drc_and_bom_lines(stages: Stages) -> None:
-    """Say what post did, the DRC totals, and the BOM size."""
+def test_finalize_reports_the_post_silk_drc_and_bom_lines(stages: Stages) -> None:
+    """Say what post and the silkscreen did, the DRC totals, and the BOM size."""
     golden_folder(stages)
     flow.finalize(stages.proj, say=stages.say)
     assert stages.said == [
         "ses import True\n"
         "zones filled, stitching vias: 227, dropped one-sided vias: 96",
+        "silk: 3 text(s) added",
         "DRC: 0 violations, 0 unconnected pads, 0 footprint errors",
         "BOM lines: 55 total parts: 116",
+    ]
+
+
+def test_finalize_warns_about_each_part_with_no_orderable_part_number(
+    stages: Stages,
+) -> None:
+    """List what the export could not give a part number, after the BOM size."""
+    golden_folder(stages)
+    stages.without_mpn = ["R9 (4k7): no part number"]
+    flow.finalize(stages.proj, say=stages.say)
+    assert stages.said[-2:] == [
+        "BOM lines: 55 total parts: 116",
+        "  warning: no orderable part number: R9 (4k7): no part number",
     ]
 
 
@@ -232,8 +255,8 @@ def test_finalize_stops_before_the_export_when_drc_is_not_clean(
     with pytest.raises(click.ClickException, match="nothing was exported"):
         flow.finalize(stages.proj, say=stages.say)
     assert stages.calls == ["post", "silk", "drc parity"]
-    assert "DRC: 6 violations, 5 unconnected pads, 0 footprint errors" in stages.said[1]
-    assert "unconnected_items" in stages.said[1]
+    assert "DRC: 6 violations, 5 unconnected pads, 0 footprint errors" in stages.said[2]
+    assert "unconnected_items" in stages.said[2]
 
 
 def test_finalize_without_a_golden_route_says_to_promote(stages: Stages) -> None:
@@ -404,6 +427,16 @@ def test_route_runs_pre_the_router_post_drc_silk_and_the_parity_drc(
     assert result.eco is None
     assert result.drc is CLEAN
     assert result.pcb == stages.files.pcb
+
+
+def test_route_says_what_the_silkscreen_did_before_the_parity_drc(
+    stages: Stages,
+) -> None:
+    """Show the silk pass's summary (its warnings live there) before the DRC."""
+    flow.route(stages.proj, say=stages.say)
+    silk_line = stages.said.index("silk: 3 text(s) added")
+    drc_lines = [i for i, line in enumerate(stages.said) if line.startswith("DRC:")]
+    assert drc_lines and silk_line < drc_lines[-1]
 
 
 def test_route_takes_tries_passes_and_the_stall_timeout_from_the_config(

@@ -80,7 +80,7 @@ class Recorder:
     def export_fab(self, proj: Project, render: bool = True) -> Any:
         """Record the export and its render flag."""
         self.exports.append(render)
-        return SimpleNamespace(bom_lines=6, total_parts=6, files=[])
+        return SimpleNamespace(bom_lines=6, total_parts=6, files=[], without_mpn=[])
 
 
 @pytest.fixture
@@ -89,6 +89,7 @@ def recorder(monkeypatch: pytest.MonkeyPatch) -> Recorder:
     rec = Recorder()
     silk = types.ModuleType("pcbkit.silk")
     silk.apply_silk = rec.apply_silk  # type: ignore[attr-defined]
+    silk.format_result = lambda result, root: "silk: labels hidden"  # type: ignore[attr-defined]
     fab = types.ModuleType("pcbkit.fab")
     fab.export_fab = rec.export_fab  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "pcbkit.silk", silk)

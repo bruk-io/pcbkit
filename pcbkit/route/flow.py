@@ -134,9 +134,9 @@ def route(
     if loop.best is not None:
         if not loop.clean:
             say(f"the best board is {files.pcb}")
-        from pcbkit.silk import apply_silk
+        from pcbkit.silk import apply_silk, format_result
 
-        apply_silk(proj)
+        say(format_result(apply_silk(proj), proj.root))
         final = kicad_cli.drc(files.pcb, files.drc, schematic_parity=True).report
         say(format_drc(final))
     return RouteResult(loop, eco_result, final, files.pcb)
@@ -214,9 +214,9 @@ def finalize(
         )
     copy_golden(proj)
     say(post_stage.post(proj).summary())
-    from pcbkit.silk import apply_silk
+    from pcbkit.silk import apply_silk, format_result
 
-    apply_silk(proj)
+    say(format_result(apply_silk(proj), proj.root))
     report = kicad_cli.drc(files.pcb, files.drc, schematic_parity=True).report
     say(format_drc(report))
     if not report.clean:
@@ -228,4 +228,6 @@ def finalize(
 
     made = export_fab(proj, render=render)
     say(f"BOM lines: {made.bom_lines} total parts: {made.total_parts}")
+    for problem in made.without_mpn:
+        say(f"  warning: no orderable part number: {problem}")
     return report
