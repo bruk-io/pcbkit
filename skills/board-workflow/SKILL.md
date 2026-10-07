@@ -21,19 +21,23 @@ how to fix it.
 
 ## The loop
 
-| Command | Run it when | What the result means |
-|---|---|---|
-| `pcbkit sch` | only design.py changed and you want ERC or the netlist | Exit 1 means ERC errors: fix them in design.py. Warnings are listed and do not fail it. |
-| `pcbkit build` | design.py, layout.py or pcbkit.toml changed | Lists ERC findings and any part "missing" from `P` in layout.py (parked below the board: give each a position). It replaces the board in kicad/, routed copper included. |
-| `pcbkit route` | after a build | Tries Freerouting up to `route.tries` times and stops at the first try with no copper problem, printing each try's problems by category. Exit 1: no try was clean, and the least bad board is left in kicad/. |
-| `pcbkit route --eco golden` | a local change after a promoted route | Keeps the copper in golden/ and re-routes only what changed. If the router stalls it routes the whole board and says so. |
-| `pcbkit promote` | the route is DRC 0/0/0 and you have looked at it | Refuses unless DRC is clean; copies the route into golden/. |
-| `pcbkit finalize` | after every promote, and to refresh the fab files | Rebuilds kicad/ from golden/, runs DRC, writes out/fab and out/docs. If DRC is not clean it exports nothing and exits 1. |
-| `pcbkit check` | after finalize; netlist-only checks work once `sch` or `build` has run | pytest over the built-in groups and checks/. Results land in out/checks/results.json. Exit 1: some check failed. |
-| `pcbkit mutants` | after adding or changing a check | Every planted mistake must be CAUGHT. Exit 2: the control run failed, so nothing else means anything. |
+Each command's `--help` says what it does; this is when to run it and what to do with the
+result.
 
-`pcbkit compare OLD NEW` shows what a re-route moved. `pcbkit shots` writes pictures of
-the board to out/shots/ (see review-board). `pcbkit quote` prints the fab order numbers.
+| Command | Run it when | If it fails or surprises |
+|---|---|---|
+| `pcbkit sch` | only design.py changed and you want ERC or the netlist | Exit 1 is ERC errors: fix them in design.py. Warnings are listed and do not fail it. |
+| `pcbkit build` | design.py, layout.py or pcbkit.toml changed | A part listed as "missing" has no position in `P` of layout.py: give it one. It replaces the board in kicad/, routed copper included. |
+| `pcbkit route` | after a build | Exit 1: no try was clean and the least bad board is left in kicad/ (see Reading DRC). |
+| `pcbkit route --eco golden` | a local change after a promoted route | If the router stalls it routes the whole board instead and says so. |
+| `pcbkit promote` | the route is DRC 0/0/0 and you have looked at it | It refuses a route that is not clean. |
+| `pcbkit finalize` | after every promote, and to refresh the fab files | If DRC is not clean it exports nothing and exits 1. |
+| `pcbkit check` | after finalize; netlist-only checks work once `sch` or `build` has run | Exit 1: read each failure message in out/checks/results.json. Do not loosen the check. |
+| `pcbkit mutants` | after adding or changing a check | Exit 1: a planted mistake was MISSED, so the check is blind to it. Exit 2: the control run failed, so nothing else means anything. |
+
+`pcbkit report` writes the validation report from the last `check` run. `pcbkit compare
+OLD NEW` shows what a re-route moved. `pcbkit shots` writes pictures of the board to
+out/shots/ (see review-board). `pcbkit quote` prints the fab order numbers.
 
 ## Reading DRC
 
