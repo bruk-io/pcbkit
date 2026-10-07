@@ -35,6 +35,8 @@ result.
 | `pcbkit check` | after finalize; netlist-only checks work once `sch` or `build` has run | Exit 1: read each failure message in out/checks/results.json. Do not loosen the check. |
 | `pcbkit mutants` | after adding or changing a check | Exit 1: a planted mistake was MISSED, so the check is blind to it. Exit 2: the control run failed, so nothing else means anything. |
 
+`pcbkit check -k EXPR` runs only the checks it matches and replaces out/checks/results.json
+with them, so run `pcbkit check` with no `-k` before an order.
 `pcbkit report` writes the validation report from the last `check` run. `pcbkit compare
 OLD NEW` shows what a re-route moved. `pcbkit shots` writes pictures of the board to
 out/shots/ (see review-board). `pcbkit quote` prints the fab order numbers.

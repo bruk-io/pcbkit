@@ -17,8 +17,9 @@ Assembling fewer boards than you make is normal and allowed.
 ## Before the browser
 
 1. Run `python3 "${CLAUDE_SKILL_DIR}/scripts/preflight.py"` in the project folder. It
-   compares the fab files and the check results with every source of the board. If it
-   exits non-zero they are stale, missing or failing: show the user what it printed and
+   compares the fab files and the check results with every source of the board, and
+   looks for a check run that was cut short. If it exits non-zero they are stale, missing,
+   incomplete or failing: show the user what it printed and
    stop. An order made from stale files is paid for.
 2. Ask what the assembler needs to know that the files do not say: parts the user supplies
    themselves, parts to leave unfitted, polarity beyond the assembly drawing, parts that

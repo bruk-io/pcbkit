@@ -47,7 +47,9 @@ For several hazards, dispatch the `check-writer` agent once per hazard, in paral
   missing spec fails the check by name instead of making it vanish.
 - The failure message names the part, the value and the limit: `R3 at 21.4 mA, limit
   20 mA`. Hand the numbers a report should show to `record(name, value)`.
-- Run just that check: `pcbkit check -k <name>`.
+- Run just that check: `pcbkit check -k <name>`. That run replaces out/checks/results.json
+  with only the checks it ran, so run `pcbkit check` with no `-k` before you call the board
+  done or order it.
 
 ## 4. Prove it fails
 
