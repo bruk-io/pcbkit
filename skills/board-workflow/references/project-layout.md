@@ -26,7 +26,7 @@ An entry in `P` for a part the design does not have is ignored.
 
 | File | What it is |
 |---|---|
-| `kicad/drc.rpt` | The latest DRC report, with positions (file millimetres: layout plus 50). |
+| `kicad/drc.rpt` | The latest DRC report, with positions (see kicad10-quirks.md for their offset). |
 | `kicad/erc.rpt` | The ERC report from the last `sch` or `build`. |
 | `kicad/freerouting.log` | The router's console output from the latest run. |
 | `kicad/placed.kicad_pcb` | The placed board, before routing. |

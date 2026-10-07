@@ -52,9 +52,10 @@ worse than no check, because it looks like evidence.
   a list of `(text in design.py, replacement)` edits, and the `-k` expression that must
   then fail), then run `pcbkit mutants`. It must say CAUGHT, and the control run must pass.
 - A board or copper check: the mutant runner edits design.py only and leaves the layout
-  alone. Copy the project to a scratch folder, plant the mistake there (move the part, narrow
-  the track), rebuild what the check reads, and run the check in the copy. Never plant it in
-  the project itself.
+  alone. Copy the project to a scratch folder without its `.venv`, plant the mistake there
+  (move the part, narrow the track), rebuild what the check reads, and run the check from
+  inside the copy with the project's own `.venv/bin/pcbkit`. Never plant it in the project
+  itself.
 - Quote the failing output in your answer. "It passes" proves nothing.
 
 ## 5. A failing check is information

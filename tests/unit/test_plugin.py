@@ -109,16 +109,16 @@ AGENT_NAMES = ["parts-researcher", "check-writer"]
 def parse_frontmatter(text: str) -> dict[str, Any]:
     """Return a Markdown file's YAML front matter, for the subset these files use.
 
-    Supported: ``key: value`` with a plain or quoted scalar, ``key: >-`` or ``|``
-    with indented lines, ``key:`` with ``  - item`` lines, a one-line list
-    ``[a, b]`` and a one-line map ``{ a: b }`` of plain scalars. Anything else raises
-    ValueError naming the line: a file that drifts out of the subset is noticed rather
-    than misread.
+    Full-line ``# comments`` are skipped. Supported: ``key: value`` with a plain or
+    quoted scalar, ``key: >-`` or ``|`` with indented lines, ``key:`` with ``  - item``
+    lines, a one-line list ``[a, b]`` and a one-line map ``{ a: b }`` of plain scalars.
+    Anything else raises ValueError naming the line: a file that drifts out of the
+    subset is noticed rather than misread.
     """
     match = re.match(r"---\n(.*?)\n---\n", text, re.S)
     if match is None:
         raise ValueError("no front matter between two --- lines at the top")
-    lines = match.group(1).split("\n")
+    lines = [x for x in match.group(1).split("\n") if not x.startswith("#")]
     found: dict[str, Any] = {}
     i = 0
     while i < len(lines):
@@ -266,6 +266,7 @@ def test_the_front_matter_reader_reads_the_subset_these_files_use() -> None:
         "description: >-\n"
         "  First line\n"
         "  second line.\n"
+        "# a comment between keys, skipped\n"
         "disable-model-invocation: true\n"
         'argument-hint: "[a] [b]"\n'
         "allowed-tools: Bash(pcbkit shots *) Read\n"
@@ -412,6 +413,8 @@ def test_the_review_skill_runs_in_a_fork_the_user_waits_for() -> None:
     assert front["background"] == "false"
     # No `agent`: the read-only Explore agent could not write the shots folder.
     assert "agent" not in front
+    # Read-only by construction: it reads and runs pcbkit shots, and edits nothing.
+    assert {"Edit", "Write"} <= set(front["disallowed-tools"].split())
 
 
 @pytest.mark.parametrize("name", ["board-workflow", "new-board", "add-check"])

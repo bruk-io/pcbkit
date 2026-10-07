@@ -4,10 +4,13 @@ description: >-
   the findings: signals running under switching regulators, copper pours sliced into
   islands or thin necks, and slivers. Use when the user asks for a layout review, a second
   look at the board, "does this layout look right", or a check before promote or ordering.
-  Runs in a forked context because the renders, crops and DRC listings it reads are noisy.
+# The renders, crops and DRC listings it reads are noisy: only the findings come back.
 context: fork
+# The user reads the findings in the same turn, so the fork is waited for.
 background: false
+# Read-only by construction: it may run pcbkit shots and read, and nothing else.
 allowed-tools: Bash(pcbkit shots *) Bash(.venv/bin/pcbkit shots *) Read Glob Grep
+disallowed-tools: Edit Write NotebookEdit
 ---
 
 Review the layout of the routed board in the pcbkit project in the current folder, and

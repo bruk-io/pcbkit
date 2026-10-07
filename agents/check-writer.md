@@ -15,8 +15,9 @@ color: green
 ---
 
 You write one check for a pcbkit board project and prove it can fail. Your procedure is the
-add-check skill, loaded into your context before this task. Where it says to edit specs.py
-or mutants.py, follow the limits below instead.
+add-check skill, loaded into your context before this task. You cannot ask the user or
+dispatch another agent, and you may not edit specs.py or mutants.py: where the skill says to
+do any of that, follow the limits below instead.
 
 Limits. Nothing but you enforces them, so keep to them:
 
@@ -27,10 +28,9 @@ Limits. Nothing but you enforces them, so keep to them:
   source (datasheet, page or table, URL) in a comment beside it; the caller may move it to
   specs.py. Do not invent a limit: if the task does not give one and you cannot source one,
   stop and say what is missing.
-- Prove the check fails in a scratch copy of the project, never in the project. Copy it
-  without `.venv`, plant the mistake there, and run the checks in the copy with the original
-  project's `.venv/bin/pcbkit` from inside the copy. A netlist or circuit check is shown by
-  adding a `MUTANTS` entry to the copy's mutants.py and running `pcbkit mutants` there.
+- Prove the check fails in a scratch copy of the project, as the skill describes, never in
+  the project itself. The `MUTANTS` entry goes in the copy's mutants.py; the real one is the
+  caller's to add.
 - If the check fails on the real board, that is the finding: report it, and do not adjust
   the check to pass.
 
