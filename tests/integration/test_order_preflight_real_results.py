@@ -109,12 +109,15 @@ def test_a_run_of_one_check_after_a_full_run_no_longer_passes_the_gate(
     check(root, "test_led")
     done = preflight(root)
     assert done.returncode == 1
+    # Two refusals: the selection block the plugin wrote, and the missing results.
     assert done.stdout.splitlines() == [
+        "PARTIAL: the last pcbkit check run was cut short by -k 'test_led' "
+        "(3 checks left out): run pcbkit check with no -k before ordering",
         "INCOMPLETE: out/checks/results.json has no result for "
         "checks/test_limits.py::test_resistor, "
         "checks/test_limits.py::TestRails::test_input "
         "(2 of 3 project checks): the last run was partial (pcbkit check -k?): "
-        "run pcbkit check with no -k"
+        "run pcbkit check with no -k",
     ]
 
 
@@ -127,9 +130,11 @@ def test_a_run_that_deselected_every_check_group_no_longer_passes_the_gate(
     done = preflight(root)
     assert done.returncode == 1
     assert done.stdout.splitlines() == [
+        "PARTIAL: the last pcbkit check run was cut short by -k 'test_limits' "
+        "(9 checks left out): run pcbkit check with no -k before ordering",
         "INCOMPLETE: out/checks/results.json has no result for check groups kicad, "
         "outputs: the last run was partial (pcbkit check -k?): "
-        "run pcbkit check with no -k"
+        "run pcbkit check with no -k",
     ]
 
 
