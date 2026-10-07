@@ -167,10 +167,10 @@ def route_cmd(eco: Path | None, tries: int | None, passes: int | None) -> None:
 def promote_cmd() -> None:
     """Save the routed board as the golden route.
 
-    Copies the route that `pcbkit route` made (prerouted.kicad_pcb, its project file,
-    the session file and the DSN) into golden/, which `pcbkit finalize` rebuilds from.
-    It first runs DRC with schematic parity on the finished board and refuses to
-    promote one that has any violation, unconnected pad or footprint error.
+    Copies the route that `pcbkit route` made (prerouted.kicad_pcb, the session file
+    and the DSN) into golden/, which `pcbkit finalize` rebuilds from. It first runs DRC
+    with schematic parity on the finished board and refuses to promote one that has
+    any violation, unconnected pad or footprint error.
     """
     env.require_pcbnew()
     proj = load_project()

@@ -332,10 +332,11 @@ of them (left free). Copied ground copper is never kept, because ground comes fr
 pours. Freerouting then completes what is missing. If it stalls on such a board, `route`
 routes the whole board instead.
 
-`pcbkit promote` copies `kicad/prerouted.kicad_pcb`, its project file, `<stem>.ses` and
-`<stem>.dsn` into `golden/`. It first runs DRC with schematic parity on the finished
-board and refuses unless there is nothing to report: `golden/` holds only a route that
-passed.
+`pcbkit promote` copies `kicad/prerouted.kicad_pcb`, `<stem>.ses` and `<stem>.dsn` into
+`golden/`. It first runs DRC with schematic parity on the finished board and refuses
+unless there is nothing to report: `golden/` holds only a route that passed. It keeps no
+project file: the rules come from `routing.py` each time and `finalize` writes the file
+again.
 
 `pcbkit finalize [--no-render]` rebuilds the board from `golden/`: it copies the files
 there into `kicad/`, runs the post-route stage on them, adds the silkscreen, runs DRC

@@ -145,9 +145,10 @@ def route(
 def promote(proj: Project, say: Callable[[str], None] = click.echo) -> list[Path]:
     """Copy the routed board's route into ``golden/``; return the files written.
 
-    The route is ``prerouted.kicad_pcb``, its project file, the session file and the
-    DSN. ``golden/`` is the route that passed DRC, so this runs DRC with schematic
-    parity on the finished board first and refuses unless it is 0/0/0.
+    The route is ``prerouted.kicad_pcb``, the session file and the DSN. ``golden/``
+    holds no project file: ``post`` applies the rules from code and writes it again.
+    ``golden/`` is the route that passed DRC, so this runs DRC with schematic parity
+    on the finished board first and refuses unless it is 0/0/0.
     """
     files = route_files(proj)
     golden = golden_files(proj)
@@ -162,14 +163,11 @@ def promote(proj: Project, say: Callable[[str], None] = click.echo) -> list[Path
             "golden/ holds only a route that passed with 0 violations, 0 unconnected "
             "pads and 0 footprint errors"
         )
-    copies = [(path, golden[role]) for role, path in needed.items()]
-    project_file = files.prerouted.with_suffix(".kicad_pro")
-    if project_file.is_file():
-        copies.append((project_file, golden["prerouted"].with_suffix(".kicad_pro")))
     proj.golden_dir.mkdir(exist_ok=True)
-    for source, target in copies:
-        shutil.copyfile(source, target)
-    written = [target for _, target in copies]
+    written = []
+    for role, source in needed.items():
+        shutil.copyfile(source, golden[role])
+        written.append(golden[role])
     say("promoted to golden/: " + ", ".join(path.name for path in written))
     return written
 

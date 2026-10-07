@@ -131,11 +131,17 @@ def test_route_promote_finalize_and_eco_on_a_small_board(
         "my_board.dsn",
         "my_board.ses",
         "prerouted.kicad_pcb",
-        "prerouted.kicad_pro",
     ]
 
-    # finalize from golden into a clean kicad/ folder: the same board, the same DRC
-    for stale in ("my_board.kicad_pcb", "my_board.ses", "prerouted.kicad_pcb"):
+    # finalize from golden into a kicad/ folder with no route and no project file for
+    # the pre-routed board (golden/ keeps none): the same board, the same DRC
+    for stale in (
+        "my_board.kicad_pcb",
+        "my_board.ses",
+        "prerouted.kicad_pcb",
+        "prerouted.kicad_pro",
+        "prerouted.kicad_prl",
+    ):
         (project.kicad_dir / stale).unlink()
     recorder.silk.clear()
     flow.finalize(project, render=False, say=said.append)

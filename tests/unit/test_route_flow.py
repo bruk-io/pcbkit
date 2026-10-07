@@ -296,7 +296,7 @@ def routed(stages: Stages, project_file: bool = True) -> None:
 
 
 def test_promote_copies_the_route_into_golden(stages: Stages) -> None:
-    """Write prerouted board, its project file, the session and the DSN."""
+    """Write the prerouted board, the session and the DSN, and nothing else."""
     routed(stages)
     written = flow.promote(stages.proj, say=stages.say)
     golden = stages.proj.golden_dir
@@ -304,17 +304,22 @@ def test_promote_copies_the_route_into_golden(stages: Stages) -> None:
         "my_board.dsn",
         "my_board.ses",
         "prerouted.kicad_pcb",
-        "prerouted.kicad_pro",
     ]
     assert (golden / "prerouted.kicad_pcb").read_text() == "route board"
     assert (golden / "my_board.ses").read_text() == "route session"
     assert (golden / "my_board.dsn").read_text() == "route dsn"
-    assert (golden / "prerouted.kicad_pro").read_text() == "rules"
     assert sorted(written) == sorted(golden.iterdir())
     assert stages.said == [
-        "promoted to golden/: prerouted.kicad_pcb, my_board.ses, my_board.dsn, "
-        "prerouted.kicad_pro"
+        "promoted to golden/: prerouted.kicad_pcb, my_board.ses, my_board.dsn"
     ]
+
+
+def test_promote_leaves_the_project_file_out_of_golden(stages: Stages) -> None:
+    """Keep no project file in golden/, though kicad/ has one beside the route."""
+    routed(stages)
+    assert stages.files.prerouted.with_suffix(".kicad_pro").is_file()
+    flow.promote(stages.proj, say=stages.say)
+    assert not list(stages.proj.golden_dir.glob("*.kicad_pro"))
 
 
 def test_promote_checks_drc_with_parity_on_the_finished_board_first(
@@ -368,17 +373,6 @@ def test_promote_without_a_routed_board_says_to_route_first(
     with pytest.raises(click.ClickException, match=r"pcbkit route"):
         flow.promote(stages.proj, say=stages.say)
     assert stages.drc_args == []
-
-
-def test_promote_without_a_project_file_copies_the_other_three(stages: Stages) -> None:
-    """Do not insist on the project file."""
-    routed(stages, project_file=False)
-    written = flow.promote(stages.proj, say=stages.say)
-    assert sorted(p.name for p in written) == [
-        "my_board.dsn",
-        "my_board.ses",
-        "prerouted.kicad_pcb",
-    ]
 
 
 # --- route --------------------------------------------------------------------------
