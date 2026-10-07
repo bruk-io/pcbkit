@@ -1041,3 +1041,193 @@ SHOTS = {
 Every problem in `SHOTS` is reported together, naming layout.py and the region, and
 nothing is exported until it is right.
 
+## Starting a board: pcbkit new and pcbkit setup
+
+Two commands take you from nothing to a board that builds. `pcbkit new` makes the project
+folder from a template, and `pcbkit setup` makes the folder ready to run: it builds the
+project's own `.venv` on KiCad's Python and makes sure the router is there. Neither needs
+that `.venv` (`setup` is what makes it), so both run from any Python that has pcbkit,
+`uvx` included. Everything after them runs from the project's `.venv`:
+
+```
+pcbkit new my-board
+cd my-board
+pcbkit setup
+.venv/bin/pcbkit build
+.venv/bin/pcbkit route
+.venv/bin/pcbkit promote
+.venv/bin/pcbkit finalize
+.venv/bin/pcbkit check
+.venv/bin/pcbkit mutants
+```
+
+### pcbkit new
+
+```
+pcbkit new NAME [--from blinky] [--pcbkit-source PATH]
+```
+
+Copies a template into the new folder `NAME` and names the board after it. `NAME` may be
+a path (`boards/my-board`): the board is named after the last part. The folder must not
+exist, or must be empty, and `new` never writes into one that holds anything. If it fails
+half way it takes out what it wrote.
+
+The name is split into words at hyphens, underscores, dots and spaces, and may use
+letters and digits besides those, because the stem and the fab name end up in file names.
+A name with anything else in it is refused, naming the characters.
+
+| `NAME` | `[board]` stem | `[board]` title | `[board]` fab_name | `[project]` name |
+|---|---|---|---|---|
+| `my-board` | `my_board` | `My Board` | `My_Board_revA` | `my-board` |
+| `ESP32-carrier` | `esp32_carrier` | `ESP32 Carrier` | `ESP32_Carrier_revA` | `esp32-carrier` |
+| `blinky2` | `blinky2` | `Blinky2` | `Blinky2_revA` | `blinky2` |
+
+What is written:
+
+- The template's files. The three `[board]` values in `pcbkit.toml` are replaced; its
+  comments and every other key stay as they are. `rev` stays `"A"`.
+- `golden/`, the template's route, with `<stem>.ses` and `<stem>.dsn` renamed to the new
+  stem and the old stem replaced inside the three files (the session's design name, the
+  DSN's first line, the schematic file each footprint names). `pcbkit finalize` looks for
+  those names, so a board made by `new` can be finalized the moment it is built.
+- `pyproject.toml`, written for the board (below), and a `README.md` with the commands.
+
+`--from` names the example to start from. `blinky` is the only one so far: see the end of
+this section.
+
+#### The project's pyproject.toml
+
+`pcbkit setup` makes the project's `.venv` from it. The project is not a package
+(`package = false`: `uv sync` installs its dependencies and nothing else), and it needs
+Python 3.9 or newer because KiCad's own Python is 3.9. `pytest` is in the list because
+`pcbkit check` runs your checks with it.
+
+```toml
+[project]
+name = "my-board"
+version = "0.1.0"
+description = "My Board: a PCB project made with pcbkit"
+requires-python = ">=3.9"
+dependencies = [
+    "pcbkit @ git+https://github.com/bruk-io/pcbkit",
+    "pytest>=8",
+]
+
+[tool.uv]
+package = false
+```
+
+By default pcbkit comes from its git repository. To install it from your own copy of the
+repository instead (to work on pcbkit, or while it is not published), give the folder you
+cloned it into:
+
+```
+pcbkit new my-board --pcbkit-source ~/src/pcbkit
+```
+
+or set `PCBKIT_SOURCE` to it, which every `new` then uses. The folder must be a pcbkit
+checkout (a `pyproject.toml` that names pcbkit, and a `pcbkit/` package), or `new` stops
+before writing anything. The dependency is then the bare name, and uv is told where it
+lives, as an editable path source, so a change you make to pcbkit shows up in the
+project at once:
+
+```toml
+dependencies = [
+    "pcbkit",
+    "pytest>=8",
+]
+
+[tool.uv.sources]
+pcbkit = { path = "/home/me/src/pcbkit", editable = true }
+```
+
+The path is absolute, so it is only good on the machine that wrote it. Commit the
+default form, and keep the path form for yourself.
+
+### pcbkit setup
+
+```
+pcbkit setup
+```
+
+Run it in a board project (the nearest folder at or above the current one that holds a
+`pcbkit.toml`, which must also hold a `pyproject.toml`): once after `pcbkit new`, and
+again after changing the dependencies. It does these things in order and says each one:
+
+1. Finds `uv` and KiCad's own Python, the interpreter that imports `pcbnew` (the
+   `KiCad Python` line of `pcbkit doctor`). KiCad 10 or newer is required.
+2. Makes `.venv` with `uv venv --python <KiCad's Python> --system-site-packages`. A `.venv`
+   that already imports `pcbnew` is kept (`uv venv` refuses to replace one, and running
+   `setup` again must do no harm); one that does not is made again. A `.venv` that is not
+   a virtual environment is never touched.
+3. Runs `uv sync --python <KiCad's Python>` to install the dependencies of
+   `pyproject.toml` into it. The interpreter is named again because a bare `uv sync`
+   rebuilds `.venv` on the Python that a `.python-version` file in the project folder
+   (or a `UV_PYTHON` variable) names, without the system site packages, and pcbnew cannot
+   be imported there. Run `pcbkit setup`, not a bare `uv sync`, to change dependencies.
+4. Checks that `.venv/bin/python` imports `pcbnew`. That is the point of all of it.
+5. Makes sure the Freerouting 1.9.0 jar is there (below).
+6. Looks for Java 17 or newer, which the router needs. A missing Java is reported with
+   how to install it and does not make `setup` fail.
+
+It ends by printing the commands to run next, as `.venv/bin/pcbkit ...`.
+
+Anything that goes wrong is a message that says what failed and what to do, not a
+traceback:
+
+| It says | What to do |
+|---|---|
+| `uv is not installed` | Install uv (`brew install uv`). |
+| `no Python that can import pcbnew was found` | Install KiCad 10 (`brew install --cask kicad`); the message lists each interpreter it tried and why it failed. |
+| `pcbnew ... is older than the 10.0 pcbkit needs` | Update KiCad. |
+| `pyproject.toml not found` | Add one that lists pcbkit and pytest as dependencies, or start the project again with `pcbkit new`. |
+| `.venv exists and is not a virtual environment` | Move that folder or file away and run `setup` again. |
+| `uv venv failed` or `uv sync failed` | Read uv's message above it. A dependency that cannot be found or built is the usual cause: check the network, and the dependencies and `[tool.uv.sources]` in `pyproject.toml`. |
+| `pcbnew does not import in .venv` | `uv sync` rebuilt `.venv` on another Python. Delete `.venv`, make sure no `.python-version` file or `UV_PYTHON` variable names a different Python, and run `setup` again. |
+| `FREEROUTING_JAR=... does not exist` | Unset it, so that `setup` downloads Freerouting, or point it at the jar. |
+| `... is not a valid jar` | The file is damaged (a download cut short): delete it, or point `FREEROUTING_JAR` at a good one. |
+| `the Freerouting download was N bytes and should be 5044336` | The download was cut short or is not the right file; nothing was kept. Run `setup` again, or download the file by hand to the path the message gives. |
+| `could not download Freerouting` | The network, or GitHub, failed; the message has the URL and where to save the file by hand. |
+
+#### The Freerouting jar
+
+`setup` uses a jar it finds, in this order: the file `FREEROUTING_JAR` names (when that
+is set it is the only place looked at, and a name that does not exist is an error, never
+a reason to download somewhere else), then `~/.local/share/pcbkit/freerouting-1.9.0.jar`,
+then `~/.local/share/freerouting/freerouting-1.9.0.jar`. A jar it finds must be a whole
+zip file.
+
+If there is none, `setup` downloads Freerouting 1.9.0 from its GitHub release
+(`https://github.com/freerouting/freerouting/releases/download/v1.9.0/freerouting-1.9.0.jar`)
+to `~/.local/share/pcbkit/freerouting-1.9.0.jar`. The bytes are written to a `.part` file
+first, and the jar is put in place only if it is exactly 5044336 bytes and a zip file; a
+short or damaged download is thrown away, so the folder never holds a half jar. A damaged
+jar in that folder is fetched again; a damaged one anywhere else is left for you to deal
+with.
+
+### The blinky example and the template
+
+`examples/blinky` in the pcbkit repository is a real, tiny board: a 2-pin power connector
+(`VIN`, `GND`), a 330 ohm resistor and a green LED on a 30 x 20 mm two-layer board. It
+has every file a project needs, a `golden/` route made by `pcbkit route` and
+`pcbkit promote`, and two checks of its own (the LED's current across the supply range, and
+the resistor's power) with three planted mistakes in `mutants.py` that they must catch.
+`pcbkit check` runs 11 checks on it and all pass: ERC and DRC (`kicad`), the seven checks of
+`outputs`, and the two of its own. The `fab` group is not switched on, but `specs.py` holds
+what it reads; with `"fab"` added to `[checks] groups` there are 19 checks, 17 pass and two
+are skipped, the ones that read the tables blinky leaves empty (decoupling capacitors, I2C
+buses), because the board has no IC and no bus.
+
+The folder `pcbkit/templates/board`, which ships inside the package, is a copy of it:
+the example's files without what commands generate (`kicad/`, `out/`, `fab/`, `.venv/`)
+and without the `pyproject.toml` and `README.md` that `pcbkit new` writes for each board.
+A unit test compares the two folders and fails when they differ. After changing the
+example, bring the template up to date from a pcbkit checkout:
+
+```
+uv run python examples/sync_template.py
+```
+
+and `--check` says whether they differ without changing anything. Change the example's
+route (`design.py` or `layout.py`) and the golden route has to be made again in the
+example (`route`, then `promote`), or `finalize` rebuilds the old board.

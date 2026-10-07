@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import platform
-import sys
 
 import pytest
 from click.testing import CliRunner, Result
@@ -31,9 +30,11 @@ WORKFLOW = [
 ]
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
-# is the independent record of who fills in what: `new` and `setup` are WP11. The
-# commands in BUILT have their own tests and no row here.
+# is the record of who fills in what. Every command is built now, so it is empty: a
+# new command starts as a stub with a row here until it has its own tests.
 BUILT = {
+    "new",
+    "setup",
     "doctor",
     "sch",
     "build",
@@ -47,16 +48,7 @@ BUILT = {
     "mutants",
     "report",
 }
-STUBS = {
-    "new": ("WP11", ["new", "my-board"]),
-    "setup": ("WP11", ["setup"]),
-}
-
-# The same commands with every option they are meant to take: each must be accepted and
-# still reach the stub (a usage error would exit 2, and the message would differ).
-WITH_OPTIONS = [
-    ("WP11", ["new", "my-board", "--from", "blinky"]),
-]
+STUBS: dict[str, tuple[str, list[str]]] = {}
 
 
 def invoke(*args: str) -> Result:
@@ -116,31 +108,10 @@ def test_every_command_that_is_not_built_has_a_stub_test() -> None:
     assert set(cli.commands) - BUILT == set(STUBS)
 
 
-@pytest.mark.parametrize("name", sorted(STUBS))
-def test_a_stub_fails_with_exit_code_1_and_names_its_work_package(name: str) -> None:
-    """Exit 1 (not 2) with exactly "not implemented yet (WPn)"."""
-    wp, argv = STUBS[name]
-    result = invoke(*argv)
-    assert result.exit_code == 1
-    assert result.output.strip() == f"Error: not implemented yet ({wp})"
-
-
-@pytest.mark.parametrize(
-    ("wp", "argv"), WITH_OPTIONS, ids=[" ".join(argv) for _, argv in WITH_OPTIONS]
-)
-def test_a_stub_accepts_every_option_its_command_will_take(
-    wp: str, argv: list[str]
-) -> None:
-    """Take each option the command will have and still reach the stub."""
-    result = invoke(*argv)
-    assert result.exit_code == 1
-    assert result.output.strip() == f"Error: not implemented yet ({wp})"
-
-
 @pytest.mark.parametrize(
     ("name", "options"),
     [
-        ("new", ["--from", "[default: blinky]"]),
+        ("new", ["--from", "[default: blinky]", "--pcbkit-source", "PCBKIT_SOURCE"]),
         ("route", ["--eco", "--tries", "--passes"]),
         ("finalize", ["--no-render"]),
         ("check", ["-k"]),
@@ -172,22 +143,6 @@ def test_bad_arguments_are_usage_errors_not_stub_messages(argv: list[str]) -> No
     result = invoke(*argv)
     assert result.exit_code == 2
     assert "not implemented yet" not in result.output
-
-
-def test_stubs_do_not_need_pcbnew(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Say "not implemented yet" for a tier 2 stub even where pcbnew cannot import.
-
-    The tier 2 commands will call require_pcbnew() first once they are implemented;
-    the stubs deliberately do not (see the cli module docstring). Whichever tier 2
-    commands are still stubs are tried, so this needs no edit when one is built. When
-    the last one is built the loop has nothing to try and the test can be deleted:
-    each built command has its own test that it needs pcbnew.
-    """
-    monkeypatch.setitem(sys.modules, "pcbnew", None)
-    tier2 = {"route", "promote", "finalize", "check", "mutants", "compare"}
-    for name in sorted(tier2 & set(STUBS)):
-        wp, argv = STUBS[name]
-        assert invoke(*argv).output.strip() == f"Error: not implemented yet ({wp})"
 
 
 # --- doctor -----------------------------------------------------------------------

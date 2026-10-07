@@ -1,0 +1,80 @@
+(session blinky
+  (base_design blinky)
+  (placement
+    (resolution um 10)
+    (component Resistor_SMD:R_0603_1608Metric
+      (place R1 660000 -612500 front 0)
+    )
+    (component "Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical"
+      (place J1 560000 -612500 front 90)
+    )
+    (component LED_SMD:LED_0603_1608Metric
+      (place D1 730000 -612500 front 180)
+    )
+  )
+  (was_is
+  )
+  (routes 
+    (resolution um 10)
+    (parser
+      (host_cad "KiCad's Pcbnew")
+      (host_version 10.0.6)
+    )
+    (library_out 
+      (padstack "Via[0-1]_700:300_um"
+        (shape
+          (circle F.Cu 7000 0 0)
+        )
+        (shape
+          (circle B.Cu 7000 0 0)
+        )
+        (attach off)
+      )
+      (padstack "Via[0-1]_700:300_um"
+        (shape
+          (circle F.Cu 7000 0 0)
+        )
+        (shape
+          (circle B.Cu 7000 0 0)
+        )
+        (attach off)
+      )
+      (padstack "Via[0-1]_700:300_um"
+        (shape
+          (circle F.Cu 7000 0 0)
+        )
+        (shape
+          (circle B.Cu 7000 0 0)
+        )
+        (attach off)
+      )
+    )
+    (network_out 
+      (net /VIN
+        (wire
+          (path F.Cu 4000
+            560000 -612500
+            651750 -612500
+          )
+        )
+      )
+      (net /LED_A
+        (wire
+          (path F.Cu 2500
+            722125 -612500
+            668250 -612500
+          )
+        )
+      )
+      (net /GND
+        (wire
+          (path F.Cu 2500
+            737875 -612500
+            712875 -587500
+            560000 -587500
+          )
+        )
+      )
+    )
+  )
+)
