@@ -161,6 +161,29 @@ def test_anything_else_is_kept(line: bytes) -> None:
     assert not quiet.is_noise(line)
 
 
+def emit(line: bytes) -> None:
+    """Write ``line`` to descriptor 2 with a line ending, unless it has one already."""
+    os.write(2, line if line.endswith(b"\n") else line + b"\n")
+
+
+def test_the_filter_drops_every_known_noise_line(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Send them through the filter process, which matches with code of its own."""
+    with quiet.quiet_stderr():
+        for param in NOISE:
+            emit(param.values[0])
+    assert capfd.readouterr().err == ""
+
+
+def test_the_filter_keeps_every_other_line(capfd: pytest.CaptureFixture[str]) -> None:
+    with quiet.quiet_stderr():
+        for param in REAL:
+            emit(param.values[0])
+    kept = [param.values[0].decode() + "\n" for param in REAL]
+    assert capfd.readouterr().err == "".join(kept)
+
+
 def test_strip_noise_keeps_every_other_line_as_it_is() -> None:
     text = (
         MAC.decode() + "\n"
