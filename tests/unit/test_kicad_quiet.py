@@ -83,7 +83,13 @@ NOISE = [
     pytest.param(
         b'/Users/runner/work/wx/src/common/stdpbase.cpp(61): assert "traits" failed '
         b"in Get(): create wxApp before calling this",
-        id="assertion: other path, line number and quoting",
+        id="assertion: absolute path, other line number and quoting",
+    ),
+    pytest.param(
+        ASSERT.replace(b"./src", b"../src"), id="assertion: path that climbs a folder"
+    ),
+    pytest.param(
+        ASSERT.replace(b"./src/common/", b""), id="assertion: file name alone"
     ),
     pytest.param(MAC, id="12-hour stamp with the narrow no-break space"),
     pytest.param(handler("11:44:35 PM"), id="12-hour stamp with an ASCII space"),
@@ -131,8 +137,16 @@ REAL = [
         id="stamp-like prefix with no digit",
     ),
     pytest.param(
-        b"x" * 41 + b"1: Debug: Adding duplicate image handler for 'PNG file'",
+        b"PM: Debug: Adding duplicate image handler for 'PNG file'",
+        id="stamp-like prefix with letters only",
+    ),
+    pytest.param(
+        b"1" * 41 + b": Debug: Adding duplicate image handler for 'PNG file'",
         id="prefix too long to be a stamp",
+    ),
+    pytest.param(b"progress 50% " + MAC, id="text glued to the front of a debug line"),
+    pytest.param(
+        b"progress 50% " + ASSERT, id="text glued to the front of the assertion"
     ),
     pytest.param(
         ASSERT.replace(b"stdpbase", b"other"), id="assertion from another file"

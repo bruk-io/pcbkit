@@ -24,9 +24,6 @@ In any other Python they are skipped, for the reason given just below.
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -39,29 +36,9 @@ pcbnew = pytest.importorskip(
 
 from pcbkit.kicad import quiet  # noqa: E402
 from tests import tiny_board, tiny_project  # noqa: E402
+from tests.child_process import pcbkit, run_python  # noqa: E402
 
 pytestmark = pytest.mark.kicad
-
-# Runs `pcbkit <args>` in this interpreter, as the console script would.
-CLI = "import sys; from pcbkit.cli import cli; sys.exit(cli())"
-
-
-def run_python(
-    code: str, *args: str, cwd: Path | None = None
-) -> subprocess.CompletedProcess[str]:
-    """Run ``code`` in a fresh Python, and capture its standard output and error."""
-    return subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(code), *args],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        timeout=300,
-    )
-
-
-def pcbkit(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Run the pcbkit command line with ``args`` in ``cwd``."""
-    return run_python(CLI, *args, cwd=cwd)
 
 
 @pytest.fixture(scope="module")

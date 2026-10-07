@@ -50,15 +50,16 @@ from typing import IO, Any, TypeVar, cast
 # One entry per kind of noise: a regular expression on a line's bytes, without its line
 # ending. Bytes, because the time stamp is not ASCII and a line need not be UTF-8.
 NOISE_PATTERNS: tuple[bytes, ...] = (
-    # wxStandardPaths::Get() finding no wxApp. The path before the file name and the
+    # wxStandardPaths::Get() finding no wxApp. The folders before the file name and the
     # line number change with the wxWidgets build; the function and the message do not.
-    rb'^\S*stdpbase\.cpp\(\d+\): assert "+traits"+ failed in Get\(\): '
-    rb"create wxApp before calling this$",
+    rb"^[/\\]?(?:[\w.\-]+[/\\])*stdpbase\.cpp\(\d+\): "
+    rb'assert "+traits"+ failed in Get\(\): create wxApp before calling this$',
     # wxImage::AddHandler, once per image format. The message is exact. The time stamp
-    # before it follows the locale (%X: "11:44:35 PM", "23:44:35", "23時44分35秒"),
-    # so it is only bounded: at most 40 bytes, ending in ": ", with a digit before its
-    # first colon.
-    rb"^(?:(?=[^\r\n:]*\d)[^\r\n]{1,40}: )?"
+    # before it follows the locale (%X: "11:44:35 PM", "23:44:35", "23時44分35秒"), so
+    # it is only bounded: up to 40 bytes of digits, time punctuation, spaces, A/P/M
+    # and non-ASCII (the narrow no-break space, day-part words, CJK units), with a
+    # digit before its first colon. Text glued to the front of the line is not one.
+    rb"^(?:(?=[^\r\n:]*\d)[0-9:.,/ \-AaPpMm\x80-\xff]{1,40}: )?"
     rb"Debug: Adding duplicate image handler for '[^'\r\n]*'$",
 )
 
