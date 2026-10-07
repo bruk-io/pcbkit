@@ -39,8 +39,9 @@ worse than no check, because it looks like evidence.
   (`nl`, `board`, `specs`, `circuits`, `record`, ...) are documented at the top of
   `pcbkit.check.plugin`: `.venv/bin/python -c 'import pcbkit.check.plugin as p; print(p.__doc__)'`.
   `test_led_currents` in the built-in `test_circuit` module is a worked example.
-- Parametrise from specs.py with `spec_params`, so a missing spec fails the check by name
-  instead of making it vanish.
+- Parametrise from specs.py with `spec_params(metafunc, "ref", lambda specs: ...)`, called
+  from the module's `pytest_generate_tests` as the top of `test_circuit.py` does, so that a
+  missing spec fails the check by name instead of making it vanish.
 - The failure message names the part, the value and the limit: `R3 at 21.4 mA, limit
   20 mA`. Hand the numbers a report should show to `record(name, value)`.
 - Run just that check: `pcbkit check -k <name>`.

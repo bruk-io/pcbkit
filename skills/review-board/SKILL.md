@@ -12,8 +12,8 @@ allowed-tools: Bash(pcbkit shots *) Bash(.venv/bin/pcbkit shots *) Read Glob Gre
 ---
 
 Review the layout of the routed board in the pcbkit project in the current folder, and
-report findings. Do not edit any file, and run no command other than `pcbkit shots`. Optional
-focus from the user: $ARGUMENTS (region names, or a concern).
+report findings. Do not edit any file, and run no command other than `pcbkit shots`. If the
+user named a focus (region names, or a concern), it is here: $ARGUMENTS
 
 1. Run `pcbkit shots --no-render` from the project folder (`.venv/bin/pcbkit shots
    --no-render` if a bare `pcbkit` is not found). It writes an SVG and a PNG of each region

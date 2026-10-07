@@ -24,6 +24,10 @@ Rules that matter more than speed:
   search snippet alone.
 - Say "not found" when you did not find it. Never fill a gap with a typical value, a figure
   for a similar part, or a guess. A shorter honest answer is the job.
+- A datasheet PDF often comes back from WebFetch as unreadable binary, saved to a file:
+  Read that file (pages 1-6 hold the ratings tables), or look for the HTML version on the
+  manufacturer's or a distributor's page. A figure you could only see in a search summary
+  or a forum post is "unverified": say so, and name where it came from.
 - Give the conditions with each figure (supply voltage, temperature, package, the
   datasheet revision or date) and say whether it is a minimum, typical or maximum. An
   absolute maximum is not an operating limit.
