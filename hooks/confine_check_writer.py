@@ -5,13 +5,16 @@ The check-writer agent (agents/check-writer.md) writes one check under ``checks/
 shows it failing in a scratch copy of the project. A plugin agent cannot carry hooks of
 its own, but this plugin-level PreToolUse hook (see hooks/hooks.json) sees every Edit
 and Write, and Claude Code adds ``agent_type`` to the event when a subagent makes the
-call: ``pcbkit:check-writer`` for this one. When it is check-writer, and the file lies
-in the project the session works in but not under ``checks/``, the hook exits 2 with the
-reason on stderr, and Claude Code blocks the tool call.
+call: ``pcbkit:check-writer`` for this one. When it is check-writer and the file lies in
+one of the session's projects but not under that project's ``checks/``, the hook exits 2
+with the reason on stderr, and Claude Code blocks the tool call.
 
-Everything else is allowed: any other agent, the main session, a scratch copy (a
-different project, outside this one) and files that belong to no project. The project is
-the nearest folder at or above the event's ``cwd`` that holds a ``pcbkit.toml``.
+Which project is "the session's" does not depend on where the agent happens to be
+working: it is a project (a folder holding a ``pcbkit.toml``) that contains, or lies
+inside, ``$CLAUDE_PROJECT_DIR``, the folder the session was started for (the event's
+``cwd`` stands in when the variable is missing). A scratch copy made elsewhere is
+another project and may be edited freely, and so may any other agent, the main session
+and files that belong to no project.
 
 It only sees the Edit and Write tools: a change made through Bash never reaches it.
 
@@ -28,7 +31,7 @@ import json
 import os
 import sys
 
-# The agent this hook confines, and the one folder of the project it may write in.
+# The agent this hook confines, and the one folder of a project it may write in.
 AGENT = "check-writer"
 FOLDER = "checks"
 # The file that makes a folder a pcbkit project.
@@ -57,34 +60,53 @@ def project_root(folder: str) -> str | None:
         folder = parent
 
 
+def inside(path: str, base: str) -> bool:
+    """Return True if ``path`` is ``base`` itself or lies below it."""
+    relative = os.path.relpath(path, base)
+    return relative != os.pardir and not relative.startswith(os.pardir + os.sep)
+
+
 def strays(path: str, root: str) -> bool:
-    """Return True if ``path`` is inside ``root`` but not under its checks/ folder.
+    """Return True if ``path``, inside project ``root``, is not under its checks/.
 
     Names are compared without regard to case, because the default macOS file system
     does not tell ``Checks/`` from ``checks/``.
     """
-    relative = os.path.relpath(path, root)
-    parts = relative.split(os.sep)
-    if parts[0] in (os.curdir, os.pardir):
-        return False  # the root itself, or somewhere else altogether
+    parts = os.path.relpath(path, root).split(os.sep)
     return len(parts) == 1 or parts[0].casefold() != FOLDER
 
 
-def blocked_path(file_path: str, cwd: str) -> bool:
+def confined(path: str, session: str) -> bool:
+    """Return True if ``path`` is in a project of the session, outside its checks/."""
+    root = project_root(os.path.dirname(path))
+    if root is None:
+        return False  # it belongs to no project
+    if not (inside(root, session) or inside(session, root)):
+        return False  # another project altogether: a scratch copy
+    return strays(path, root)
+
+
+def blocked_path(file_path: str, cwd: str, session: str) -> bool:
     """Return True if check-writer may not write ``file_path``.
 
     A relative path is taken from ``cwd`` and ``..`` is resolved. Symbolic links are
     followed as well as the path as written: a link inside checks/ that leads to
     design.py is a write to design.py.
     """
-    root = project_root(cwd)
-    if root is None:
-        return False
     written = os.path.normpath(os.path.join(cwd, os.path.expanduser(file_path)))
-    if strays(written, os.path.normpath(root)):
+    if confined(written, os.path.normpath(session)):
         return True
     resolved = os.path.realpath(written)
-    return resolved != written and strays(resolved, os.path.realpath(root))
+    return resolved != written and confined(resolved, os.path.realpath(session))
+
+
+def session_folder(event: dict, fallback_cwd: str) -> str:
+    """Return the folder the session was started for: the project dir, else the cwd."""
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    if project_dir and os.path.isabs(project_dir):
+        return project_dir
+    cwd = event.get("cwd")
+    return cwd if isinstance(cwd, str) and os.path.isabs(cwd) else fallback_cwd
 
 
 def reason(file_path: str) -> str:
@@ -119,7 +141,7 @@ def decide(event: object, fallback_cwd: str) -> tuple[int, str]:
     cwd = event.get("cwd")
     if not isinstance(cwd, str) or not os.path.isabs(cwd):
         cwd = fallback_cwd
-    if blocked_path(path, cwd):
+    if blocked_path(path, cwd, session_folder(event, fallback_cwd)):
         return BLOCK, reason(path)
     return ALLOW, ""
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,14 +25,24 @@ NAMESPACED = "pcbkit:check-writer"
 BARE = "check-writer"
 
 
-def run_hook(event: object | bytes, cwd: Path) -> subprocess.CompletedProcess[bytes]:
-    """Run the hook on one event (JSON-encoded unless given as bytes)."""
+def run_hook(
+    event: object | bytes, cwd: Path, session: Path | str | None = None
+) -> subprocess.CompletedProcess[bytes]:
+    """Run the hook on one event (JSON-encoded unless given as bytes).
+
+    ``session`` is what Claude Code puts in $CLAUDE_PROJECT_DIR for a hook; without it
+    the variable is removed, so a test never sees the one of the session it runs in.
+    """
     data = event if isinstance(event, bytes) else json.dumps(event).encode("utf-8")
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    if session is not None:
+        env["CLAUDE_PROJECT_DIR"] = str(session)
     return subprocess.run(
         [sys.executable, str(HOOK)],
         input=data,
         capture_output=True,
         cwd=cwd,
+        env=env,
         timeout=60,
     )
 
@@ -186,6 +197,57 @@ def test_everyone_else_may_write_anywhere_in_the_project(
 def test_only_that_agent_is_confined(project: Path, agent: object) -> None:
     done = run_hook(write(project / "design.py", agent, project), project)
     assert done.returncode == 0, stderr(done)
+
+
+# --- which project is the session's -------------------------------------------------
+
+
+def test_the_session_decides_the_project_not_where_the_agent_is_working(
+    project: Path, tmp_path: Path
+) -> None:
+    """An agent that works inside its scratch copy does not unprotect the project."""
+    scratch = tmp_path / "scratch" / "my-board"
+    scratch.mkdir(parents=True)
+    (scratch / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    real = run_hook(write(project / "design.py", cwd=scratch), scratch, session=project)
+    copy = run_hook(write(scratch / "design.py", cwd=scratch), scratch, session=project)
+    assert (real.returncode, copy.returncode) == (2, 0), stderr(real)
+
+
+def test_a_session_started_above_the_board_still_confines_it(tmp_path: Path) -> None:
+    started = tmp_path / "repo"
+    board = started / "boards" / "my-board"
+    (board / "checks").mkdir(parents=True)
+    (board / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    (board / "design.py").write_text("x = 1\n", encoding="utf-8")
+    scratch = tmp_path / "scratch" / "my-board"
+    scratch.mkdir(parents=True)
+    (scratch / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    results = {
+        name: run_hook(write(path, cwd=started), started, session=started).returncode
+        for name, path in {
+            "design.py": board / "design.py",
+            "checks": board / "checks" / "test_x.py",
+            "scratch": scratch / "design.py",
+        }.items()
+    }
+    assert results == {"design.py": 2, "checks": 0, "scratch": 0}
+
+
+def test_a_session_started_inside_the_project_confines_it(project: Path) -> None:
+    inside = project / "checks"
+    blocked = run_hook(write(project / "design.py", cwd=inside), inside, session=inside)
+    allowed = run_hook(write(inside / "test_x.py", cwd=inside), inside, session=inside)
+    assert (blocked.returncode, allowed.returncode) == (2, 0)
+
+
+@pytest.mark.parametrize("session", ["relative/folder", ""], ids=["relative", "empty"])
+def test_a_session_variable_that_is_no_absolute_path_is_ignored(
+    project: Path, session: str
+) -> None:
+    """The event's cwd stands in, as when the variable is missing."""
+    done = run_hook(write(project / "design.py", cwd=project), project, session=session)
+    assert done.returncode == 2, stderr(done)
 
 
 def test_a_scratch_copy_outside_the_project_may_be_edited(
