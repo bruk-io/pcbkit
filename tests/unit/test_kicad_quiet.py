@@ -488,13 +488,15 @@ os.close(writer)
 os.close(reader)
 try:
     with quiet.quiet_stderr():
-        os.write(2, b"a real line\\n")
-        # More than a pipe holds, so the last write can only return once the filter has
-        # read all of it. A filter that ended at its first failed write (the real line)
-        # would leave the pipe with no reader, and one of these writes would raise. The
-        # bytes decide it, not the timing.
-        for _ in range(6000):
-            os.write(2, {noise!r} + b"\\n")
+        # A real line every 50 lines, among the noise: the first one is the filter's
+        # first failed write, the later ones must find it still reading and discarding.
+        # There is far more than a pipe holds (64 KB) after every one of them, so the
+        # last write can only return once the filter has read all of it. A filter that
+        # ended at a failed write, or at the next real line, would leave the pipe with
+        # no reader, and one of these writes would raise. The bytes decide it, not the
+        # timing.
+        for i in range(12000):
+            os.write(2, (b"a real line" if i % 50 == 0 else {noise!r}) + b"\\n")
 except BaseException as error:
     print("raised", type(error).__name__, error)
 else:
@@ -506,10 +508,11 @@ def test_a_reader_that_has_gone_away_does_not_break_the_call() -> None:
     """Keep the filter reading when it cannot write, so the call sees no broken pipe.
 
     The code under quiet_stderr writes to descriptor 2, which is the filter's pipe. The
-    filter writes the real line to the real standard error, which has no reader left,
-    and that fails. It must carry on and discard, because if it ended, the next write by
-    the code it serves would raise BrokenPipeError there: a call that has nothing to do
-    with the closed pipe, failing because of it.
+    filter writes a real line to the real standard error, which has no reader left, and
+    that fails. It must carry on reading and discard every line after it, the real ones
+    too: if it ended, or died on the next real line, the next write by the code it
+    serves would raise BrokenPipeError there. That is a call with nothing to do with
+    the closed pipe, failing because of it.
     """
     done = run_child(READER_GONE.format(noise=MAC))
     assert (done.returncode, done.stdout) == (0, "returned normally\n")
