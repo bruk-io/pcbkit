@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import errno
 import os
+import signal
 import subprocess
 import sys
 import textwrap
 import time
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Any
 
@@ -93,6 +95,26 @@ def wait_until(condition: Callable[[], bool], seconds: float) -> bool:
     return True
 
 
+@contextmanager
+def within(seconds: int) -> Iterator[None]:
+    """Raise TimeoutError where the body stands if it takes longer than ``seconds``.
+
+    For code that waits for ever when it is wrong: the test then fails, with the line
+    it was stuck on in the traceback, instead of hanging the whole run.
+    """
+
+    def expired(signum: int, frame: Any) -> None:
+        raise TimeoutError(f"still waiting after {seconds} s")
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 # --- which lines are noise ------------------------------------------------------------
 
 NOISE = [
@@ -113,9 +135,14 @@ NOISE = [
     pytest.param(handler("11:44:35 PM"), id="12-hour stamp with an ASCII space"),
     pytest.param(handler("23:44:35"), id="24-hour stamp"),
     pytest.param(handler("23.44.35"), id="dotted stamp"),
+    pytest.param(handler("2026-10-07 23:44:35"), id="stamp with a date and dashes"),
+    pytest.param(
+        handler("10/07/2026, 11:44:35 PM"), id="stamp with a date, slashes and a comma"
+    ),
     pytest.param(handler("23時44分35秒"), id="stamp with CJK units"),
     pytest.param(handler("오후 11:47:53"), id="stamp with a leading day-part word"),
     pytest.param(handler(""), id="no stamp at all"),
+    pytest.param(handler("23:44:35", ""), id="a format with no name"),
     *[pytest.param(handler("23:44:35", name), id=name) for name in FORMATS],
     pytest.param(MAC + b"\n", id="debug line with its newline"),
 ]
@@ -179,6 +206,29 @@ REAL = [
     pytest.param(ASSERT + b" (really)", id="assertion with text after it"),
     pytest.param(
         ASSERT.replace(b"(59)", b""), id="assertion with no line number to match"
+    ),
+    pytest.param(
+        ASSERT.replace(b"(59)", b"()"), id="assertion with an empty line number"
+    ),
+    pytest.param(
+        ASSERT.replace(b"(59)", b"(x)"), id="assertion whose line number is no number"
+    ),
+    pytest.param(
+        ASSERT.replace(b'""traits""', b"traits"), id="assertion with no quotes round it"
+    ),
+    pytest.param(
+        ASSERT.replace(b"Get()", b"Set()"), id="assertion in another function"
+    ),
+    pytest.param(
+        ASSERT.replace(b"stdpbase.cpp", b"stdpbaseXcpp"),
+        id="assertion from a file whose name only looks the same",
+    ),
+    pytest.param(ASSERT + b"  ", id="assertion with trailing spaces"),
+    pytest.param(MAC + b"  ", id="debug line with trailing spaces"),
+    pytest.param(MAC + b" and 'more'", id="debug line that names two formats"),
+    pytest.param(
+        b"PM: Debug: Adding duplicate image handler for 'PNG file 2'",
+        id="letters-only prefix, and a digit after the first colon",
     ),
 ]
 
@@ -324,11 +374,13 @@ class Recorder:
     def __init__(self) -> None:
         """Start with no children."""
         self.children: list[Any] = []
+        self.commands: list[Any] = []
 
     def Popen(self, *args: Any, **kwargs: Any) -> Any:  # noqa: N802
-        """Start the real child and remember it."""
+        """Start the real child and remember it, and the command that started it."""
         child = subprocess.Popen(*args, **kwargs)
         self.children.append(child)
+        self.commands.append(args[0] if args else kwargs["args"])
         return child
 
 
@@ -353,6 +405,44 @@ def test_the_filter_runs_in_its_own_session(recorder: Recorder) -> None:
         (child,) = recorder.children
         assert os.getsid(child.pid) == child.pid
         assert os.getsid(child.pid) != os.getsid(0)
+
+
+def test_the_filter_is_started_isolated_and_without_site(recorder: Recorder) -> None:
+    """Run the filter as ``python -I -S -c``, so it starts the same way everywhere.
+
+    -I makes it ignore the PYTHON* variables and keeps the current folder off its import
+    path (the next test shows what that is for). -S keeps it from importing site, which
+    would run the .pth files and the sitecustomize of whatever environment pcbkit is in:
+    that costs start-up time on every call, and anything one of them printed would reach
+    the terminal.
+    """
+    with quiet.quiet_stderr():
+        pass
+    (command,) = recorder.commands
+    assert command[:4] == [sys.executable, "-I", "-S", "-c"]
+
+
+@pytest.mark.parametrize("how", ["current folder", "PYTHONPATH"])
+def test_the_filter_imports_nothing_from_the_callers_folder_or_environment(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    how: str,
+) -> None:
+    """Keep a module of the caller's from standing in for one the filter imports.
+
+    pcbkit runs in a board project's folder, and PYTHONPATH can name any folder. A file
+    there called re.py would be imported by the filter in place of the standard one, and
+    the filter would die before it read a line.
+    """
+    (tmp_path / "re.py").write_text('raise RuntimeError("the filter imported re.py")\n')
+    if how == "current folder":
+        monkeypatch.chdir(tmp_path)
+    else:
+        monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    with quiet.quiet_stderr():
+        write(MAC, b"real line")
+    assert capfd.readouterr().err == "real line\n"
 
 
 def test_a_block_inside_a_block_starts_no_second_filter(
@@ -639,8 +729,11 @@ def test_a_redirect_that_fails_runs_the_call_unfiltered_and_leaves_nothing(
     """
     monkeypatch.setattr(quiet, "os", FailingOs(dup2=OSError(errno.EBADF, "planted")))
     before = open_descriptors()
-    with quiet.quiet_stderr():
-        write(MAC, b"real line")
+    # Closing the filter's input is what lets it end; without that, waiting for it never
+    # returns, so the test is given a limit instead of being left to hang.
+    with within(30):
+        with quiet.quiet_stderr():
+            write(MAC, b"real line")
     assert capfd.readouterr().err == MAC.decode() + "\nreal line\n"
     (child,) = recorder.children
     assert child.returncode == 0  # it was sent nothing, and has been waited for
