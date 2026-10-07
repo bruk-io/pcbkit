@@ -52,6 +52,13 @@ from typing import Any
 
 import pytest
 
+from pcbkit.check.results import (
+    BUILTIN_GROUPS,
+    BUILTIN_PACKAGE,
+    RESULTS_FILE,
+    RESULTS_FORMAT,
+    results_dir,
+)
 from pcbkit.project import (
     Project,
     ProjectError,
@@ -60,20 +67,6 @@ from pcbkit.project import (
 )
 
 OPTION = "--pcbkit-project"
-RESULTS_DIR = "checks"
-RESULTS_FILE = "results.json"
-RESULTS_FORMAT = 1
-
-# The built-in check modules and the group each belongs to.
-BUILTIN_GROUPS = {
-    "test_kicad": "kicad",
-    "test_outputs": "outputs",
-    "test_fab": "fab",
-    "test_copper": "copper",
-    "test_circuit": "circuit",
-    "test_esp32s3": "esp32s3",
-}
-BUILTIN_PACKAGE = "pcbkit.check.builtin"
 
 STATE = pytest.StashKey[Any]()
 
@@ -190,11 +183,6 @@ def builtin_dir() -> Path:
     import pcbkit.check.builtin as builtin
 
     return Path(builtin.__file__).resolve().parent
-
-
-def results_dir(project: Project) -> Path:
-    """Return the folder the results, the report and the plots go in."""
-    return project.out_dir / RESULTS_DIR
 
 
 # --- options and set-up -----------------------------------------------------------
@@ -328,10 +316,14 @@ def record(request: pytest.FixtureRequest) -> Callable[[str, Any], None]:
     return _record
 
 
-@pytest.fixture(autouse=True)
-def _missing_spec_guard(request: pytest.FixtureRequest) -> None:
-    """Fail a check that was parametrised from data the project does not have."""
-    callspec = getattr(request.node, "callspec", None)
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_call(item: pytest.Item) -> None:
+    """Fail a check that was parametrised from data the project does not have.
+
+    It is a failure of the check itself (not an error in setting it up), so it reads
+    in the report like any other failed check, naming the missing spec.
+    """
+    callspec = getattr(item, "callspec", None)
     if callspec is None:
         return
     for value in callspec.params.values():
@@ -439,14 +431,14 @@ def pytest_runtest_makereport(
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Write out/checks/results.json, unless nothing ran."""
+    """Write out/checks/results.json, unless the run only collected."""
     config = session.config
     state = config.stash.get(STATE, None)
     if state is None or config.option.collectonly:
         return
+    # A run that selected nothing still writes (an empty list), so the results of an
+    # earlier run are never mistaken for this one's.
     checks = {k: v for k, v in state.results.items() if v["outcome"]}
-    if not checks:
-        return
     counts: dict[str, int] = {}
     for entry in checks.values():
         counts[entry["outcome"]] = counts.get(entry["outcome"], 0) + 1

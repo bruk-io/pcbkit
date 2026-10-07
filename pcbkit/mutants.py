@@ -69,14 +69,17 @@ REGENERATE = (
 class Verdict:
     """What one scratch run came to.
 
-    ``caught`` is True when pytest failed; ``summary`` is pytest's last line (or what
-    went wrong); ``error`` is True when the run could not be set up.
+    ``caught`` is True when a check failed (pytest exited non-zero and reported a
+    "failed"; checks that only error, as when the schematic cannot be read, are not a
+    catch); ``summary`` is pytest's last line (or what went wrong); ``error`` is True
+    when the run could not be set up; ``code`` is pytest's exit code.
     """
 
     name: str
     caught: bool
     summary: str
     error: bool = False
+    code: int = 0
 
     def line(self) -> str:
         """Return the verdict as one report line: CAUGHT or MISSED, then the summary."""
@@ -98,7 +101,33 @@ def load(project: Project) -> tuple[list[Mutant], dict[str, int]]:
         for name, value in vars(module).items()
         if name.endswith("_MUTANTS") and name != "MUTANTS" and isinstance(value, list)
     }
-    return [(str(n), list(e), str(t)) for n, e, t in mutants], parked
+    return [_checked(entry, i) for i, entry in enumerate(mutants)], parked
+
+
+def _checked(entry: Any, index: int) -> Mutant:
+    """Return a MUTANTS entry as a (name, edits, expression) triple, or raise.
+
+    Each edit is a pair of strings: the text to find in design.py and what to put there.
+    """
+    shape = '(name, [(text to find, text to put there), ...], "pytest -k expression")'
+    try:
+        name, edits, expression = entry
+        if isinstance(edits, str) or any(
+            isinstance(edit, str) or len(edit) != 2 for edit in edits
+        ):
+            raise ValueError("an edit is a pair of texts")
+        pairs = [(edit[0], edit[1]) for edit in edits]
+    except (TypeError, ValueError):
+        raise click.ClickException(
+            f"mutants.py: MUTANTS entry {index} should look like {shape}, got {entry!r}"
+        ) from None
+    texts = [name, expression] + [t for pair in pairs for t in pair]
+    if not all(isinstance(t, str) for t in texts):
+        raise click.ClickException(
+            f"mutants.py: MUTANTS entry {index} ({name!r}) should be {shape}: "
+            "every text must be a string"
+        )
+    return name, pairs, expression
 
 
 def copy_project(project: Project, dest: Path) -> Path:
@@ -157,7 +186,8 @@ def run_mutant(
         shutil.rmtree(scratch, ignore_errors=True)
     lines = done.stdout.strip().splitlines()
     summary = lines[-1].strip() if lines else _tail(done.stderr, 1)
-    return Verdict(name, done.returncode != 0 and "failed" in summary, summary)
+    caught = done.returncode != 0 and "failed" in summary
+    return Verdict(name, caught, summary, code=done.returncode)
 
 
 def control_expression(mutants: Sequence[Mutant]) -> str:
@@ -179,7 +209,7 @@ def run_all(
         raise click.ClickException(f"{project.root / 'design.py'} not found")
     mutants, parked = load(project)
     control = run_mutant(project, "control (no edits)", [], control_expression(mutants))
-    ok = not control.caught and " passed" in f" {control.summary}"
+    ok = control.code == 0 and " passed" in f" {control.summary}"
     if control.error or not ok:
         echo(f"{control.name:<{NAME_WIDTH}} FAILS   {control.summary}")
         echo("\ncontrol run did not pass cleanly: fix that first")

@@ -230,10 +230,11 @@ def check_cmd(expression: str | None) -> None:
     """
     env.require_pcbnew()
     proj = load_project()
-    from pcbkit.check import plugin, runner
+    from pcbkit.check import results as check_results
+    from pcbkit.check import runner
 
     code = runner.run(proj, expression)
-    results = plugin.results_dir(proj) / plugin.RESULTS_FILE
+    results = check_results.results_dir(proj) / check_results.RESULTS_FILE
     if results.is_file():
         click.echo(f"Results: {results.relative_to(proj.root)} (pcbkit report)")
     click.get_current_context().exit(code)
@@ -259,9 +260,24 @@ def mutants_cmd() -> None:
 def report_cmd() -> None:
     """Write the validation report from the last check run.
 
-    Not implemented yet (WP7).
+    Turns out/checks/results.json (left by `pcbkit check`) into
+    out/checks/VALIDATION.md: the counts, then every check with its result and the
+    numbers it recorded. Exits 1 if the last run had a failed check or an error, or ran
+    no checks. Runs anywhere: it only reads the results file.
     """
-    _not_implemented("WP7")
+    proj = load_project()
+    from pcbkit import report
+
+    path, data = report.write_report(proj)
+    click.echo(f"{report.summary_line(data)}\nReport: {path.relative_to(proj.root)}")
+    counts = data.get("counts", {})
+    if not data["checks"]:
+        click.echo(
+            "The last run ran no checks: nothing matched? Run `pcbkit check` again."
+        )
+        click.get_current_context().exit(1)
+    if counts.get("failed") or counts.get("error"):
+        click.get_current_context().exit(1)
 
 
 @cli.command("quote")

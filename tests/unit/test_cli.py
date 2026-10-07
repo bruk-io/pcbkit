@@ -31,8 +31,8 @@ WORKFLOW = [
 ]
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
-# is the independent record of who fills in what: `new` and `setup` are WP11, report
-# is WP7. The commands in BUILT have their own tests and no row here.
+# is the independent record of who fills in what: `new` and `setup` are WP11. The
+# commands in BUILT have their own tests and no row here.
 BUILT = {
     "doctor",
     "sch",
@@ -45,11 +45,11 @@ BUILT = {
     "shots",
     "check",
     "mutants",
+    "report",
 }
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
-    "report": ("WP7", ["report"]),
 }
 
 # The same commands with every option they are meant to take: each must be accepted and

@@ -111,7 +111,7 @@ def test_job_file_stackup(
 ) -> None:
     """Describe the stackup of pcbkit.toml in the Gerber job file."""
     stackup = project.config.stackup
-    job = json.loads(next(v for k, v in gerbers.items() if k.endswith(".gbrjob")))
+    job = json.loads(_file(gerbers, ".gbrjob"))
     specs = job["GeneralSpecs"]
     copper = [
         lay["Thickness"] for lay in job["MaterialStackup"] if lay["Type"] == "Copper"
@@ -133,6 +133,14 @@ def test_job_file_stackup(
     assert abs(specs["BoardThickness"] - stackup.thickness_mm) < 1e-9
 
 
+def _file(gerbers: dict[str, str], suffix: str) -> str:
+    """Return the text of the Gerber zip's file that ends in ``suffix``, or fail."""
+    for name, text in gerbers.items():
+        if name.endswith(suffix):
+            return text
+    pytest.fail(f"the Gerber zip has no file ending {suffix}", pytrace=False)
+
+
 def _gerber_coords(text: str) -> list[tuple[float, float]]:
     """Return every point a Gerber file draws or moves to, in millimetres."""
     fs = re.search(r"%FSLAX(\d)(\d)Y(\d)(\d)\*%", text)
@@ -150,8 +158,7 @@ def _gerber_coords(text: str) -> list[tuple[float, float]]:
 
 def test_outline_size(gerbers: dict[str, str], layout: ProjectModule) -> None:
     """Cut the board to the size layout.py says."""
-    edge = next(v for k, v in gerbers.items() if k.endswith("Edge_Cuts.gbr"))
-    pts = _gerber_coords(edge)
+    pts = _gerber_coords(_file(gerbers, "Edge_Cuts.gbr"))
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
     assert abs((max(xs) - min(xs)) - layout.W) < 0.05
     assert abs((max(ys) - min(ys)) - layout.H) < 0.05
@@ -176,10 +183,8 @@ def test_drill_files_match_board(
 ) -> None:
     """Drill exactly the holes the board has, by diameter, plated and not."""
     pcbnew = _pcb.pcbnew()
-    pth = _excellon_hits(next(v for k, v in gerbers.items() if k.endswith("-PTH.drl")))
-    npth = _excellon_hits(
-        next(v for k, v in gerbers.items() if k.endswith("-NPTH.drl"))
-    )
+    pth = _excellon_hits(_file(gerbers, "-PTH.drl"))
+    npth = _excellon_hits(_file(gerbers, "-NPTH.drl"))
     want_p: dict[float, int] = {}
     want_n: dict[float, int] = {}
     for t in board.GetTracks():

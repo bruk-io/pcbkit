@@ -90,6 +90,8 @@ def intruders(
     ``layer`` is "top" or "bottom"; ``box`` is ``(x0, y0, x1, y1)``; ``allowed`` holds
     the nets that may be there, spelled as KiCad names them ("/GND").
     """
+    if layer not in ("top", "bottom"):
+        raise ValueError(f"layer must be 'top' or 'bottom', not {layer!r}")
     return [
         (what, area)
         for what, lay, area in copper_in_rect(board, *box)
