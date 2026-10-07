@@ -1,0 +1,99 @@
+# The pcbkit docs site: MkDocs with the Material theme, versioned by mike.
+#
+#   uv run --group docs mkdocs serve           # preview at http://127.0.0.1:8000
+#   uv run --group docs mkdocs build --strict  # what CI runs on every push and pull request
+#
+# A release publishes the site to the gh-pages branch with mike (.github/workflows/docs.yml);
+# mike builds it with this file, so a warning here stops a deploy as well.
+
+site_name: pcbkit
+site_description: PCB as Python. Generate, route, check and export KiCad boards from code.
+site_url: https://bruk-io.github.io/pcbkit/
+repo_url: https://github.com/bruk-io/pcbkit
+repo_name: bruk-io/pcbkit
+copyright: pcbkit is licensed under AGPL-3.0-or-later
+
+docs_dir: docs
+site_dir: site
+
+# Any warning is an error, whoever runs the build: a broken link or a page left out of
+# the nav must not reach a release.
+strict: true
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+extra:
+  # The version picker in the header. mike keeps the list in versions.json on gh-pages.
+  version:
+    provider: mike
+    alias: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  # The changelog page includes the repository's CHANGELOG.md; a missing file fails the build.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  # The CLI reference is generated from the click group, so it cannot drift from the code.
+  - mkdocs-click
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts: concepts.md
+  - Board project interface: project-interface.md
+  - Routing recipes: routing-recipes.md
+  - Writing checks: writing-checks.md
+  - Ordering boards: ordering.md
+  - The Claude plugin: claude-plugin.md
+  - Troubleshooting: troubleshooting.md
+  - CLI reference: cli.md
+  - Release process: release-process.md
+  - Changelog: changelog.md

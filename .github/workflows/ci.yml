@@ -33,3 +33,19 @@ jobs:
       - name: Show the interpreter that will run the tests
         run: uv run --python ${{ matrix.python-version }} python --version
       - run: uv run --python ${{ matrix.python-version }} pytest tests -m "not kicad and not e2e" -q
+
+  # Build the docs site strictly: a broken link, a page left out of the nav or a
+  # command the CLI page no longer matches fails here, before a release does. This only
+  # builds; docs.yml is what publishes, when a release is published.
+  docs:
+    runs-on: ubuntu-latest
+    env:
+      # Material prints a notice about MkDocs 2.0 on every build. pyproject.toml keeps
+      # mkdocs below 2, so the notice only adds noise.
+      NO_MKDOCS_2_WARNING: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv run --group docs mkdocs build --strict

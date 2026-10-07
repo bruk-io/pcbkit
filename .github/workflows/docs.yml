@@ -1,0 +1,83 @@
+name: docs
+
+# Publish the docs site, one folder per version, when a GitHub release is published.
+# The site is the gh-pages branch (Settings > Pages > Deploy from a branch: gh-pages,
+# / (root)). mike keeps a folder for each version and a versions.json for the version
+# picker; `latest` follows stable releases only, and a pre-release is deployed without
+# moving it. The rules for the version live in tools/docs_version.py, where they are
+# tested.
+#
+# A release that another workflow creates with GITHUB_TOKEN does not start this one:
+# GitHub does not run workflows for events made with that token. See
+# docs/release-process.md before automating releases.
+
+on:
+  release:
+    types: [published]
+  # Deploy a tag again by hand, for example after a failed run.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag to deploy, such as v0.1.0"
+        required: true
+        type: string
+      prerelease:
+        description: "Deploy it as a pre-release: leave latest where it is"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# One deploy at a time. Two jobs must not push gh-pages together; the second waits.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+env:
+  # Material prints a notice about MkDocs 2.0 on every build. pyproject.toml keeps
+  # mkdocs below 2, so the notice only adds noise.
+  NO_MKDOCS_2_WARNING: "true"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The files of the tag being published, and every branch: mike commits to
+          # gh-pages, so it needs that branch's history.
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Let mike make commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Work out the docs version
+        id: docs
+        env:
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          PRERELEASE: ${{ (inputs.prerelease || github.event.release.prerelease) && 'true' || 'false' }}
+        run: |
+          # The versions already published, which keep an old release from taking
+          # latest back. There are none before the first deploy: an empty file.
+          git show origin/gh-pages:versions.json > "$RUNNER_TEMP/deployed.json" 2>/dev/null || : > "$RUNNER_TEMP/deployed.json"
+          python3 tools/docs_version.py --tag "$TAG" --prerelease "$PRERELEASE" --deployed "$RUNNER_TEMP/deployed.json" >> "$GITHUB_OUTPUT"
+      - name: Deploy the release, and make it latest
+        if: steps.docs.outputs.latest == 'true'
+        env:
+          VERSION: ${{ steps.docs.outputs.version }}
+          TITLE: ${{ steps.docs.outputs.title }}
+        run: |
+          uv run --group docs mike deploy --push --update-aliases --title "$TITLE" "$VERSION" latest
+          uv run --group docs mike set-default --push latest
+      - name: Deploy the pre-release, and leave latest where it is
+        if: steps.docs.outputs.latest != 'true'
+        env:
+          VERSION: ${{ steps.docs.outputs.version }}
+          TITLE: ${{ steps.docs.outputs.title }}
+        run: uv run --group docs mike deploy --push --title "$TITLE" "$VERSION"

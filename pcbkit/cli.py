@@ -48,8 +48,8 @@ def cli() -> None:
 
     Run the commands inside a board project: a folder with a pcbkit.toml. They are
     listed in the order you use them. Commands that need KiCad's pcbnew module (build,
-    route, promote, finalize, check, mutants, compare, shots) run in the project's own
-    .venv, which `pcbkit setup` creates; the rest run anywhere.
+    route, promote, finalize, check, mutants, compare) run in the project's own .venv,
+    which `pcbkit setup` creates; the rest run anywhere.
     """
 
 
@@ -162,7 +162,7 @@ def sch_cmd() -> None:
 def build_cmd() -> None:
     """Generate the schematic and netlist, then place the board.
 
-    Runs `pcbkit sch`, then builds kicad/<stem>.kicad_pcb: each footprint of the
+    Runs `pcbkit sch`, then builds `kicad/<stem>.kicad_pcb`: each footprint of the
     netlist at its position in layout.py, the outline, the mounting holes and the
     stackup. A part with no position is parked below the board and listed. ERC
     findings are listed too: the board is placed anyway, and the exit code is 1 if ERC
@@ -450,7 +450,7 @@ def compare_cmd(
     "--pcb",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     metavar="FILE",
-    help="Board to shoot (default: the project's kicad/<stem>.kicad_pcb).",
+    help="Board to shoot (default: the project's `kicad/<stem>.kicad_pcb`).",
 )
 @click.option(
     "--region",

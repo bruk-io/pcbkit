@@ -308,7 +308,7 @@ def require_pcbnew() -> None:
     """Raise a ClickException pointing at `pcbkit setup` unless pcbnew imports here.
 
     Every command that needs pcbnew (build, route, promote, finalize, check, mutants,
-    compare, shots) calls this first, so a missing pcbnew is a message, not a traceback.
+    compare) calls this first, so a missing pcbnew is a message, not a traceback.
     It also quiets pcbnew's wx noise for the rest of the process (``import_pcbnew``).
     """
     try:
