@@ -12,9 +12,10 @@ subtract ``OX, OY`` to get layout ones. Nets are named without KiCad's leading "
 ``N(board, "VIN")`` finds the net "/VIN".
 
 pcbnew is imported when a helper first needs it, so this module imports on a machine
-with no KiCad. The helpers that need no pcbnew (``rect``, ``segment_distance``,
-``point_in_track``, ``remove``, ``set_copper``) work anywhere; a tier 2 command calls
-``pcbkit.kicad.env.require_pcbnew`` before it uses the rest.
+with no KiCad. The import goes through ``env.import_pcbnew``, which also hides pcbnew's
+wx noise (see ``pcbkit.kicad.quiet``). The helpers that need no pcbnew (``rect``,
+``segment_distance``, ``point_in_track``, ``remove``, ``set_copper``) work anywhere; a
+tier 2 command calls ``pcbkit.kicad.env.require_pcbnew`` before it uses the rest.
 
 Four pcbnew hazards on KiCad 10 are shielded here, so no caller has to remember them:
 
@@ -36,6 +37,8 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from pcbkit.kicad import env
+
 # KiCad's file coordinates minus layout coordinates, in millimetres (see above).
 OX = 50.0
 OY = 50.0
@@ -44,10 +47,8 @@ Point = Sequence[float]
 
 
 def _pcbnew() -> Any:
-    """Return the pcbnew module, imported on first use."""
-    import pcbnew
-
-    return pcbnew
+    """Return the pcbnew module, imported on first use, with its wx noise quieted."""
+    return env.import_pcbnew()
 
 
 def _plain(v: Any) -> Any:

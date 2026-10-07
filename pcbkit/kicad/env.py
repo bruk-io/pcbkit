@@ -3,7 +3,9 @@
 Nothing here runs at import time, and a ``find_*`` function returns None rather than
 raising when it finds nothing, so ``pcbkit doctor`` works on a machine with no KiCad.
 ``share_dir`` (and its three siblings) and ``require_pcbnew`` raise, because their
-callers cannot carry on without the answer.
+callers cannot carry on without the answer. ``import_pcbnew`` is how code gets the
+pcbnew module itself: it hides the wx noise that pcbnew writes to standard error
+(see ``pcbkit.kicad.quiet``).
 
 Everything that touches the machine goes through ``_which``, ``_run``, ``host_os``,
 ``Path.home``, ``os.environ`` or the locations just below, so unit tests can replace
@@ -22,9 +24,12 @@ import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from xml.parsers.expat import ExpatError
 
 import click
+
+from pcbkit.kicad import quiet
 
 # Oldest versions pcbkit supports.
 MIN_KICAD = (10, 0)
@@ -283,16 +288,35 @@ def pcbnew_importable() -> bool:
     return True
 
 
+def import_pcbnew() -> Any:
+    """Return the pcbnew module, with the calls that print wx noise quieted.
+
+    Raise ImportError if pcbnew cannot be imported. On macOS pcbnew writes wxWidgets
+    assertions and debug lines to standard error when a board is made or loaded;
+    ``pcbkit.kicad.quiet`` says which and why. This wraps ``LoadBoard`` and
+    ``NewBoard`` once, in the module itself, so every later ``pcbnew.LoadBoard(...)``
+    in this process is quiet, wherever it is written. Code that imports pcbnew for
+    itself (a check, a hook) should get it from here, or from a command that called
+    ``require_pcbnew`` first. Calling it again is cheap and changes nothing.
+    """
+    import pcbnew
+
+    return quiet.quiet_pcbnew(pcbnew)
+
+
 def require_pcbnew() -> None:
     """Raise a ClickException pointing at `pcbkit setup` unless pcbnew imports here.
 
     Every command that needs pcbnew (build, route, promote, finalize, check, mutants,
     compare, shots) calls this first, so a missing pcbnew is a message, not a traceback.
+    It also quiets pcbnew's wx noise for the rest of the process (``import_pcbnew``).
     """
-    if not pcbnew_importable():
+    try:
+        import_pcbnew()
+    except ImportError:
         raise click.ClickException(
             "pcbnew isn't importable here. In the board project, run: pcbkit setup"
-        )
+        ) from None
 
 
 # --- Java and Freerouting ---------------------------------------------------------
