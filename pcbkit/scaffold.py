@@ -104,8 +104,8 @@ def template_differences(example: Path, template: Path) -> list[str]:
 def sync_template(example: Path, template: Path) -> list[str]:
     """Make ``template`` hold exactly the template files of ``example``.
 
-    Return what changed, as ``template_differences`` words it. Only files that are
-    not meant to be there are removed, so a wrong ``template`` cannot wipe a folder.
+    Return what changed, as ``template_differences`` words it. Files that a template
+    never holds, such as a ``kicad/`` folder, are left alone.
     """
     changes = template_differences(example, template)
     want = template_files(example)

@@ -8,6 +8,7 @@ tests that read the real template (`pcbkit/templates/board`) and the real exampl
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
 import sys
@@ -377,6 +378,17 @@ def test_retarget_golden_with_the_same_stem_touches_nothing(tmp_path: Path) -> N
     assert {name: (folder / name).read_bytes() for name in listing(folder)} == before
 
 
+def test_retarget_golden_with_the_same_stem_does_not_even_rewrite_the_files(
+    tmp_path: Path,
+) -> None:
+    """Leave the files' times alone: nothing was changed, so nothing is written."""
+    folder = golden(tmp_path)
+    for path in folder.iterdir():
+        os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+    scaffold.retarget_golden(folder, "blinky", "blinky")
+    assert {p.stat().st_mtime_ns for p in folder.iterdir()} == {1_000_000_000}
+
+
 def test_retarget_golden_without_a_folder_does_nothing(tmp_path: Path) -> None:
     """Accept a template that has no golden/."""
     assert scaffold.retarget_golden(tmp_path / "golden", "blinky", "x") == []
@@ -503,6 +515,20 @@ def test_the_readme_names_the_board_and_commands_that_exist(here: Path) -> None:
     assert commands <= set(cli.commands)
 
 
+def test_new_takes_the_revision_from_the_template(
+    here: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Call the board rev B when the template is at rev B, in the toml and the names."""
+    root = tmp_path / "templates"
+    folder = materialise(scaffold.template_files(TEMPLATE), root / "board")
+    toml = folder / "pcbkit.toml"
+    toml.write_text(toml.read_text("utf-8").replace('rev = "A"', 'rev = "B"'), "utf-8")
+    monkeypatch.setattr(scaffold, "TEMPLATE_ROOT", root)
+    created = scaffold.create_project("my-board")
+    board = load_project(created.root).config.board
+    assert (board.rev, board.fab_name) == ("B", "My_Board_revB")
+
+
 def test_new_refuses_a_folder_that_has_something_in_it(here: Path) -> None:
     """Never write into a folder with files in it, and leave it exactly as it was."""
     write_tree(here / "my-board", {"notes.txt": "mine"})
@@ -603,6 +629,30 @@ def test_a_failure_half_way_takes_out_what_was_written(
     with pytest.raises(ScaffoldError, match="could not write .*No space left"):
         scaffold.create_project("my-board")
     assert not (here / "my-board").exists()
+
+
+def test_new_checks_that_what_it_wrote_is_a_pcbkit_toml_pcbkit_accepts(
+    here: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse, and leave nothing, if the renamed pcbkit.toml would not load."""
+    monkeypatch.setattr(
+        scaffold, "rename_board", lambda text, values: "[board]\nstem = 5\n"
+    )
+    with pytest.raises(ProjectError, match="pcbkit.toml: "):
+        scaffold.create_project("my-board")
+    assert not (here / "my-board").exists()
+
+
+def test_a_relative_pcbkit_source_is_written_as_an_absolute_path(
+    here: Path, tmp_path: Path
+) -> None:
+    """Resolve --pcbkit-source, since the project may be opened from anywhere."""
+    checkout = make_checkout(tmp_path / "checkout")
+    created = scaffold.create_project("my-board", pcbkit_source=Path("../checkout"))
+    data = tomllib.loads((here / "my-board" / "pyproject.toml").read_text("utf-8"))
+    path = data["tool"]["uv"]["sources"]["pcbkit"]["path"]
+    assert path == str(checkout.resolve()) and Path(path).is_absolute()
+    assert created.source == path
 
 
 def test_a_failure_in_a_folder_that_was_there_empties_it_again(

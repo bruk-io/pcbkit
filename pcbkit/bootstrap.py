@@ -9,8 +9,9 @@ order, for the project at ``root``:
    exists already and imports pcbnew (then it is kept: ``uv venv`` refuses to replace
    a venv, and a second ``pcbkit setup`` must do no harm);
 3. ``uv sync --python <KiCad's>`` installs the project's dependencies (pcbkit and
-   pytest) into it. The interpreter is named again so that a ``.python-version`` file
-   in this folder or above it cannot make uv rebuild the venv on another Python;
+   pytest) into it. The interpreter is named again because a bare ``uv sync`` rebuilds
+   the venv, without the system site packages, on the Python that a ``.python-version``
+   file in the project folder or ``UV_PYTHON`` names (measured, with uv 0.12);
 4. prove ``.venv/bin/python`` imports pcbnew, which is the point of all of it;
 5. make sure the Freerouting 1.9.0 jar is there: one ``env.find_freerouting_jar`` finds,
    else a download to ``~/.local/share/pcbkit``, checked for size and for being a zip;
@@ -156,7 +157,7 @@ def venv_imports_pcbnew(python: Path) -> tuple[bool, str]:
         return False, f"{python} does not exist"
     run = env._run([str(python), "-I", "-c", PROBE], timeout=60.0)
     tagged = [line for line in run.output.splitlines() if line.startswith(PROBE_TAG)]
-    if run.returncode == 0 and tagged:
+    if tagged:  # the import worked, whatever happened as the interpreter closed
         return True, tagged[-1][len(PROBE_TAG) :].strip().strip("()")
     lines = [line.strip() for line in run.output.splitlines() if line.strip()]
     return False, run.error or (lines[-1] if lines else "no output")

@@ -974,10 +974,10 @@ again after changing the dependencies. It does these things in order and says ea
    `setup` again must do no harm); one that does not is made again. A `.venv` that is not
    a virtual environment is never touched.
 3. Runs `uv sync --python <KiCad's Python>` to install the dependencies of
-   `pyproject.toml` into it. The interpreter is named again so that a `.python-version`
-   file in the folder or above it cannot make uv rebuild `.venv` on another Python: pcbnew
-   cannot be imported there. Run `pcbkit setup`, not a bare `uv sync`, to change
-   dependencies.
+   `pyproject.toml` into it. The interpreter is named again because a bare `uv sync`
+   rebuilds `.venv` on the Python that a `.python-version` file in the project folder
+   (or a `UV_PYTHON` variable) names, without the system site packages, and pcbnew cannot
+   be imported there. Run `pcbkit setup`, not a bare `uv sync`, to change dependencies.
 4. Checks that `.venv/bin/python` imports `pcbnew`. That is the point of all of it.
 5. Makes sure the Freerouting 1.9.0 jar is there (below).
 6. Looks for Java 17 or newer, which the router needs. A missing Java is reported with

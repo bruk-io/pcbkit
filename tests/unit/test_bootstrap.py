@@ -386,6 +386,33 @@ def test_the_venv_probe_ignores_noise_before_its_line(world: World) -> None:
     assert (ok, detail) == (True, "10.0.6")
 
 
+def test_the_venv_is_probed_in_isolated_mode(world: World) -> None:
+    """Run the venv's Python with -I, so a stray pcbnew.py or PYTHONPATH cannot pass."""
+    world.make_venv()
+    bootstrap.venv_imports_pcbnew(world.venv / "bin" / "python")
+    probes = [
+        c for c in world.machine.calls if c[0] == str(world.venv / "bin" / "python")
+    ]
+    assert len(probes) == 1 and probes[0][1] == "-I"
+    assert probes[0][2:] == ["-c", bootstrap.PROBE]
+
+
+def test_the_venv_probe_counts_the_import_even_if_python_crashes_afterwards(
+    world: World,
+) -> None:
+    """Take the answer as proof: pcbnew can crash the interpreter as it closes."""
+    world.make_venv(VENV_OK, code=139)
+    ok, detail = bootstrap.venv_imports_pcbnew(world.venv / "bin" / "python")
+    assert (ok, detail) == (True, "10.0.6")
+
+
+def test_the_venv_probe_rejects_a_failure_that_did_not_import(world: World) -> None:
+    """Report the last line of a traceback, as the reason, when there is no answer."""
+    world.make_venv(NO_PCBNEW, code=1)
+    ok, detail = bootstrap.venv_imports_pcbnew(world.venv / "bin" / "python")
+    assert not ok and detail == "ModuleNotFoundError: No module named 'pcbnew'"
+
+
 def test_the_venv_probe_says_why_when_the_python_is_missing_or_silent(
     world: World,
 ) -> None:
@@ -528,6 +555,8 @@ def test_a_download_that_never_ends_is_cut_off(
     class Endless:
         def read(self, n: int) -> bytes:
             reads.append(n)
+            if len(reads) > 200:
+                raise AssertionError("still reading: the download has no end")
             return b"\0" * n
 
         def close(self) -> None:
