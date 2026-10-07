@@ -1,24 +1,19 @@
 """The pcbkit command line.
 
-One function per command, in workflow order. A command that is not built yet is a stub
-that fails with "not implemented yet (WPn)", naming the work package that fills it in.
-
-Command functions are called ``<command>_cmd`` and registered under an explicit name, so
-a command named ``check`` or ``report`` never shadows the module of the same name that
-the work package implementing it will import here.
+One function per command, in workflow order. Command functions are called
+``<command>_cmd`` and registered under an explicit name, so a command named ``check`` or
+``report`` never shadows the module of the same name that it imports.
 
 Tier 2 commands (build, route, promote, finalize, check, mutants, compare) need
-pcbnew. Whoever implements one must call ``pcbkit.kicad.env.require_pcbnew()`` first, so
-a missing pcbnew is a message rather than a traceback. The stubs do not, on purpose:
-they say "not implemented yet" wherever they run. ``shots`` is tier 1: it needs only
-kicad-cli and rsvg-convert.
+pcbnew. Each calls ``pcbkit.kicad.env.require_pcbnew()`` first, so a missing pcbnew is a
+message rather than a traceback. ``shots`` is tier 1: it needs only kicad-cli and
+rsvg-convert.
 """
 
 from __future__ import annotations
 
 import platform
 from pathlib import Path
-from typing import NoReturn
 
 import click
 
@@ -32,11 +27,6 @@ class _WorkflowGroup(click.Group):
 
     def list_commands(self, ctx: click.Context) -> list[str]:
         return list(self.commands)
-
-
-def _not_implemented(wp: str) -> NoReturn:
-    """Fail with the message every stub shares."""
-    raise click.ClickException(f"not implemented yet ({wp})")
 
 
 @click.group(
@@ -304,14 +294,18 @@ def report_cmd() -> None:
 
     Turns out/checks/results.json (left by `pcbkit check`) into
     out/checks/VALIDATION.md: the counts, then every check with its result and the
-    numbers it recorded. Exits 1 if the last run had a failed check or an error, or ran
-    no checks. Runs anywhere: it only reads the results file.
+    numbers it recorded. A run that -k cut short is marked as partial. Exits 1 if the
+    last run had a failed check or an error, or ran no checks. Runs anywhere: it only
+    reads the results file.
     """
     proj = load_project()
     from pcbkit import report
 
     path, data = report.write_report(proj)
     click.echo(f"{report.summary_line(data)}\nReport: {path.relative_to(proj.root)}")
+    note = report.partial_note(data)
+    if note:
+        click.echo(note)
     counts = data.get("counts", {})
     if not data["checks"]:
         click.echo(

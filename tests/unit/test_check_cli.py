@@ -290,6 +290,29 @@ def test_report_writes_the_report_and_prints_the_summary_and_its_path(
     assert "| test_x | pass |  |" in text.splitlines()
 
 
+def test_report_of_a_filtered_run_prints_that_it_is_partial(
+    root: Path, fake_pcbnew: types.ModuleType
+) -> None:
+    """Print the partial note after the path, and exit as the outcomes say."""
+    path = write_results(root, {"checks/test_a.py::test_x": "passed"})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["selection"] = {
+        "keyword": "test_x",
+        "markexpr": "",
+        "deselected": 10,
+        "complete": False,
+    }
+    path.write_text(json.dumps(data), encoding="utf-8")
+    result = invoke("report")
+    assert_exit(result, 0)
+    assert result.output.splitlines() == [
+        "1 passed in 3.5s",
+        f"Report: {REPORT}",
+        "Partial run: filtered by -k 'test_x', which left out 10 checks. Run "
+        "`pcbkit check` with no `-k` before you order boards.",
+    ]
+
+
 @pytest.mark.parametrize(
     ("outcomes", "code"),
     [

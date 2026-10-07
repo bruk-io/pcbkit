@@ -174,6 +174,77 @@ def test_render_leaves_out_the_board_line_when_the_title_is_empty() -> None:
     ]
 
 
+def selection(
+    keyword: str = "", markexpr: str = "", deselected: int = 0, complete: bool = False
+) -> dict[str, Any]:
+    """Return a ``selection`` block the way the plugin writes it."""
+    return {
+        "keyword": keyword,
+        "markexpr": markexpr,
+        "deselected": deselected,
+        "complete": complete,
+    }
+
+
+def test_render_says_under_the_counts_when_the_run_was_filtered() -> None:
+    """Quote the filter and how many checks it left out, right under the counts."""
+    text = report.render(
+        make_results(
+            {"checks/test_a.py::test_x": entry("passed")},
+            selection=selection(keyword="led", deselected=10),
+        )
+    )
+    assert text.splitlines()[4:8] == [
+        "`1 passed in 1.5s`",
+        "",
+        "> Partial run: filtered by -k 'led', which left out 10 checks. Run "
+        "`pcbkit check` with no `-k` before you order boards.",
+        "",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block", "expected"),
+    [
+        (
+            selection(markexpr="slow", deselected=3),
+            "filtered by -m 'slow', which left out 3 checks",
+        ),
+        (
+            selection(keyword="led", markexpr="slow", deselected=2),
+            "filtered by -k 'led' and -m 'slow', which left out 2 checks",
+        ),
+        (
+            selection(keyword="led", deselected=1),
+            "filtered by -k 'led', which left out 1 check.",
+        ),
+        (selection(keyword="led"), "filtered by -k 'led'."),
+        (selection(deselected=4), "filtered by a selection, which left out 4 checks"),
+    ],
+    ids=["markexpr", "both", "one-check", "nothing-left-out", "deselect-only"],
+)
+def test_partial_note_names_the_filter_and_counts_what_it_left_out(
+    block: dict[str, Any], expected: str
+) -> None:
+    """Name -k and -m when given, and say "1 check" but "2 checks"."""
+    note = report.partial_note(make_results({}, selection=block))
+    assert note is not None
+    assert note.startswith("Partial run: ")
+    assert expected in note
+
+
+@pytest.mark.parametrize(
+    "more",
+    [{"selection": selection(complete=True)}, {}, {"selection": "garbled"}],
+    ids=["complete", "no-selection", "not-a-dict"],
+)
+def test_render_of_a_complete_run_has_no_partial_note(more: dict[str, Any]) -> None:
+    """Say nothing for a whole run, or for results too old to record a selection."""
+    data = make_results({"checks/test_a.py::test_x": entry("passed")}, **more)
+    assert report.partial_note(data) is None
+    assert "Partial run" not in report.render(data)
+
+
 def test_render_ends_with_a_newline_and_leaves_the_results_alone() -> None:
     """Return text that ends in a line break, and do not edit what it was given."""
     data = make_results({"checks/test_a.py::test_x": entry("passed")})

@@ -4,6 +4,7 @@
 turns it into ``out/checks/VALIDATION.md``: the counts, then one table per group of
 built-in checks and one per file of the project's own, a row per check with its result
 and the numbers it recorded. A skipped check shows its reason, a failed one its message.
+A run that ``-k`` or ``-m`` cut short says so under the counts.
 """
 
 from __future__ import annotations
@@ -56,6 +57,27 @@ def summary_line(data: dict[str, Any]) -> str:
     return (", ".join(parts) or "no checks") + tail
 
 
+def partial_note(data: dict[str, Any]) -> str | None:
+    """Return a sentence saying the run was filtered, or None for a whole run.
+
+    The plugin's ``selection`` block has ``complete`` false after ``-k``, ``-m`` or a
+    deselect. Results from before pcbkit wrote that block count as whole, as they did.
+    """
+    selection = data.get("selection")
+    if not isinstance(selection, dict) or selection.get("complete") is not False:
+        return None
+    flags = (("-k", "keyword"), ("-m", "markexpr"))
+    filters = [
+        f"{flag} '{selection[key]}'" for flag, key in flags if selection.get(key)
+    ]
+    left = selection.get("deselected") or 0
+    counted = f", which left out {left} check{'' if left == 1 else 's'}" if left else ""
+    return (
+        f"Partial run: filtered by {' and '.join(filters) or 'a selection'}{counted}. "
+        "Run `pcbkit check` with no `-k` before you order boards."
+    )
+
+
 def _section(check_id: str, entry: dict[str, Any]) -> str:
     """Return the heading a check is listed under."""
     where = check_id.partition("::")[0]
@@ -83,6 +105,9 @@ def render(data: dict[str, Any]) -> str:
     if title:
         lines += [f"{title}, rev {rev}", ""]
     lines += [f"`{summary_line(data)}`", ""]
+    note = partial_note(data)
+    if note:
+        lines += [f"> {note}", ""]
     sections: dict[str, list[tuple[str, dict[str, Any]]]] = {}
     for check_id, entry in data["checks"].items():
         sections.setdefault(_section(check_id, entry), []).append((check_id, entry))
