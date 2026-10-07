@@ -373,9 +373,13 @@ Error: DRC is not clean: nothing was exported. Fix the board, or promote a route
 ```
 
 `finalize` rebuilds from `golden/`, which still holds the board as it was when you promoted
-it, with the old value on R1. `kicad/drc.rpt` names the part and the field. pcbkit refuses
-rather than export files that disagree with your schematic. The way out is the loop above:
-`route --eco golden`, `promote`, `finalize`.
+it, with the old value on R1. `kicad/drc.rpt` names the part and the field. The way out is
+the loop above: `route --eco golden`, `promote`, `finalize`.
+
+A refused `finalize` exports nothing, and it leaves the last good export where it was, so
+`out/fab/` still describes the old board. `pcbkit check` notices: `test_bom_matches_schematic`
+fails because the BOM still has the old part number, and so does the DRC check. Do not
+upload anything from `out/` until `finalize` has succeeded and `check` passes.
 
 ## Where next
 
