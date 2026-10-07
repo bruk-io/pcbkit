@@ -9,6 +9,7 @@ under ``checks/``.
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -276,3 +277,18 @@ def test_an_event_with_nothing_to_check_is_allowed(
     done = run_hook(event, project)
     assert done.returncode == 0, stderr(done)
     assert done.stderr == b""
+
+
+# --- the script itself ---------------------------------------------------------------
+
+
+def test_the_script_imports_only_the_standard_library() -> None:
+    """It runs under the system python3, where pcbkit is not installed."""
+    tree = ast.parse(HOOK.read_text(encoding="utf-8"), filename=str(HOOK))
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert imported <= {"__future__", "json", "os", "sys"}, imported
