@@ -155,9 +155,17 @@ def scalar(value: str, line: str) -> Any:
         if len(value) < 2 or value[-1] != value[0]:
             raise ValueError(f"unterminated quote in front matter line: {line!r}")
         return value[1:-1]
-    if value[0] == "[" and value[-1] == "]":
+    if (
+        value[0] == "["
+        and value[-1] == "]"
+        and value.count("[") == value.count("]") == 1
+    ):
         return [part.strip() for part in value[1:-1].split(",") if part.strip()]
-    if value[0] == "{" and value[-1] == "}":
+    if (
+        value[0] == "{"
+        and value[-1] == "}"
+        and value.count("{") == value.count("}") == 1
+    ):
         pairs = [part.split(":", 1) for part in value[1:-1].split(",")]
         if any(len(p) != 2 for p in pairs):
             raise ValueError(f"map not understood in front matter line: {line!r}")
@@ -250,6 +258,61 @@ def command_problems(text: str) -> list[str]:
                 if option.startswith("-") and option not in known:
                     problems.append(f"`{span}`: `pcbkit {name}` has no option {option}")
     return problems
+
+
+def test_the_front_matter_reader_reads_the_subset_these_files_use() -> None:
+    text = (
+        "---\n"
+        "description: >-\n"
+        "  First line\n"
+        "  second line.\n"
+        "disable-model-invocation: true\n"
+        'argument-hint: "[a] [b]"\n'
+        "allowed-tools: Bash(pcbkit shots *) Read\n"
+        "allowed_tools: [Read, Glob]\n"
+        "target: { source: file, path: kicad/x.kicad_pcb }\n"
+        "skills:\n"
+        "  - add-check\n"
+        "  - other\n"
+        "---\n"
+        "body\n"
+    )
+    assert parse_frontmatter(text) == {
+        "description": "First line second line.",
+        "disable-model-invocation": "true",
+        "argument-hint": "[a] [b]",
+        "allowed-tools": "Bash(pcbkit shots *) Read",
+        "allowed_tools": ["Read", "Glob"],
+        "target": {"source": "file", "path": "kicad/x.kicad_pcb"},
+        "skills": ["add-check", "other"],
+    }
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "argument-hint: [boards to make] [boards to assemble]",
+        'argument-hint: "unterminated',
+        "key: a: b",
+        "key: value # comment",
+        "key: *alias",
+        "key:",
+        "  indented: nonsense",
+        "target: { a: b, c }",
+    ],
+)
+def test_the_front_matter_reader_refuses_what_a_yaml_parser_may_read_differently(
+    line: str,
+) -> None:
+    with pytest.raises(ValueError):
+        parse_frontmatter(f"---\n{line}\n---\nbody\n")
+
+
+def test_the_front_matter_reader_refuses_a_repeated_key_and_a_missing_block() -> None:
+    with pytest.raises(ValueError, match="twice"):
+        parse_frontmatter("---\nname: a\nname: b\n---\n")
+    with pytest.raises(ValueError, match="no front matter"):
+        parse_frontmatter("# no front matter\n")
 
 
 # --- the manifest and the hook --------------------------------------------------------
