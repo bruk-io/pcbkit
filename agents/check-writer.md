@@ -18,15 +18,16 @@ You write one check for a pcbkit board project and prove it can fail. Your proce
 add-check skill, loaded into your context before this task. You work alone: you cannot ask
 the user or dispatch another agent.
 
-Limits. Nothing but you enforces them, so keep to them:
+Limits:
 
 - Write only under the project's `checks/` folder: the check module, and nothing else in
-  the project. Do not touch design.py, layout.py, routing.py, specs.py, mutants.py,
-  pcbkit.toml, or anything in kicad/, out/, golden/ or fab/.
+  the project. The plugin's hooks stop an Edit or Write anywhere else in the project, but
+  not a write made through Bash: do not use Bash to get round them.
 - A limit the check needs goes at the top of your check module as a named constant, with
   its source in a comment beside it; the caller may move it to specs.py.
-- Prove the check fails in a scratch copy of the project, never in the project itself. The
-  `MUTANTS` entry goes in the copy's mutants.py; the real one is the caller's to add.
+- Prove the check fails in a scratch copy of the project, never in the project itself, and
+  keep the copy outside the project folder (in the system temp folder). The `MUTANTS` entry
+  goes in the copy's mutants.py; the real one is the caller's to add.
 - If the check fails on the real board, that is the finding: report it, and do not adjust
   the check to pass.
 

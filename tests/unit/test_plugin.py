@@ -376,12 +376,17 @@ def test_the_hook_runs_the_guard_before_edit_and_write() -> None:
     assert list(config["hooks"]) == ["PreToolUse"]
     (group,) = config["hooks"]["PreToolUse"]
     assert group["matcher"] == "Edit|Write"
-    (handler,) = group["hooks"]
-    assert handler["type"] == "command"
-    assert handler["command"] == "python3"
-    (script,) = handler["args"]
-    assert script == "${CLAUDE_PLUGIN_ROOT}/hooks/guard_generated.py"
-    assert (ROOT / script.replace("${CLAUDE_PLUGIN_ROOT}/", "")).is_file()
+    scripts = []
+    for handler in group["hooks"]:
+        assert handler["type"] == "command"
+        assert handler["command"] == "python3"
+        (script,) = handler["args"]
+        assert (ROOT / script.replace("${CLAUDE_PLUGIN_ROOT}/", "")).is_file()
+        scripts.append(script)
+    assert scripts == [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/guard_generated.py",
+        "${CLAUDE_PLUGIN_ROOT}/hooks/confine_check_writer.py",
+    ]
 
 
 # --- skills ---------------------------------------------------------------------------

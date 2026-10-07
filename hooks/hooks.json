@@ -9,6 +9,12 @@
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/guard_generated.py"],
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/confine_check_writer.py"],
+            "timeout": 10
           }
         ]
       }
