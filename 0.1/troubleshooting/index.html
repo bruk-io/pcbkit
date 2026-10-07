@@ -1,0 +1,1601 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="PCB as Python. Generate, route, check and export KiCad boards from code.">
+      
+      
+      
+        <link rel="canonical" href="https://bruk-io.github.io/pcbkit/0.1/troubleshooting/">
+      
+      
+        <link rel="prev" href="../claude-plugin/">
+      
+      
+        <link rel="next" href="../cli/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Troubleshooting - pcbkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#troubleshooting" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pcbkit" class="md-header__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pcbkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Troubleshooting
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pcbkit" class="md-nav__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pcbkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board project interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Routing recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ordering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering boards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Claude plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reading-pcbkit-doctor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading pcbkit doctor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kicad-or-kicad-cli-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        KiCad or kicad-cli not found
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pcbnew-isnt-importable-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbnew isn't importable here
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-setup-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When setup fails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#freerouting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freerouting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Freerouting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-it-stalls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When it stalls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-route-that-will-not-finish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A route that will not finish
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drc-errors-after-you-edit-the-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DRC errors after you edit the design
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stale-fab-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stale fab outputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-check-fails-on-a-missing-spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A check fails on a missing spec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#noise-from-kicad" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Noise from KiCad
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-logs-and-reports-live" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where logs and reports live
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#asking-for-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking for help
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reading-pcbkit-doctor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading pcbkit doctor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kicad-or-kicad-cli-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        KiCad or kicad-cli not found
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pcbnew-isnt-importable-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbnew isn't importable here
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-setup-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When setup fails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#freerouting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freerouting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Freerouting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-it-stalls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When it stalls
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-route-that-will-not-finish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A route that will not finish
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drc-errors-after-you-edit-the-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DRC errors after you edit the design
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stale-fab-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stale fab outputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-check-fails-on-a-missing-spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A check fails on a missing spec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#noise-from-kicad" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Noise from KiCad
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-logs-and-reports-live" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where logs and reports live
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#asking-for-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking for help
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h1>
+<p>Start with <code>pcbkit doctor</code>: on a new machine most problems are a missing tool, and it names
+the fix. The rest of this page goes by symptom: the message you see, why it happens, and what
+to do. The examples use the blinky board, and paths in them are shortened.</p>
+<table>
+<thead>
+<tr>
+<th>You see</th>
+<th>Read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MISSING</code> in the <code>doctor</code> report</td>
+<td><a href="#reading-pcbkit-doctor">Reading pcbkit doctor</a></td>
+</tr>
+<tr>
+<td><code>kicad-cli not found</code></td>
+<td><a href="#kicad-or-kicad-cli-not-found">KiCad or kicad-cli not found</a></td>
+</tr>
+<tr>
+<td><code>pcbnew isn't importable here</code></td>
+<td><a href="#pcbnew-isnt-importable-here">pcbnew isn't importable here</a></td>
+</tr>
+<tr>
+<td><code>pcbkit setup</code> fails, or <code>pytest isn't installed</code></td>
+<td><a href="#when-setup-fails">When setup fails</a></td>
+</tr>
+<tr>
+<td><code>Freerouting jar not found</code>, <code>Java 17 or newer not found</code>, <code>stalled</code>, <code>timed out</code></td>
+<td><a href="#freerouting">Freerouting</a></td>
+</tr>
+<tr>
+<td><code>gave up after N tries</code></td>
+<td><a href="#a-route-that-will-not-finish">A route that will not finish</a></td>
+</tr>
+<tr>
+<td><code>DRC is not clean: nothing was exported</code></td>
+<td><a href="#drc-errors-after-you-edit-the-design">DRC errors after you edit the design</a></td>
+</tr>
+<tr>
+<td><code>WARNING: ... is older than ...</code>, <code>STALE</code>, <code>no fab outputs</code></td>
+<td><a href="#stale-fab-outputs">Stale fab outputs</a></td>
+</tr>
+<tr>
+<td><code>... is not defined in .../specs.py</code>, <code>missing-spec</code></td>
+<td><a href="#a-check-fails-on-a-missing-spec">A check fails on a missing spec</a></td>
+</tr>
+<tr>
+<td>Lines from KiCad that look like errors</td>
+<td><a href="#noise-from-kicad">Noise from KiCad</a></td>
+</tr>
+<tr>
+<td>Where is the report?</td>
+<td><a href="#where-logs-and-reports-live">Where logs and reports live</a></td>
+</tr>
+</tbody>
+</table>
+<p>An error inside your own <code>design.py</code>, <code>layout.py</code>, <code>routing.py</code> or another module of yours
+reaches you as an ordinary Python traceback through your file. Read the last frames first:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>  File ".../blinky/design.py", line 27, in &lt;module&gt;
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    C("C1", "100n", "VIN", "GND", B, "C0603", "CL10B104KB8NNNC", "Samsung")
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>NameError: name 'C' is not defined
+</code></pre></div>
+<p>That one is a missing <code>C</code> in the <code>from pcbkit.design import ...</code> line. Problems that pcbkit
+finds itself (a mistyped key in <code>pcbkit.toml</code>, a hook of the wrong shape in <code>routing.py</code>) are
+one-line messages that name the file and the key.</p>
+<h2 id="reading-pcbkit-doctor">Reading pcbkit doctor<a class="headerlink" href="#reading-pcbkit-doctor" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>$ .venv/bin/pcbkit doctor
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>OK       KiCad                   10.0.6  /Applications/KiCad/KiCad.app
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>OK       kicad-cli               10.0.6  /Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>OK       KiCad libraries         /Applications/KiCad/KiCad.app/Contents/SharedSupport
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>OK       KiCad Python            Python 3.9.13, pcbnew 10.0.6  /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>OK       Java                    17.0.20.1  .../bin/java
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>OK       Freerouting             1.9.0  ~/.local/share/freerouting/freerouting-1.9.0.jar
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>OK       rsvg-convert            2.60.0  /opt/homebrew/bin/rsvg-convert
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>OK       uv                      0.12.15  .../bin/uv
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>OK       ngspice (optional)      47  /opt/homebrew/bin/ngspice
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>OK       pcbnew here (optional)  importable: build, route, finalize and the other tier 2 commands run
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>All required items are present.
+</code></pre></div>
+<p>A header line above it names the pcbkit version, the operating system and the Python that is
+running pcbkit. Then one line per item: <code>OK</code> or <code>MISSING</code>, the item, what was found (version
+and path) or what is wrong, and for anything not <code>OK</code> a <code>(fix: ...)</code>. The last line counts
+what is missing. The exit status is 1 if a required item is missing and 0 otherwise, so
+<code>ngspice</code> and <code>pcbnew here</code>, which are optional, never fail it.</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>What it looks for</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KiCad (macOS only)</td>
+<td><code>KiCad.app</code> at <code>/Applications/KiCad/</code>, version 10.0 or newer.</td>
+<td><code>brew install --cask kicad</code>, or the installer from kicad.org.</td>
+</tr>
+<tr>
+<td>kicad-cli</td>
+<td>On <code>PATH</code>, inside <code>KiCad.app</code>, or <code>/usr/bin</code>; 10.0 or newer.</td>
+<td>The same.</td>
+</tr>
+<tr>
+<td>KiCad libraries</td>
+<td>KiCad's share folder with <code>footprints/</code>, <code>symbols/</code> and <code>3dmodels/</code>. <code>KICAD_SHARE</code> names another folder, and when it is set it is the only place looked at.</td>
+<td>Reinstall KiCad, or set <code>KICAD_SHARE</code>.</td>
+</tr>
+<tr>
+<td>KiCad Python</td>
+<td>An interpreter that can <code>import pcbnew</code>, 10.0 or newer. On macOS only the one inside <code>KiCad.app</code>; elsewhere <code>python3</code> on <code>PATH</code> or <code>/usr/bin/python3</code>.</td>
+<td>The same as KiCad.</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>17 or newer, from <code>JAVA_HOME</code>, <code>PATH</code>, or Homebrew's keg-only JDKs.</td>
+<td><code>brew install openjdk@21</code> (pcbkit finds that install itself); on Linux <code>sudo apt install openjdk-21-jre</code>.</td>
+</tr>
+<tr>
+<td>Freerouting</td>
+<td><code>freerouting-1.9.0.jar</code> from <code>FREEROUTING_JAR</code>, else <code>~/.local/share/pcbkit/</code>, else <code>~/.local/share/freerouting/</code>. It must be a whole zip file.</td>
+<td><code>pcbkit setup</code> downloads it; or set <code>FREEROUTING_JAR</code>.</td>
+</tr>
+<tr>
+<td>rsvg-convert</td>
+<td>On <code>PATH</code>. <code>finalize</code> draws the assembly drawing with it, and <code>shots</code> every PNG.</td>
+<td><code>brew install librsvg</code>; on Linux <code>sudo apt install librsvg2-bin</code>.</td>
+</tr>
+<tr>
+<td>uv</td>
+<td>On <code>PATH</code>.</td>
+<td><code>brew install uv</code>; elsewhere the installer from astral.sh.</td>
+</tr>
+<tr>
+<td>ngspice (optional)</td>
+<td>On <code>PATH</code>. Only the checks that run SPICE need it.</td>
+<td><code>brew install ngspice</code>.</td>
+</tr>
+<tr>
+<td>pcbnew here (optional)</td>
+<td>Whether the Python running this pcbkit can import <code>pcbnew</code>.</td>
+<td><code>pcbkit setup</code>, then use the project's <code>.venv/bin/pcbkit</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Run from outside a project's <code>.venv</code>, with <code>uv run pcbkit doctor</code> for instance, the
+<code>pcbnew here</code> line reads as below. That is normal, not a fault: "tier 2 commands" are the ones
+that need <code>pcbnew</code> (see <a href="#pcbnew-isnt-importable-here">pcbnew isn't importable here</a>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>MISSING  pcbnew here (optional)  not importable here, so tier 2 commands (build, route, ...) cannot run  (fix: run `pcbkit setup` in a board project, then run pcbkit from that project's .venv)
+</code></pre></div>
+<p>An item that a variable points at wrongly says so. With <code>FREEROUTING_JAR</code> set to a file that
+is not there, the report ends:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>MISSING  Freerouting             FREEROUTING_JAR=/nowhere/freerouting-1.9.0.jar does not exist  (fix: run `pcbkit setup` in a board project, or set FREEROUTING_JAR to the jar)
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>...
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>1 required item missing: Freerouting.
+</code></pre></div>
+<h2 id="kicad-or-kicad-cli-not-found">KiCad or kicad-cli not found<a class="headerlink" href="#kicad-or-kicad-cli-not-found" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kicad-cli not found: install KiCad 10 (brew install --cask kicad), or put its folder on PATH. `pcbkit doctor` shows what is missing.
+</code></pre></div>
+<p>pcbkit needs KiCad 10.0 or newer, and <code>pcbkit doctor</code> reports an older one with what it found,
+as <code>found 9.0.2 at &lt;path&gt;; pcbkit needs 10.0</code>. Install KiCad 10 and run <code>pcbkit doctor</code> again.</p>
+<ul>
+<li><strong>macOS.</strong> pcbkit looks for the app at <code>/Applications/KiCad/KiCad.app</code>, where the installer
+  and <code>brew install --cask kicad</code> put it, and takes <code>kicad-cli</code>, KiCad's own Python and the
+  libraries from inside it. Only <code>kicad-cli</code> is also looked for on <code>PATH</code>, and only the
+  libraries can be pointed elsewhere (<code>KICAD_SHARE</code>): there is no setting for another KiCad's
+  Python. A KiCad installed anywhere else is therefore only half found, so install it at the
+  default place.</li>
+<li><strong>Linux.</strong> pcbkit looks for <code>kicad-cli</code> on <code>PATH</code> and in <code>/usr/bin</code>, the libraries in
+  <code>/usr/share/kicad</code>, and a <code>python3</code> (on <code>PATH</code>, or <code>/usr/bin/python3</code>) that imports
+  <code>pcbnew</code>. <code>KICAD_SHARE</code> overrides the libraries.</li>
+</ul>
+<h2 id="pcbnew-isnt-importable-here">pcbnew isn't importable here<a class="headerlink" href="#pcbnew-isnt-importable-here" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Error: pcbnew isn't importable here. In the board project, run: pcbkit setup
+</code></pre></div>
+<p><code>build</code>, <code>route</code>, <code>promote</code>, <code>finalize</code>, <code>check</code>, <code>mutants</code> and <code>compare</code> drive KiCad's
+<code>pcbnew</code> module, and it can only be imported by KiCad's own Python. A pcbkit that was started
+from another Python (<code>uvx</code>, a <code>uv run</code> in the pcbkit checkout, your system Python) cannot import
+it. The other commands (<code>new</code>, <code>doctor</code>, <code>setup</code>, <code>sch</code>, <code>quote</code>, <code>report</code> and <code>shots</code>) run
+from any Python that has pcbkit.</p>
+<p>In the board project, run <code>pcbkit setup</code> once. It builds the project's <code>.venv</code> on KiCad's
+Python, so <code>pcbnew</code> imports there. Then run pcbkit from that <code>.venv</code>, either as
+<code>.venv/bin/pcbkit build</code> or after <code>source .venv/bin/activate</code>. To see which one you are
+running, <code>pcbkit doctor</code> names the Python in its first line (3.9.13 in the project's <code>.venv</code>,
+which is KiCad's) and says on its <code>pcbnew here</code> line whether <code>pcbnew</code> imports.</p>
+<h2 id="when-setup-fails">When setup fails<a class="headerlink" href="#when-setup-fails" title="Permanent link">&para;</a></h2>
+<p><code>pcbkit setup</code> says what failed and what to do, never a traceback. The messages, and what to
+do about each, are in a table in the
+<a href="../project-interface/#pcbkit-setup">project interface</a>. Two more you may meet:</p>
+<p><strong><code>uv sync failed</code> with "Repository not found".</strong> A project made by <code>pcbkit new</code> depends on
+pcbkit from its git repository (<code>pcbkit @ git+https://github.com/bruk-io/pcbkit</code> in its
+<code>pyproject.toml</code>). If uv cannot read that repository (you are not signed in to GitHub, or it
+has not been published yet), <code>setup</code> ends like this:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>error: Failed to download and build `pcbkit @ git+https://github.com/bruk-io/pcbkit`
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  cause: Git operation failed
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  ...
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>         remote: Repository not found.
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>Error: `uv sync` failed (exit 1); its message is above. A dependency that cannot be found or built is the usual cause: check the network, and the dependencies and [tool.uv.sources] in pyproject.toml, then run `pcbkit setup` again.
+</code></pre></div>
+<p>Start the project again from your own copy of pcbkit, with <code>--pcbkit-source</code> (or set
+<code>PCBKIT_SOURCE</code>). Run <code>new</code> from that copy, since the project does not exist yet:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv run --project ~/src/pcbkit pcbkit new my-board --pcbkit-source ~/src/pcbkit
+</code></pre></div>
+<p>Or, in an existing project, replace the dependency with the bare name <code>pcbkit</code> and add the
+source as the project interface describes under
+<a href="../project-interface/#the-projects-pyprojecttoml">the project's pyproject.toml</a>, then run
+<code>pcbkit setup</code> again.</p>
+<p><strong><code>pytest isn't installed in this environment</code>.</strong> <code>pcbkit check</code> runs your checks with
+pytest, and the project's <code>.venv</code> has none:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pytest isn't installed in this environment: the checks run on it. Add it to the project's dependencies (uv add pytest) and run again.
+</code></pre></div>
+<p>Put <code>pytest&gt;=8</code> in <code>dependencies</code> in the project's <code>pyproject.toml</code> and run <code>pcbkit setup</code>.
+That is the way to change dependencies: <code>setup</code> keeps <code>.venv</code> on KiCad's Python, and a bare
+<code>uv sync</code> can rebuild it on another one (see the table linked above).</p>
+<h2 id="freerouting">Freerouting<a class="headerlink" href="#freerouting" title="Permanent link">&para;</a></h2>
+<p>The router is the Freerouting 1.9.0 jar, run with Java 17 or newer.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>Freerouting jar not found: run `pcbkit setup`, or set FREEROUTING_JAR=/path/to/freerouting-1.9.0.jar
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>Java 17 or newer not found: install it (brew install openjdk@21); `pcbkit doctor` shows what is missing
+</code></pre></div>
+<p><code>pcbkit setup</code> downloads the jar to <code>~/.local/share/pcbkit/</code> if it finds none, and checks its
+size and that it is a zip file. A jar that is not whole is reported like this, and the fix is
+what it says:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>~/.local/share/pcbkit/freerouting-1.9.0.jar is not a complete jar (a truncated download?): delete it and run `pcbkit setup`
+</code></pre></div>
+<p>The search order, and what to do if the download fails, are in the project interface under
+<a href="../project-interface/#the-freerouting-jar">the Freerouting jar</a>.</p>
+<p>On macOS, Freerouting's window opens while it routes. Leave it alone: pcbkit starts it, watches
+it and ends it.</p>
+<h3 id="when-it-stalls">When it stalls<a class="headerlink" href="#when-it-stalls" title="Permanent link">&para;</a></h3>
+<p>Freerouting sometimes hangs after it loads a board, before it routes anything. It prints
+<code>Starting auto-routing</code> when it begins, so pcbkit waits for that line, and kills the run, and
+everything it started, if it has not come within <code>stall_timeout_s</code> of <code>[route]</code> (90 seconds by
+default). The run counts as a failed try. This is the output with <code>stall_timeout_s = 1</code>, set
+to show it (see the third point):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>$ .venv/bin/pcbkit route --tries 1
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>try 1/1: running Freerouting
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>try 1/1: stalled: no "Starting auto-routing" in 1 s: Freerouting stalled while loading the board
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>gave up after 1 tries: none of them made a routed board
+</code></pre></div>
+<p>When the router's log has a <code>normalization of net ... failed</code> line, which is how the hang
+usually shows itself, the message ends with it: <code>(its log says "...")</code>. What to do:</p>
+<ol>
+<li><strong>Run it again.</strong> The hang does not always come back. <code>route</code> already makes <code>[route] tries</code>
+   tries (three by default) and goes on to the next after a stall.</li>
+<li><strong>Read <code>kicad/freerouting.log</code>.</strong> If it stops after <code>Opening '&lt;stem&gt;.dsn'...</code>, with or
+   without <code>normalization of net ... failed</code>, the router hung. On an <code>--eco</code> route a plain
+   <code>pcbkit route</code> is the way out, and pcbkit already falls back to one (below). If a plain
+   route hangs every time, send the log to whoever maintains pcbkit. If the log shows no
+   failure at all, the machine may only have been slow to load it: raise <code>stall_timeout_s</code>.</li>
+<li><strong>Do not set <code>stall_timeout_s</code> low.</strong> The line comes about 20 seconds after launch even on
+   a small board (23 seconds for blinky on the Mac this was written on), so a value under about
+   30 seconds kills every run.</li>
+</ol>
+<p>With <code>route --eco</code>, the first stall is not a failed try: <code>route</code> says so and routes the whole
+board instead of keeping the old route, without using up a try.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>the eco run stalled: no "Starting auto-routing" in 90 s: Freerouting stalled while loading the board
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>routing the whole board instead of keeping the old route
+</code></pre></div>
+<p>Two more ways a try can fail without making a board, each a <code>try</code> line of its own:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>try 1/3: timed out: still running after 900 s
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>try 1/3: no result: Freerouting exited with code 1 without writing blinky.ses; the end of its log:
+</code></pre></div>
+<p>The first is a run still going after 900 seconds (15 minutes; that is not a setting). The
+second is followed by the last lines of <code>kicad/freerouting.log</code>: read them. A line
+<code>New version available: v2.5.0</code> in that log is Freerouting advertising itself and means
+nothing.</p>
+<h2 id="a-route-that-will-not-finish">A route that will not finish<a class="headerlink" href="#a-route-that-will-not-finish" title="Permanent link">&para;</a></h2>
+<p>When no try comes out clean, <code>route</code> says so, leaves the best board in <code>kicad/</code> and exits 1.
+This one had a keep-out strip across the board, put there on purpose, so the connector could
+not reach the rest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>$ .venv/bin/pcbkit route --tries 2
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>try 1/2: running Freerouting
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>ses import True
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>zones filled, stitching vias: 30, dropped one-sided vias: 0
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>try 1/2: 2 copper problems (unconnected_items 2), 31 s
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>try 2/2: running Freerouting
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>ses import True
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>zones filled, stitching vias: 30, dropped one-sided vias: 0
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>try 2/2: 2 copper problems (unconnected_items 2), 31 s
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>gave up after 2 tries: the best was try 1: 2 copper problems (unconnected_items 2)
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>the best board is ~/blinky/kicad/blinky.kicad_pcb
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>silk       kicad/blinky.kicad_pcb: 4 text(s) added
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>DRC: 0 violations, 2 unconnected pads, 0 footprint errors
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>     2 unconnected_items
+</code></pre></div>
+<p>Each <code>try</code> line is one Freerouting run, finished and checked. A try is clean when none of
+<code>unconnected_items</code>, <code>clearance</code>, <code>shorting_items</code>, <code>tracks_crossing</code>, <code>hole_clearance</code> and
+<code>copper_edge_clearance</code> has an entry. Any other DRC category is not part of that test: <code>route</code>
+can call a try clean and the <code>DRC:</code> line at the end still list something. <code>promote</code> accepts
+only 0 violations, 0 unconnected pads and 0 footprint errors:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>$ .venv/bin/pcbkit promote
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>Error: not promoting: blinky.kicad_pcb fails DRC
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>DRC: 0 violations, 2 unconnected pads, 0 footprint errors
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>     2 unconnected_items
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>golden/ holds only a route that passed with 0 violations, 0 unconnected pads and 0 footprint errors
+</code></pre></div>
+<p>The positions are in <code>kicad/drc.rpt</code>, in KiCad's file coordinates, which are your layout
+coordinates plus 50 mm in both x and y:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>[unconnected_items]: Missing connection between items
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    Local override; error
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    @(56.0000 mm, 61.2500 mm): PTH pad 1 [/VIN] of J1
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>    @(65.1750 mm, 61.2500 mm): Pad 1 [/VIN] of R1 on F.Cu
+</code></pre></div>
+<p>(56, 61.25) is (6, 11.25) in <code>layout.py</code>: J1. Read the category, then:</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Usually means</th>
+<th>First move</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>unconnected_items</code></td>
+<td>The router could not finish a net, or a pre-route or keep-out walls it in.</td>
+<td>Look at what stands between the two pads in <code>layout.py</code> and <code>routing.py</code>: a keep-out, a pre-route, a part. Give the net room.</td>
+</tr>
+<tr>
+<td><code>clearance</code>, <code>shorting_items</code>, <code>tracks_crossing</code>, <code>hole_clearance</code></td>
+<td>A hand pre-route or keep-out in <code>routing.py</code> crowds something, or two parts sit too close.</td>
+<td>Change <code>routing.py</code> or <code>layout.py</code>. The router follows the rules; your hooks do not.</td>
+</tr>
+<tr>
+<td><code>copper_edge_clearance</code></td>
+<td>Something is too near the board edge.</td>
+<td>Move the part, or make the board bigger.</td>
+</tr>
+</tbody>
+</table>
+<p>More tries rarely help. Freerouting does not always give the same board for the same input
+(on one Mac it once left a net unrouted and finished it on the next run), which is why <code>route</code>
+tries again, but when every try ends with the same problem, the board is the problem. Change
+the placement, or the hand routes and keep-outs in <code>routing.py</code>. Recipes for those are in
+<a href="../routing-recipes/">routing recipes</a>.</p>
+<p><strong>Eco or full.</strong> <code>pcbkit route --eco golden</code> keeps the route in <code>golden/</code> and only routes
+what you changed: its copper is copied onto the new board and locked, except copper that
+clashes with a change (dropped) and copper on the changed parts' nets or within
+<code>[route] eco_unlock_reach_mm</code> of them (left free for Freerouting to rework). Use it for a
+local change: a part nudged, a value changed, one net added. If an eco route will not come
+clean, the frozen copper around the change may be boxing it in: raise <code>eco_unlock_reach_mm</code>,
+or run a plain <code>pcbkit route</code>. A full route makes a new layout, so look at it again before
+you promote it (<code>pcbkit shots</code>, and <code>pcbkit compare</code> to see what moved; both are in the
+<a href="../project-interface/#comparing-boards-and-taking-shots">project interface</a>).</p>
+<p>If a keep-out of yours bans vias but not the pour, ground-stitching vias are still put inside
+it, and DRC reports <code>items_not_allowed</code>. Ban the pour as well (it is the default of
+<code>api.keepout</code>) for a region that must stay empty.</p>
+<h2 id="drc-errors-after-you-edit-the-design">DRC errors after you edit the design<a class="headerlink" href="#drc-errors-after-you-edit-the-design" title="Permanent link">&para;</a></h2>
+<p>DRC with schematic parity compares the board with the schematic. <code>pcbkit build</code> draws the
+schematic again from <code>design.py</code>, but <code>pcbkit finalize</code> rebuilds the board from <code>golden/</code>, the
+route of the last board you promoted. After you change <code>design.py</code> or <code>layout.py</code> the two
+disagree until you route and promote again. Here a capacitor was added to <code>design.py</code>, and
+<code>finalize</code> was run straight after <code>build</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>$ .venv/bin/pcbkit finalize
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>ses import True
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>zones filled, stitching vias: 26, dropped one-sided vias: 0
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>silk       kicad/blinky.kicad_pcb: 4 text(s) added
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>DRC: 0 violations, 0 unconnected pads, 1 footprint errors
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>     1 missing_footprint
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>Error: DRC is not clean: nothing was exported. Fix the board, or promote a route that passes.
+</code></pre></div>
+<p><code>kicad/drc.rpt</code> names it: <code>[missing_footprint]: Missing footprint C1 (100n)</code>. A part whose
+value you changed shows as <code>footprint_symbol_mismatch</code> instead. Bring <code>golden/</code> up to date:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>.venv/bin/pcbkit build
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>.venv/bin/pcbkit route --eco golden     # a plain `route` after a big change
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>.venv/bin/pcbkit promote
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>.venv/bin/pcbkit finalize
+</code></pre></div>
+<p>Look at <code>DRC: 0 violations, 0 unconnected pads, 0 footprint errors</code> before you promote.</p>
+<p><strong><code>pcbkit check</code> right after <code>build</code>.</strong> <code>build</code> makes the placed board with no copper and none
+of the fields pcbkit copies onto each footprint (<code>MPN</code>, <code>Manufacturer</code>, <code>Description</code>) when it
+finishes a board. The <code>kicad</code> check group then reports the unrouted connections as unconnected
+pads, and <code>Missing symbol field 'MPN' in footprint</code> for each part. Do not add the fields by
+hand: <code>route</code> and <code>finalize</code> write them. Run <code>check</code> on a finalized board.</p>
+<p>A footprint error that is still there after you routed, promoted and finalized from an
+up-to-date <code>golden/</code> means the board and the schematic disagree about a part. The board is
+built from the netlist, so fix the part in <code>design.py</code> and run <code>build</code> again.</p>
+<h2 id="stale-fab-outputs">Stale fab outputs<a class="headerlink" href="#stale-fab-outputs" title="Permanent link">&para;</a></h2>
+<p><code>finalize</code> rewrites <code>out/fab/</code> and <code>out/docs/</code> from the board as it is then. Anything you do
+afterwards leaves those files describing an earlier board, and a <code>finalize</code> that stops at
+<code>DRC is not clean: nothing was exported</code> leaves the earlier files exactly as they were. Three
+things tell you.</p>
+<p><strong><code>pcbkit quote</code></strong> warns, and still prints the numbers, so read to the end:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>WARNING: Blinky_revA_gerbers.zip is older than blinky.kicad_pcb: run `pcbkit finalize` before you rely on these numbers
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>WARNING: the Gerbers say 0.035, 0.035 mm copper but [stackup] copper_mm is 0.07: the files are from another board; run `pcbkit finalize`
+</code></pre></div>
+<p><strong>The <code>outputs</code> checks</strong> compare the files with the board and the schematic. After a board
+was rebuilt without a finalize, one of them fails like this:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>AssertionError: PTH drill file {0.3: 26, 1.0: 2} vs board {1.0: 2}
+</code></pre></div>
+<p>With no export at all, each of them errors with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>Failed: no fab outputs under ~/blinky: run `pcbkit finalize`
+</code></pre></div>
+<p><strong>The order gate</strong> of the Claude plugin, which you can also run yourself
+(<a href="../ordering/#before-you-order">ordering</a>), prints one line per problem:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>STALE: out/fab/Blinky_revA_gerbers.zip is older than design.py: run pcbkit build, route, promote and finalize
+</code></pre></div>
+<p>The cure is the same each time: <code>build</code>, <code>route</code> (or <code>route --eco golden</code>), <code>promote</code>,
+<code>finalize</code>, as far back as your change reaches, then <code>pcbkit check</code>. Do not copy files into
+<code>out/fab/</code> by hand, and do not order from files that <code>quote</code> or the order gate warns about.</p>
+<h2 id="a-check-fails-on-a-missing-spec">A check fails on a missing spec<a class="headerlink" href="#a-check-fails-on-a-missing-spec" title="Permanent link">&para;</a></h2>
+<p>A built-in check reads its numbers from your <code>specs.py</code> (and <code>circuits.py</code>). If a group is
+switched on in <code>[checks] groups</code> and a number it needs is not there, the check fails and
+names the name and the file. It does not skip, so a gap cannot pass for a green run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>specs.PINOUT is not defined in .../blinky/specs.py: add it (docs/project-interface.md says what each check group reads)
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>circuits.scenario is needed, but .../blinky/circuits.py does not exist: create it (docs/project-interface.md says what each check group reads)
+</code></pre></div>
+<p>A check that runs once per row of a table cannot run at all without the table, so it fails once
+and is called <code>missing-spec</code> in its name, as in
+<code>test_circuit::test_symbol_pin_functions_match_datasheet[missing-spec]</code>. Add the name, in the
+type the <a href="../project-interface/#built-in-groups-and-what-they-read">project interface</a> gives
+for it, or switch the group off in <code>pcbkit.toml</code> if the board has nothing for it to judge.</p>
+<p>Some cases that look alike are not errors, or are another error:</p>
+<ul>
+<li>A table that <strong>exists but is empty</strong> (<code>I2C_BUSES = {}</code> on a board with no bus) is not an
+  error: its checks are skipped, and pytest says <code>got empty parameter set for (bus)</code>. A skip
+  has its reason in <code>out/checks/results.json</code>.</li>
+<li>A name documented as optional may be left out.</li>
+<li>The <code>outputs</code> group needs the fab files, and errors until there are some, with "no fab
+  outputs under ...: run <code>pcbkit finalize</code>" (see <a href="#stale-fab-outputs">Stale fab outputs</a>).</li>
+</ul>
+<p>Never loosen a check to make a gap go away: fill in the number, with its source beside it.
+<a href="../writing-checks/">Writing checks</a> says how.</p>
+<h2 id="noise-from-kicad">Noise from KiCad<a class="headerlink" href="#noise-from-kicad" title="Permanent link">&para;</a></h2>
+<p>On macOS, KiCad's <code>pcbnew</code> module writes lines that look like errors and are not. Without
+pcbkit's filter you would see, once for the first board a process loads and then twelve for
+every board after it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>./src/common/stdpbase.cpp(59): assert ""traits"" failed in Get(): create wxApp before calling this
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>08:22:43 AM: Debug: Adding duplicate image handler for 'PNG file'
+</code></pre></div>
+<p>pcbkit hides exactly those two patterns, only while it loads or makes a board, and shows every
+other line. A KiCad or wxWidgets that words them differently makes them show again, by design:
+pcbkit would rather show noise than hide a real error. If you see a line like that:</p>
+<ul>
+<li>Judge by the result, not the line. A command that exits 0 and prints its usual summary (the
+  <code>DRC:</code> line, <code>ses import True</code>, <code>placed 3, missing: []</code>) worked.</li>
+<li>To get it hidden, tell whoever maintains pcbkit the line and the KiCad version from
+  <code>pcbkit doctor</code>. The fix is one more pattern in <code>NOISE_PATTERNS</code> in <code>pcbkit/kicad/quiet.py</code>.</li>
+<li>A script of your own gets the raw noise, unless it gets <code>pcbnew</code> from
+  <code>pcbkit.kicad.env.import_pcbnew()</code>.</li>
+</ul>
+<p><code>pcbkit check</code> also ends with a pytest warning that the SWIG-based Python interface to the PCB
+editor is deprecated. That is KiCad announcing a future change to the interface pcbkit uses.
+It does nothing today.</p>
+<h2 id="where-logs-and-reports-live">Where logs and reports live<a class="headerlink" href="#where-logs-and-reports-live" title="Permanent link">&para;</a></h2>
+<p>Everything is in the project folder, and everything in <code>kicad/</code> and <code>out/</code> is regenerated.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+<th>Written by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kicad/erc.rpt</code></td>
+<td>The ERC report of the schematic.</td>
+<td><code>sch</code>, <code>build</code></td>
+</tr>
+<tr>
+<td><code>kicad/drc.rpt</code></td>
+<td>The latest DRC report, with positions in KiCad file coordinates.</td>
+<td><code>route</code>, <code>promote</code>, <code>finalize</code></td>
+</tr>
+<tr>
+<td><code>kicad/freerouting.log</code></td>
+<td>The router's console output from its latest run.</td>
+<td><code>route</code></td>
+</tr>
+<tr>
+<td><code>kicad/&lt;stem&gt;.kicad_pcb</code></td>
+<td>The finished board. Open it in KiCad to look; do not save it.</td>
+<td><code>route</code>, <code>finalize</code></td>
+</tr>
+<tr>
+<td><code>out/checks/results.json</code></td>
+<td>Every check: outcome, skip reason or failure message, and the numbers it recorded.</td>
+<td><code>check</code></td>
+</tr>
+<tr>
+<td><code>out/checks/VALIDATION.md</code></td>
+<td>That, as a report.</td>
+<td><code>report</code></td>
+</tr>
+<tr>
+<td><code>out/fab/</code>, <code>out/docs/</code></td>
+<td>What you send, and what you read.</td>
+<td><code>finalize</code></td>
+</tr>
+<tr>
+<td><code>out/shots/</code></td>
+<td>Crops and renders of regions of the board.</td>
+<td><code>shots</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>kicad</code> checks write their reports to a temporary folder and put the whole text in the
+failure message, so for a failing <code>test_erc_clean</code> or <code>test_drc_clean_with_schematic_parity</code>,
+read <code>message</code> in <code>results.json</code> or pytest's own output; <code>kicad/drc.rpt</code> is from the last
+<code>route</code>, <code>promote</code> or <code>finalize</code> and may not be the same board.</p>
+<h2 id="asking-for-help">Asking for help<a class="headerlink" href="#asking-for-help" title="Permanent link">&para;</a></h2>
+<p>Send the whole output of the command that failed (not only its last line), the output of
+<code>pcbkit doctor</code>, and whichever of <code>kicad/freerouting.log</code>, <code>kicad/drc.rpt</code> and
+<code>out/checks/results.json</code> applies. For a routing problem, say whether the same board routed
+before your last change, and what that change was.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../claude-plugin/" class="md-footer__link md-footer__link--prev" aria-label="Previous: The Claude plugin">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                The Claude plugin
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../cli/" class="md-footer__link md-footer__link--next" aria-label="Next: CLI reference">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                CLI reference
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      pcbkit is licensed under AGPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.top", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

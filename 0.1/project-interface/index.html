@@ -1,0 +1,3586 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="PCB as Python. Generate, route, check and export KiCad boards from code.">
+      
+      
+      
+        <link rel="canonical" href="https://bruk-io.github.io/pcbkit/0.1/project-interface/">
+      
+      
+        <link rel="prev" href="../concepts/">
+      
+      
+        <link rel="next" href="../routing-recipes/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Board project interface - pcbkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#the-board-project-interface" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pcbkit" class="md-header__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pcbkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Board project interface
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pcbkit" class="md-nav__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pcbkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board project interface
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board project interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#importing-your-own-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing your own modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pcbkittoml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit.toml
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#designpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        design.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="design.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The calls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#names-designpy-can-define" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Names design.py can define
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#footprintspy-and-footprints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        footprints.py and footprints/
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routingpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        routing.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="routing.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-engine-assumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the engine assumes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-commands-that-run-these-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The commands that run these hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-api-argument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The api argument
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-minimal-routingpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A minimal routing.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layoutpy-and-silkpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        layout.py and silk.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="layout.py and silk.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layoutpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        layout.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#silkpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        silk.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="silk.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-api-argument-of-extra" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The api argument of extra
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#once-per-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Once per board
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fab-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fab outputs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fab outputs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is written
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-the-bom-lists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the BOM lists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bompy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bom.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-quote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit quote
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks-specspy-circuitspy-checks-and-mutantspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checks: specs.py, circuits.py, checks/ and mutants.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Checks: specs.py, circuits.py, checks/ and mutants.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-a-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-groups-and-what-they-read" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in groups and what they read
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#circuitspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        circuits.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mutantspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mutants.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparing-boards-and-taking-shots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparing boards and taking shots
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Comparing boards and taking shots">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-compare" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit compare
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-shots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit shots
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit shots">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shots-in-layoutpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SHOTS in layout.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-a-board-pcbkit-new-and-pcbkit-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting a board: pcbkit new and pcbkit setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting a board: pcbkit new and pcbkit setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit new
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit new">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-projects-pyprojecttoml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The project's pyproject.toml
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-freerouting-jar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Freerouting jar
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-blinky-example-and-the-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The blinky example and the template
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Routing recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ordering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering boards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Claude plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#importing-your-own-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing your own modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pcbkittoml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit.toml
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#designpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        design.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="design.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The calls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#names-designpy-can-define" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Names design.py can define
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#footprintspy-and-footprints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        footprints.py and footprints/
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routingpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        routing.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="routing.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-engine-assumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the engine assumes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-commands-that-run-these-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The commands that run these hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-api-argument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The api argument
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-minimal-routingpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A minimal routing.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layoutpy-and-silkpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        layout.py and silk.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="layout.py and silk.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layoutpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        layout.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#silkpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        silk.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="silk.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-api-argument-of-extra" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The api argument of extra
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#once-per-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Once per board
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fab-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fab outputs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fab outputs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is written
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-the-bom-lists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the BOM lists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bompy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bom.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-quote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit quote
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks-specspy-circuitspy-checks-and-mutantspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checks: specs.py, circuits.py, checks/ and mutants.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Checks: specs.py, circuits.py, checks/ and mutants.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-a-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-groups-and-what-they-read" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in groups and what they read
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#circuitspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        circuits.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mutantspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mutants.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparing-boards-and-taking-shots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparing boards and taking shots
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Comparing boards and taking shots">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-compare" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit compare
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-shots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit shots
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit shots">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shots-in-layoutpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SHOTS in layout.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-a-board-pcbkit-new-and-pcbkit-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting a board: pcbkit new and pcbkit setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting a board: pcbkit new and pcbkit setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit new
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit new">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-projects-pyprojecttoml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The project's pyproject.toml
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pcbkit-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-freerouting-jar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Freerouting jar
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-blinky-example-and-the-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The blinky example and the template
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="the-board-project-interface">The board project interface<a class="headerlink" href="#the-board-project-interface" title="Permanent link">&para;</a></h1>
+<p>What you own when you build a board with pcbkit: the folder layout, <code>pcbkit.toml</code>, and
+the hooks in <code>routing.py</code>.</p>
+<p>Status: pre-release. The <code>pcbkit.toml</code> schema and the <code>routing.py</code> hooks are settled
+here; the contracts of the other modules are added as the commands that read them are
+implemented.</p>
+<h2 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>my-board/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  pcbkit.toml          board names, stackup, router and stitching settings, fab profile, checks
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  pyproject.toml       depends on pcbkit; `pcbkit new` writes it
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  design.py            the circuit: parts and nets, written with pcbkit.design
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  layout.py            W, H, P = {ref: (x, y, rot)}; optional CORNER_R, HOLES, outline(), SHOTS
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  routing.py           hooks for routing (below)
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>  silk.py              optional: labels and silkscreen choices (LABELS, CONN_LABELS, HIDE_REF,
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                       KEEP_REF, extra(), title block)
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>  bom.py               optional: how parts are bought and shown in the BOM (MPN_OVERRIDE, ...)
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>  footprints.py        optional: custom symbols and footprints; footprints/ holds .kicad_mod files
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>  specs.py             datasheet numbers and design limits the checks read
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>  circuits.py          optional: SPICE deck builders
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>  checks/test_*.py     your own checks (pytest), written against the pcbkit.check APIs
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>  mutants.py           MUTANTS: planted mistakes the checks must catch
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>  kicad/ out/ golden/ fab/    generated by pcbkit: never edit by hand
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>  archive/             yours: earlier revisions
+</code></pre></div>
+<ul>
+<li>A command finds the project from the current directory: the nearest folder at or above
+  it that holds a <code>pcbkit.toml</code>.</li>
+<li><code>kicad/</code>, <code>out/</code>, <code>golden/</code> and <code>fab/</code> are regenerated by pcbkit. An edit made there,
+  including one made in the KiCad GUI, is lost on the next build. Change the Python
+  instead. Opening the files in KiCad to look at them is fine.</li>
+<li><code>golden/</code> holds the route that passed DRC (<code>pcbkit promote</code> writes it, <code>pcbkit finalize</code>
+  rebuilds from it).</li>
+<li>Coordinates in <code>layout.py</code> and in the routing hooks are millimetres from the board's
+  top-left corner, with y pointing down. pcbkit adds a fixed (50, 50) mm offset to place
+  the board on KiCad's page; the helpers below apply it, so your code never sees it.</li>
+</ul>
+<h3 id="importing-your-own-modules">Importing your own modules<a class="headerlink" href="#importing-your-own-modules" title="Permanent link">&para;</a></h3>
+<p>pcbkit imports your modules by file path (<code>pcbkit.project.import_project_module</code>). While
+it does, it puts the project folder on <code>sys.path</code>, so <code>routing.py</code> can simply
+<code>import layout</code>. Every importer shares one copy of each module. Name your modules so they
+do not shadow an installed package (a <code>design.py</code> is fine, a <code>string.py</code> is not). An error
+inside your own module reaches you as an ordinary traceback through your file.</p>
+<h2 id="pcbkittoml">pcbkit.toml<a class="headerlink" href="#pcbkittoml" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[board]</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">stem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_board"</span><span class="w">            </span><span class="c1"># KiCad file stem: kicad/my_board.kicad_pcb</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"My Board"</span><span class="w">           </span><span class="c1"># shown in the title block</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">rev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"A"</span><span class="w">                    </span><span class="c1"># shown in the title block</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">fab_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"My_Board_revA"</span><span class="w">   </span><span class="c1"># prefix of the files written for the fab house</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="k">[stackup]</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">layers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">thickness_mm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.6</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">copper_mm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.035</span><span class="w">            </span><span class="c1"># 1 oz; 2 oz is 0.070</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">[route]</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">freerouting_passes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">40</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">tries</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">stall_timeout_s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">90</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">eco_unlock_reach_mm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">8.0</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="k">[stitch]</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="n">pitch_mm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">5.0</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">dense</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="mf">10.0</span><span class="p">,</span><span class="w"> </span><span class="mf">10.0</span><span class="p">,</span><span class="w"> </span><span class="mf">30.0</span><span class="p">,</span><span class="w"> </span><span class="mf">20.0</span><span class="p">,</span><span class="w"> </span><span class="mf">2.0</span><span class="p">]]</span><span class="w">   </span><span class="c1"># x0, y0, x1, y1, pitch</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="n">gap_limit_mm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">3.4</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="k">[fab]</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="n">profile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"pcbway"</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="k">[checks]</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="n">groups</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"kicad"</span><span class="p">,</span><span class="w"> </span><span class="s2">"outputs"</span><span class="p">,</span><span class="w"> </span><span class="s2">"fab"</span><span class="p">]</span>
+</code></pre></div>
+<p>Only <code>[board]</code> is required, and every key in it is. Leave out any other table or key and
+it takes the default below.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>board.stem</code></td>
+<td>string</td>
+<td>required</td>
+<td>KiCad file stem. Letters, digits, <code>_</code>, <code>-</code> and <code>.</code>, no spaces, not starting with <code>.</code> or <code>-</code>.</td>
+</tr>
+<tr>
+<td><code>board.title</code></td>
+<td>string</td>
+<td>required</td>
+<td>Title block text.</td>
+</tr>
+<tr>
+<td><code>board.rev</code></td>
+<td>string</td>
+<td>required</td>
+<td>Revision, such as <code>"A"</code>. Quote it: <code>rev = 2</code> is an integer and is rejected.</td>
+</tr>
+<tr>
+<td><code>board.fab_name</code></td>
+<td>string</td>
+<td>required</td>
+<td>Base name of the files written for the fab house, such as <code>My_Board_revA_gerbers.zip</code>. Same character rules as <code>stem</code>.</td>
+</tr>
+<tr>
+<td><code>stackup.layers</code></td>
+<td>integer</td>
+<td><code>2</code></td>
+<td>Copper layers. Only <code>2</code> is accepted: pcbkit builds two-layer boards.</td>
+</tr>
+<tr>
+<td><code>stackup.thickness_mm</code></td>
+<td>number</td>
+<td><code>1.6</code></td>
+<td>Finished board thickness.</td>
+</tr>
+<tr>
+<td><code>stackup.copper_mm</code></td>
+<td>number</td>
+<td><code>0.035</code></td>
+<td>Outer copper thickness, written into the saved board's stackup. 1 oz is <code>0.035</code>, 2 oz is <code>0.070</code>.</td>
+</tr>
+<tr>
+<td><code>route.freerouting_passes</code></td>
+<td>integer</td>
+<td><code>40</code></td>
+<td>Maximum passes in one Freerouting run (its <code>-mp</code> option).</td>
+</tr>
+<tr>
+<td><code>route.tries</code></td>
+<td>integer</td>
+<td><code>3</code></td>
+<td>Freerouting runs <code>pcbkit route</code> makes before giving up when the result is not DRC-clean.</td>
+</tr>
+<tr>
+<td><code>route.stall_timeout_s</code></td>
+<td>integer</td>
+<td><code>90</code></td>
+<td>Seconds to wait for Freerouting to start routing before it is killed. It can hang while loading a board.</td>
+</tr>
+<tr>
+<td><code>route.eco_unlock_reach_mm</code></td>
+<td>number</td>
+<td><code>8.0</code></td>
+<td>With <code>pcbkit route --eco</code>, copper this close to a changed pad, and copper on the changed parts' nets, stays unlocked so Freerouting may rework it.</td>
+</tr>
+<tr>
+<td><code>stitch.pitch_mm</code></td>
+<td>number</td>
+<td><code>5.0</code></td>
+<td>Grid pitch of ground-stitching vias wherever both ground pours have solid copper.</td>
+</tr>
+<tr>
+<td><code>stitch.dense</code></td>
+<td>list of boxes</td>
+<td><code>[]</code></td>
+<td>Boxes, each <code>[x0, y0, x1, y1, pitch]</code> in layout millimetres with <code>x0 &lt; x1</code> and <code>y0 &lt; y1</code>, where the stitching grid uses <code>pitch</code> instead. Use it under a switching regulator, for example.</td>
+</tr>
+<tr>
+<td><code>stitch.gap_limit_mm</code></td>
+<td>number</td>
+<td><code>3.4</code></td>
+<td>Largest distance from any point with ground on both layers to the nearest ground via or plated ground pad. pcbkit adds vias until nothing is further away. Choose it a little under the limit you care about (a twentieth of a wavelength at your highest frequency, say).</td>
+</tr>
+<tr>
+<td><code>fab.profile</code></td>
+<td>string</td>
+<td><code>"pcbway"</code></td>
+<td>Whose limits and order forms to use. <code>"pcbway"</code> is the only profile so far.</td>
+</tr>
+<tr>
+<td><code>checks.groups</code></td>
+<td>list of strings</td>
+<td><code>["kicad", "outputs"]</code></td>
+<td>Built-in check groups to run: <code>kicad</code>, <code>outputs</code>, <code>fab</code>, <code>copper</code>, <code>circuit</code>, <code>esp32s3</code>. The default groups need nothing from <code>specs.py</code>; add the others as you write the numbers they read.</td>
+</tr>
+</tbody>
+</table>
+<p>How the file is read:</p>
+<ul>
+<li>A number accepts a TOML integer or float (<code>thickness_mm = 2</code> is fine) but never a
+  boolean, and never <code>inf</code> or <code>nan</code>. Whole-number keys reject <code>2.0</code> and <code>"2"</code>.</li>
+<li>An unknown table or key is an error, with a "did you mean" when one is close. A typo
+  never silently takes the default.</li>
+<li>Every problem in the file is reported together, naming the file, the table and the key.</li>
+</ul>
+<h2 id="designpy">design.py<a class="headerlink" href="#designpy" title="Permanent link">&para;</a></h2>
+<p>The circuit: every part, and the net on each of its pins. You write it with a few calls
+from <code>pcbkit.design</code>. pcbkit draws the schematic from it (<code>pcbkit sch</code>), and the board is
+built from the netlist KiCad exports from that schematic, so schematic and board cannot
+drift apart.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">FP</span><span class="p">,</span> <span class="n">LED</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">part</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">BLOCK_ORDER</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Supply"</span><span class="p">,</span> <span class="s2">"Indicator"</span><span class="p">]</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">NOTES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"My board: 3V3 in, one LED."</span><span class="p">,</span> <span class="s2">"The LED draws about 5 mA."</span><span class="p">]</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">B</span> <span class="o">=</span> <span class="s2">"Supply"</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">part</span><span class="p">(</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="s2">"J1"</span><span class="p">,</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="s2">"Connector_Generic:Conn_01x02"</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="s2">"3V3 in"</span><span class="p">,</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">FP</span><span class="p">[</span><span class="s2">"HDR2"</span><span class="p">],</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="p">{</span><span class="s2">"1"</span><span class="p">:</span> <span class="s2">"+3V3"</span><span class="p">,</span> <span class="s2">"2"</span><span class="p">:</span> <span class="s2">"GND"</span><span class="p">},</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="s2">"Acme"</span><span class="p">,</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="s2">"HDR-2"</span><span class="p">,</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="s2">"Supply header: 3V3 / GND"</span><span class="p">,</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="n">B</span><span class="p">,</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="p">)</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="n">B</span> <span class="o">=</span> <span class="s2">"Indicator"</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="n">R</span><span class="p">(</span><span class="s2">"R1"</span><span class="p">,</span> <span class="s2">"330"</span><span class="p">,</span> <span class="s2">"+3V3"</span><span class="p">,</span> <span class="s2">"LED_A"</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a><span class="n">LED</span><span class="p">(</span><span class="s2">"D1"</span><span class="p">,</span> <span class="s2">"Green"</span><span class="p">,</span> <span class="s2">"LED_A"</span><span class="p">,</span> <span class="s2">"GND"</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="s2">"GRN-0603"</span><span class="p">,</span> <span class="s2">"Acme"</span><span class="p">)</span>
+</code></pre></div>
+<p>Nets are joined by name: pins that name the same net are connected, and no wire is drawn.
+A pin number the symbol does not have is an error. A pin of the symbol that you leave out,
+or give <code>None</code>, gets a no-connect flag, except on a part whose reference starts with <code>#</code>
+(a power flag, whose text is also hidden on the sheet) or whose symbol is in the
+<code>Mechanical</code> library.</p>
+<h3 id="the-calls">The calls<a class="headerlink" href="#the-calls" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">part</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">sym</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">fp</span><span class="p">,</span> <span class="n">pins</span><span class="p">,</span> <span class="n">mfr</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">mpn</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">dnp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bom</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">R</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">mpn</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">mfr</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">fp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">C</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s2">"C0603"</span><span class="p">,</span> <span class="n">mpn</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">mfr</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">LED</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">color</span><span class="p">,</span> <span class="n">anode</span><span class="p">,</span> <span class="n">cathode</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">mpn</span><span class="p">,</span> <span class="n">mfr</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><code>part</code> makes one part. <code>ref</code> is unique in the design. <code>sym</code> is <code>Library:Name</code>, a symbol
+  of KiCad's stock libraries or of the project's own (see footprints.py below). <code>pins</code>
+  maps pin numbers, as strings, to net names. <code>block</code> names the group the part is drawn
+  in. <code>dnp</code> marks it do-not-populate; <code>bom=False</code> keeps it out of the bill of materials.</li>
+<li><code>R</code> makes a <code>Device:R</code> in the <code>FP["R0603"]</code> footprint, or in <code>fp</code>. <code>mpn</code> defaults to
+  <code>0603 &lt;value&gt; 1%</code> and <code>desc</code> to <code>Resistor &lt;value&gt; 0603 1%</code>.</li>
+<li><code>C</code> makes a <code>Device:C</code> whose footprint is the <code>FP</code> entry named by <code>size</code>. <code>desc</code>
+  defaults to <code>Ceramic capacitor &lt;value&gt; &lt;size without its letter&gt;</code>, so <code>0603</code> for the
+  default.</li>
+<li><code>LED</code> makes a <code>Device:LED</code> in <code>FP["LED0603"]</code>, with the anode on pin 2 and the cathode
+  on pin 1, as KiCad numbers it. <code>desc</code> is <code>LED &lt;color&gt; 0603</code>.</li>
+<li>Positional order is part of the contract: the calls above are what existing designs
+  write.</li>
+</ul>
+<p><code>FP</code> maps short keys to footprints. It is a plain dict that you can extend in your
+design.py (<code>FP["HDR3"] = "my_board:Header_1x03_P2.54mm"</code>); it starts from these
+entries each time the design is loaded:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Footprint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>R0603</code></td>
+<td><code>Resistor_SMD:R_0603_1608Metric</code></td>
+</tr>
+<tr>
+<td><code>C0603</code></td>
+<td><code>Capacitor_SMD:C_0603_1608Metric</code></td>
+</tr>
+<tr>
+<td><code>C0805</code></td>
+<td><code>Capacitor_SMD:C_0805_2012Metric</code></td>
+</tr>
+<tr>
+<td><code>C1206</code></td>
+<td><code>Capacitor_SMD:C_1206_3216Metric</code></td>
+</tr>
+<tr>
+<td><code>LED0603</code></td>
+<td><code>LED_SMD:LED_0603_1608Metric</code></td>
+</tr>
+<tr>
+<td><code>XH2</code></td>
+<td><code>Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>XH3</code></td>
+<td><code>Connector_JST:JST_XH_B3B-XH-A_1x03_P2.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>XH4</code></td>
+<td><code>Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>XH5</code></td>
+<td><code>Connector_JST:JST_XH_B5B-XH-A_1x05_P2.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>XH6</code></td>
+<td><code>Connector_JST:JST_XH_B6B-XH-A_1x06_P2.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>XH10</code></td>
+<td><code>Connector_JST:JST_XH_B10B-XH-A_1x10_P2.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>PH3</code></td>
+<td><code>Connector_JST:JST_PH_B3B-PH-K_1x03_P2.00mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>ZH4</code></td>
+<td><code>Connector_JST:JST_ZH_B4B-ZR_1x04_P1.50mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>QWIIC</code></td>
+<td><code>Connector_JST:JST_SH_BM04B-SRSS-TB_1x04-1MP_P1.00mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>HDR2</code></td>
+<td><code>Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>HDR8</code></td>
+<td><code>Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical</code></td>
+</tr>
+<tr>
+<td><code>WIRE2</code></td>
+<td><code>Connector_Wire:SolderWire-2sqmm_1x02_P7.8mm_D2mm_OD3.9mm</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="names-designpy-can-define">Names design.py can define<a class="headerlink" href="#names-designpy-can-define" title="Permanent link">&para;</a></h3>
+<p>All optional. The board's stem, title and revision are not here: they come from
+pcbkit.toml.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BLOCK_ORDER</code></td>
+<td>list of strings</td>
+<td>the blocks, in the order the parts first use them</td>
+<td>The order the blocks are drawn on the sheet.</td>
+</tr>
+<tr>
+<td><code>NOTES</code></td>
+<td>list of strings</td>
+<td><code>[]</code></td>
+<td>Lines of text under the blocks. The first is the heading.</td>
+</tr>
+<tr>
+<td><code>BLOCK_WIDTHS</code></td>
+<td>dict of block to number</td>
+<td><code>{}</code></td>
+<td>Width in mm of a block that needs more or less than 130.</td>
+</tr>
+<tr>
+<td><code>BLOCK_TITLES</code></td>
+<td>dict of block to string</td>
+<td><code>{}</code></td>
+<td>The heading of a block whose heading is not its name.</td>
+</tr>
+<tr>
+<td><code>COMPANY</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>The title block's company line; left out when empty.</td>
+</tr>
+<tr>
+<td><code>COMMENT</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>The title block's first comment; left out when empty.</td>
+</tr>
+</tbody>
+</table>
+<p>Any other upper-case data the file defines (a pin table, say) is kept in the loaded
+<code>Design.constants</code>, for your own checks.</p>
+<p>pcbkit refuses, naming the file and the part: a design with no parts, a reference used
+twice, a part with no block or in a block missing from <code>BLOCK_ORDER</code>, a <code>BLOCK_ORDER</code>
+entry with no parts, a <code>BLOCK_WIDTHS</code> or <code>BLOCK_TITLES</code> key that is not a block, and a
+name above with the wrong type.</p>
+<p>pcbkit runs design.py afresh each time it needs the design, starting from an empty list
+of parts and the default <code>FP</code>, so nothing carries over from another board or from an
+earlier load. Modules your design.py imports from the project folder are run again too,
+so a block of parts may live in a module of its own.</p>
+<h2 id="footprintspy-and-footprints">footprints.py and footprints/<a class="headerlink" href="#footprintspy-and-footprints" title="Permanent link">&para;</a></h2>
+<p>Most parts come from KiCad's stock libraries. A part KiCad does not have goes in the
+project's own library, which <code>pcbkit sch</code> builds into <code>kicad/</code> from two places that can
+be used together: the hooks in <code>footprints.py</code>, and the <code>.kicad_mod</code> files in
+<code>footprints/</code> (copied unchanged, for example a stock footprint that a newer KiCad
+dropped). Both are optional.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.kicad.sexp</span><span class="w"> </span><span class="kn">import</span> <span class="n">q</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">LIB</span> <span class="o">=</span> <span class="s2">"my_board"</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">symbols</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="sd">"""Return the project's symbols (shortened: a real one also has pins and graphics)."""</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="k">return</span> <span class="p">[[</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">q</span><span class="p">(</span><span class="s2">"Thing"</span><span class="p">),</span> <span class="p">[</span><span class="s2">"in_bom"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">]]]</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">footprints</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">    </span><span class="sd">"""Return the project's footprints by name (shortened in the same way)."""</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"Pad"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"footprint"</span><span class="p">,</span> <span class="n">q</span><span class="p">(</span><span class="s2">"Pad"</span><span class="p">),</span> <span class="p">[</span><span class="s2">"layer"</span><span class="p">,</span> <span class="n">q</span><span class="p">(</span><span class="s2">"F.Cu"</span><span class="p">)]]}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Returns</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LIB</code></td>
+<td>string</td>
+<td>The library nickname: the part before the colon in <code>my_board:Thing</code>. Default: the board's stem. Letters, digits, <code>_</code>, <code>-</code> and <code>.</code>.</td>
+</tr>
+<tr>
+<td><code>symbols()</code></td>
+<td>list of nodes</td>
+<td>Each <code>["symbol", q("Name"), ...]</code>, written to <code>kicad/&lt;LIB&gt;.kicad_sym</code>. Names must differ.</td>
+</tr>
+<tr>
+<td><code>footprints()</code></td>
+<td>dict of name to node</td>
+<td>Each <code>["footprint", q("Name"), ...]</code> whose name matches its key, written to <code>kicad/&lt;LIB&gt;.pretty/&lt;Name&gt;.kicad_mod</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Nodes are the nested lists of <code>pcbkit.kicad.sexp</code>: <code>q("text")</code> marks a quoted string, a
+number is a number, and any other bare word is a string. A footprint that is both
+generated and vendored under one name is an error.</p>
+<p><code>pcbkit sch</code> writes these files into <code>kicad/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;stem&gt;.kicad_sch</code></td>
+<td>The schematic.</td>
+</tr>
+<tr>
+<td><code>&lt;LIB&gt;.kicad_sym</code></td>
+<td>The project's symbols. Only when <code>symbols()</code> returns some.</td>
+</tr>
+<tr>
+<td><code>&lt;LIB&gt;.pretty/</code></td>
+<td>The project's footprints: generated, then vendored. Only when there are any.</td>
+</tr>
+<tr>
+<td><code>sym-lib-table</code>, <code>fp-lib-table</code></td>
+<td>Tell KiCad where the project's libraries are. Empty when it has none.</td>
+</tr>
+<tr>
+<td><code>&lt;stem&gt;.kicad_pro</code></td>
+<td>A minimal project file, written only when there is none. kicad-cli reads the two tables above only when the project file exists, and later stages save the design rules into it, so it is never overwritten.</td>
+</tr>
+<tr>
+<td><code>erc.rpt</code></td>
+<td>The ERC report.</td>
+</tr>
+<tr>
+<td><code>&lt;stem&gt;.net</code></td>
+<td>The netlist, in KiCad's S-expression format.</td>
+</tr>
+</tbody>
+</table>
+<p>pcbkit overwrites the files it makes and does not delete ones it no longer makes. Delete
+<code>kicad/</code> for a clean rebuild.</p>
+<h2 id="routingpy">routing.py<a class="headerlink" href="#routingpy" title="Permanent link">&para;</a></h2>
+<p>The routing engine imports <code>routing.py</code> and calls the hooks below that it defines. Only
+<code>prerouted</code> is required, and it may do nothing.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Signature</th>
+<th>Called</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NETCLASSES</code></td>
+<td><code>dict[str, tuple]</code></td>
+<td>when rules are applied</td>
+<td>Net classes: name to <code>(track, clearance, via_d, via_drill, patterns)</code>, all in millimetres. <code>patterns</code> is a list of net names with KiCad's leading <code>/</code>, such as <code>"/VIN"</code>.</td>
+</tr>
+<tr>
+<td><code>design_rules</code></td>
+<td><code>design_rules(ds) -&gt; None</code></td>
+<td>after pcbkit's generic rules</td>
+<td>Board-specific design rules. <code>ds</code> is <code>board.GetDesignSettings()</code>; set minimums on it, for example <code>ds.m_TrackMinWidth = api.mm(0.2)</code>.</td>
+</tr>
+<tr>
+<td><code>prerouted</code></td>
+<td><code>prerouted(board, api) -&gt; None</code></td>
+<td>before Freerouting</td>
+<td>Hand-route what the autorouter should not decide, such as power paths. Tracks and vias made with <code>api.track</code> and <code>api.via</code> are locked, so Freerouting routes around them.</td>
+</tr>
+<tr>
+<td><code>keepouts</code></td>
+<td><code>keepouts(board, api) -&gt; None</code></td>
+<td>before Freerouting</td>
+<td>Add rule areas (<code>api.keepout</code>): a keep-out under an antenna, a strip kept clear of signals beside a high-current pour, a region reserved for a heat sink.</td>
+</tr>
+<tr>
+<td><code>gnd_links</code></td>
+<td><code>gnd_links(board, api) -&gt; None</code></td>
+<td>after Freerouting, before the pours are filled</td>
+<td>Give fine-pitch ground pads their own copper where the pour's minimum width would cut their thin necks.</td>
+</tr>
+<tr>
+<td><code>zones</code></td>
+<td><code>zones(board, api) -&gt; None</code></td>
+<td>after <code>gnd_links</code>, before the pours are filled</td>
+<td>Add the ground and power pours (<code>api.zone</code>) and any pour keep-out.</td>
+</tr>
+<tr>
+<td><code>solid_pad_refs</code></td>
+<td><code>set[str]</code></td>
+<td>while the pours are filled</td>
+<td>References whose ground pads connect to the pour solid, with no thermal spokes: high-current connectors, a regulator's ground.</td>
+</tr>
+</tbody>
+</table>
+<p>The order within each stage follows the table: before Freerouting, rules (<code>NETCLASSES</code>
+then <code>design_rules</code>), <code>prerouted</code>, <code>keepouts</code>, then pcbkit's own keep-out strips along
+the four board edges; after it, the rules are applied again (a copied board does not
+carry them), the router's result is imported, then <code>gnd_links</code>, <code>zones</code> and
+<code>solid_pad_refs</code> run, and the pours are filled and stitched.</p>
+<p>An error raised inside one of your hooks reaches you as an ordinary traceback through
+<code>routing.py</code>. A hook that is missing or has the wrong shape (<code>prerouted</code> absent, a
+<code>NETCLASSES</code> entry that is not five values, <code>solid_pad_refs</code> given as a bare string) is
+reported before anything runs, with the file and the hook.</p>
+<h3 id="what-the-engine-assumes">What the engine assumes<a class="headerlink" href="#what-the-engine-assumes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>The board's size</strong> is <code>W</code> and <code>H</code> in <code>layout.py</code>, in millimetres. They give the
+  keep-out strips along the edges and the area stitching covers.</li>
+<li><strong>The ground net is called <code>GND</code>.</strong> Stitching vias, the gap-filling vias and
+  <code>solid_pad_refs</code> find ground by that name. Stitching also needs a <code>GND</code> pour on each
+  layer, so <code>zones</code> must make both; with no pour on a layer nothing is stitched, and
+  that is not an error.</li>
+<li><strong>Stitching and clean-up are the same for every board.</strong> Their settings are in
+  <code>pcbkit.toml</code> (<code>[stitch]</code>): the grid pitch, the dense boxes and the gap limit. After
+  the pours are filled, vias that carry copper on one layer only, and tracks that end
+  nowhere, are taken out.</li>
+</ul>
+<h3 id="the-commands-that-run-these-hooks">The commands that run these hooks<a class="headerlink" href="#the-commands-that-run-these-hooks" title="Permanent link">&para;</a></h3>
+<p><code>pcbkit route [--eco PATH] [--tries N] [--passes N]</code> starts from
+<code>kicad/placed.kicad_pcb</code>, which <code>pcbkit build</code> writes, and stops with a hint if that is
+missing. It applies the rules, runs <code>prerouted</code> and <code>keepouts</code>, adds the edge strips and
+exports the DSN, <code>kicad/&lt;stem&gt;.dsn</code>. Then it runs Freerouting, up to <code>route.tries</code>
+times: after each run it imports <code>kicad/&lt;stem&gt;.ses</code>, runs the post-route stage (the
+hooks, the pours, the stitching and the clean-up) and runs DRC. It stops at the first
+try with no copper problem, meaning no unconnected pad, clearance, short, crossing,
+hole-clearance or edge-clearance entry; it prints each try's problems by category. If no
+try is clean it gives up, leaves the try with the fewest problems in <code>kicad/</code>, and exits
+1. A Freerouting run that has not started routing within <code>route.stall_timeout_s</code> is
+killed with everything it started, and counts as a failed try. Last it adds the
+silkscreen and shows DRC with schematic parity.</p>
+<p>With <code>--eco PATH</code>, the route in <code>PATH</code> (a folder like <code>golden/</code>) is kept: its copper is
+copied onto the new board and locked, except copper that clashes with what changed
+(dropped) and copper on the changed parts' nets or within <code>route.eco_unlock_reach_mm</code>
+of them (left free). Copied ground copper is never kept, because ground comes from the
+pours. Freerouting then completes what is missing. If it stalls on such a board, <code>route</code>
+routes the whole board instead.</p>
+<p><code>pcbkit promote</code> copies <code>kicad/prerouted.kicad_pcb</code>, <code>&lt;stem&gt;.ses</code> and <code>&lt;stem&gt;.dsn</code> into
+<code>golden/</code>. It first runs DRC with schematic parity on the finished board and refuses
+unless there is nothing to report: <code>golden/</code> holds only a route that passed. It keeps no
+project file: the rules come from <code>routing.py</code> each time and <code>finalize</code> writes the file
+again.</p>
+<p><code>pcbkit finalize [--no-render]</code> rebuilds the board from <code>golden/</code>: it copies the files
+there into <code>kicad/</code>, runs the post-route stage on them, adds the silkscreen, runs DRC
+with schematic parity and exports the fab files. If DRC finds anything it stops, exports
+nothing and exits 1. It needs <code>kicad/&lt;stem&gt;.kicad_sch</code> (from <code>pcbkit build</code>).</p>
+<p>The stages hand each other these files, all in <code>kicad/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Written by</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>placed.kicad_pcb</code></td>
+<td><code>pcbkit build</code></td>
+<td>The placed board, before routing.</td>
+</tr>
+<tr>
+<td><code>prerouted.kicad_pcb</code></td>
+<td><code>route</code></td>
+<td>The placed board with your pre-routes and keep-outs, and no autorouted copper. <code>golden/</code> keeps it.</td>
+</tr>
+<tr>
+<td><code>&lt;stem&gt;.dsn</code></td>
+<td><code>route</code></td>
+<td>Its Specctra export, which Freerouting reads.</td>
+</tr>
+<tr>
+<td><code>&lt;stem&gt;.ses</code></td>
+<td>Freerouting</td>
+<td>The route it found. <code>golden/</code> keeps it.</td>
+</tr>
+<tr>
+<td><code>routed_nozones.kicad_pcb</code></td>
+<td><code>route</code>, <code>finalize</code></td>
+<td>The board with the route imported, before the pours and the clean-up.</td>
+</tr>
+<tr>
+<td><code>&lt;stem&gt;.kicad_pcb</code></td>
+<td><code>route</code>, <code>finalize</code></td>
+<td>The finished board.</td>
+</tr>
+<tr>
+<td><code>drc.rpt</code></td>
+<td><code>route</code>, <code>promote</code>, <code>finalize</code></td>
+<td>The latest DRC report.</td>
+</tr>
+<tr>
+<td><code>freerouting.log</code></td>
+<td><code>route</code></td>
+<td>The router's console output from its latest run.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-api-argument">The <code>api</code> argument<a class="headerlink" href="#the-api-argument" title="Permanent link">&para;</a></h3>
+<p><code>api</code> is the <code>pcbkit.kicad.board</code> module: pcbkit's helpers for pcbnew, so a project rarely
+needs to import pcbnew itself (it may). Besides unit helpers (<code>mm</code>, <code>pt</code>, <code>to_local</code>) it
+provides:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">pad</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span> <span class="n">num</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PAD</span>                  <span class="c1"># pad `num` of the footprint `ref`</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">ppos</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span> <span class="n">num</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>              <span class="c1"># that pad's centre, in layout mm</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">track</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">pts</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">netname</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>                                             <span class="c1"># a locked track through the points `pts`;</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>                                             <span class="c1"># `layer` None means F_Cu</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">via</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">netname</span><span class="p">,</span> <span class="n">d</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">drill</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>                                             <span class="c1"># a locked through-hole via</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">keepout</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">x0</span><span class="p">,</span> <span class="n">y0</span><span class="p">,</span> <span class="n">x1</span><span class="p">,</span> <span class="n">y1</span><span class="p">,</span> <span class="n">tracks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">vias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">pours</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="n">layers</span><span class="o">=</span><span class="p">(</span><span class="s2">"F.Cu"</span><span class="p">,</span> <span class="s2">"B.Cu"</span><span class="p">),</span> <span class="n">pts</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>                                             <span class="c1"># a rule area; `pts` gives a polygon instead</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="n">zone</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">netname</span><span class="p">,</span> <span class="n">layer</span><span class="p">,</span> <span class="n">pts</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">full</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>     <span class="n">min_w</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span> <span class="n">clearance</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ZONE</span>     <span class="c1"># a copper pour; `layer` is a pcbnew layer id</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>                                             <span class="c1"># (F_Cu or B_Cu); `full` = solid pad connection</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="n">rect</span><span class="p">(</span><span class="n">x0</span><span class="p">,</span> <span class="n">y0</span><span class="p">,</span> <span class="n">x1</span><span class="p">,</span> <span class="n">y1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)]</span>         <span class="c1"># a rectangle's corners, for `zone` and `keepout`</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="n">clear_spot</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">near</span><span class="p">,</span> <span class="n">net</span><span class="o">=</span><span class="s2">"GND"</span><span class="p">,</span> <span class="n">via_d</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">drill</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>           <span class="n">reach</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">gap</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>    <span class="c1"># nearest spot a via and its track fit</span>
+</code></pre></div>
+<p>The module also has the outline and text helpers that placement uses (<code>add_line</code>,
+<code>add_arc</code>, <code>add_text</code>), <code>N(board, name)</code> for a net, and the engine's shields against
+pcbnew hazards on KiCad 10 (<code>remove</code>, <code>point_in_track</code>, <code>set_copper</code>). A layer argument
+that defaults to <code>None</code> means the layer the helper names in its docstring (F_Cu for
+<code>track</code>): that is how the module imports on a machine without KiCad. Any number may be a
+numpy scalar.</p>
+<p>Net names passed to these helpers have no leading <code>/</code>: <code>track(board, pts, 1.0, "VIN")</code>
+finds the net <code>/VIN</code>. Only the <code>NETCLASSES</code> patterns carry the <code>/</code>, because they are
+KiCad's own net-name patterns.</p>
+<h3 id="a-minimal-routingpy">A minimal routing.py<a class="headerlink" href="#a-minimal-routingpy" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">NETCLASSES</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="s2">"Wide"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="p">[</span><span class="s2">"/VIN"</span><span class="p">,</span> <span class="s2">"/VOUT"</span><span class="p">]),</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="p">}</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">prerouted</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">api</span><span class="p">):</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="sd">"""Run the input connector's positive pin to the fuse with a wide track."""</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">a</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">ppos</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="s2">"CN1"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">b</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">ppos</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="s2">"F1"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">api</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="p">[</span><span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">b</span><span class="p">],</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"VIN"</span><span class="p">)</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">solid_pad_refs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"CN1"</span><span class="p">}</span>
+</code></pre></div>
+<p>These helper signatures are part of the contract: if one changes, this page changes
+with it.</p>
+<h2 id="layoutpy-and-silkpy">layout.py and silk.py<a class="headerlink" href="#layoutpy-and-silkpy" title="Permanent link">&para;</a></h2>
+<p><code>layout.py</code> says where everything goes on the board. <code>pcbkit build</code> reads it, after the
+schematic, and writes <code>kicad/&lt;stem&gt;.kicad_pcb</code> (and an identical <code>kicad/placed.kicad_pcb</code>).
+<code>silk.py</code> says what text the silkscreen pass adds; it is optional. Coordinates in both are
+millimetres from the board's top-left corner, with y pointing down.</p>
+<h3 id="layoutpy">layout.py<a class="headerlink" href="#layoutpy" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>W</code>, <code>H</code></td>
+<td>number</td>
+<td>required</td>
+<td>The board's width and height. With an <code>outline</code> function they are the board's bounding box: the silkscreen pass keeps text 0.6 mm off these edges, and parts without a position are parked below <code>H</code>.</td>
+</tr>
+<tr>
+<td><code>P</code></td>
+<td>dict</td>
+<td>required</td>
+<td>Where each part goes: <code>{ref: (x, y, rot)}</code>. <code>rot</code> is in degrees, counter-clockwise as KiCad shows it.</td>
+</tr>
+<tr>
+<td><code>CORNER_R</code></td>
+<td>number</td>
+<td><code>0</code></td>
+<td>Radius of the outline's corners, from 0 (square) to half the shorter side.</td>
+</tr>
+<tr>
+<td><code>HOLES</code></td>
+<td>list</td>
+<td><code>[]</code></td>
+<td>The position <code>(x, y)</code> of each mounting hole.</td>
+</tr>
+<tr>
+<td><code>outline</code></td>
+<td>function</td>
+<td>none</td>
+<td><code>outline(board, api)</code> draws the board outline itself, instead of the rectangle <code>W</code> by <code>H</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">W</span><span class="p">,</span> <span class="n">H</span> <span class="o">=</span> <span class="mf">40.0</span><span class="p">,</span> <span class="mf">24.0</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">CORNER_R</span> <span class="o">=</span> <span class="mf">2.0</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">HOLES</span> <span class="o">=</span> <span class="p">[(</span><span class="mf">4.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">36.0</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">)]</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">P</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="s2">"J1"</span><span class="p">:</span> <span class="p">(</span><span class="mf">10.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="s2">"R1"</span><span class="p">:</span> <span class="p">(</span><span class="mf">26.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">,</span> <span class="mi">90</span><span class="p">),</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">}</span>
+</code></pre></div>
+<ul>
+<li>A part called <code>H1</code>, <code>H2</code>, ... (an <code>H</code> and a number, nothing else) is a mounting hole: it
+  goes to <code>HOLES[n - 1]</code> with rotation 0, whatever <code>P</code> says about it. There must be
+  a position for each. A reference such as <code>HR1</code> or <code>HS1</code> is an ordinary part.</li>
+<li>A part of the design that has no entry in <code>P</code> is still put on the board, but parked
+  below it: at x = 5, 16 mm under the bottom edge for the first, and 6 mm lower for each
+  next. <code>pcbkit build</code> prints them as <code>missing</code>. An entry in <code>P</code> for a part the design
+  does not have is ignored.</li>
+<li>The outline is a rectangle on <code>Edge.Cuts</code>, with quarter-circle corners of radius
+  <code>CORNER_R</code>. For any other shape, define <code>outline(board, api)</code>. <code>api</code> is the
+  <code>pcbkit.kicad.board</code> module (see "The <code>api</code> argument" under routing.py), so
+  <code>api.add_line(board, x0, y0, x1, y1)</code> and <code>api.add_arc(board, cx, cy, sx, sy, ex, ey)</code>
+  draw on <code>Edge.Cuts</code> in layout millimetres:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">outline</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">api</span><span class="p">):</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="sd">"""Draw a board with one corner cut off."""</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">api</span><span class="o">.</span><span class="n">add_line</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">api</span><span class="o">.</span><span class="n">add_line</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">api</span><span class="o">.</span><span class="n">add_line</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">24</span><span class="p">)</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">api</span><span class="o">.</span><span class="n">add_line</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">24</span><span class="p">)</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">api</span><span class="o">.</span><span class="n">add_line</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>Each footprint is loaded from the project's own library (<code>kicad/&lt;LIB&gt;.pretty</code>, see
+  footprints.py) when its id starts with <code>&lt;LIB&gt;:</code>, and from KiCad's stock libraries
+  otherwise. A footprint that is not there stops the build, naming it.</li>
+<li>The stackup is written into the board from <code>[stackup]</code>: the outer copper is
+  <code>copper_mm</code>, the board is <code>thickness_mm</code> thick, and the FR4 core between the coppers is
+  <code>thickness_mm</code> less 0.16 mm, whatever the copper weight.</li>
+</ul>
+<h3 id="silkpy">silk.py<a class="headerlink" href="#silkpy" title="Permanent link">&para;</a></h3>
+<p>The silkscreen pass runs on the routed board (<code>pcbkit finalize</code> does it, after the pours
+are filled). It adds text in this order, and each text it adds is something the ones
+after it keep clear of: pads, the parts' own silkscreen and the board edge are in the way
+from the start.</p>
+<ol>
+<li><code>LABELS</code>, at their spots.</li>
+<li><code>CONN_LABELS</code>, beside their parts.</li>
+<li>Whatever <code>extra(board, api)</code> draws.</li>
+<li>A reference designator for every part, on the silkscreen where there is room round its
+   courtyard.</li>
+<li>The assembly drawing: a reference with no room on the silkscreen goes to the fab layer
+   (<code>F.Fab</code>), and one that overlaps another fab text, or sits on a through-hole pad, is
+   moved to a clear spot or shrunk.</li>
+</ol>
+<p>Values are never printed, and the board's title block is filled in.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LABELS</code></td>
+<td>list of <code>(text, x, y, size, rot)</code></td>
+<td><code>[]</code></td>
+<td>Fixed labels. <code>x</code>, <code>y</code> is the text's centre, <code>size</code> its height in mm and <code>rot</code> 0 or 90. A label whose spot is taken moves to the nearest free one within 1.5 mm; if none is free it is drawn at its spot anyway, with a warning.</td>
+</tr>
+<tr>
+<td><code>CONN_LABELS</code></td>
+<td>dict of ref to text</td>
+<td><code>{}</code></td>
+<td>A function label beside each part named: below its courtyard, above it, or to a side, whichever is free first. A reference that is not on the board is an error.</td>
+</tr>
+<tr>
+<td><code>HIDE_REF</code></td>
+<td>set of references</td>
+<td><code>set()</code></td>
+<td>Parts whose reference is not printed on the silkscreen but kept on <code>F.Fab</code>. A reference that is not on the board is a warning.</td>
+</tr>
+<tr>
+<td><code>KEEP_REF</code></td>
+<td>set of references</td>
+<td><code>set()</code></td>
+<td>Parts whose reference text is left where its footprint has it, and whose fab texts the assembly pass does not move: for a footprint that draws its own labels. A part in both sets is an error.</td>
+</tr>
+<tr>
+<td><code>extra</code></td>
+<td>function</td>
+<td>none</td>
+<td><code>extra(board, api)</code> draws what only this board needs.</td>
+</tr>
+<tr>
+<td><code>COMPANY</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>The title block's company.</td>
+</tr>
+<tr>
+<td><code>COMMENTS</code></td>
+<td>list of strings</td>
+<td><code>[]</code></td>
+<td>The title block's comments, up to nine.</td>
+</tr>
+<tr>
+<td><code>DATE</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>The title block's date. Left empty unless you set it, so that running the pass on another day does not change the board.</td>
+</tr>
+</tbody>
+</table>
+<p>The title block's title and revision come from <code>[board]</code> in pcbkit.toml. Any other name
+in silk.py is yours: <code>extra</code> can read it.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.silk</span><span class="w"> </span><span class="kn">import</span> <span class="n">iloc</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">LABELS</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"My Board"</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">CONN_LABELS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"J1"</span><span class="p">:</span> <span class="s2">"3V3 / GND"</span><span class="p">}</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="n">HIDE_REF</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"H1"</span><span class="p">,</span> <span class="s2">"H2"</span><span class="p">}</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">COMPANY</span> <span class="o">=</span> <span class="s2">"Acme"</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="n">COMMENTS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"2 layer, 1.6 mm FR4"</span><span class="p">]</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="n">DATE</span> <span class="o">=</span> <span class="s2">"2026-01-02"</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">extra</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">api</span><span class="p">):</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">    </span><span class="sd">"""Number J1's pins on the silkscreen, beside each pad."""</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>    <span class="k">for</span> <span class="n">pad</span> <span class="ow">in</span> <span class="n">api</span><span class="o">.</span><span class="n">footprints</span><span class="p">[</span><span class="s2">"J1"</span><span class="p">]</span><span class="o">.</span><span class="n">Pads</span><span class="p">():</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>        <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">iloc</span><span class="p">(</span><span class="n">pad</span><span class="p">)</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">api</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">pad</span><span class="o">.</span><span class="n">GetNumber</span><span class="p">(),</span> <span class="p">[(</span><span class="n">x</span> <span class="o">+</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">y</span><span class="p">)],</span> <span class="mf">0.8</span><span class="p">):</span>
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>            <span class="n">api</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no room for the mark of J1 pin </span><span class="si">{</span><span class="n">pad</span><span class="o">.</span><span class="n">GetNumber</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="the-api-argument-of-extra">The <code>api</code> argument of <code>extra</code><a class="headerlink" href="#the-api-argument-of-extra" title="Permanent link">&para;</a></h4>
+<p><code>extra</code> is called after <code>LABELS</code> and <code>CONN_LABELS</code>, so it sees them as obstacles, and the
+reference designators are placed afterwards and keep clear of what it draws. <code>api</code> holds
+the state of the pass:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">api</span><span class="o">.</span><span class="n">board</span>                                    <span class="c1"># the pcbnew board (also the first argument)</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">api</span><span class="o">.</span><span class="n">footprints</span>                               <span class="c1"># {ref: footprint} of every part on the board</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">api</span><span class="o">.</span><span class="n">obstacles</span>                                <span class="c1"># Boxes: what text keeps clear of, in layout mm</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">api</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="n">api</span><span class="o">.</span><span class="n">height</span>                        <span class="c1"># the board's size, W and H of layout.py</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="n">api</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">rot</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bold</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">text</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>                                             <span class="c1"># add a text centred on (x, y), on F.SilkS</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>                                             <span class="c1"># unless `layer` (a pcbnew layer id) says</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>                                             <span class="c1"># otherwise; later texts keep clear of it</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="n">api</span><span class="o">.</span><span class="n">free</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">vertical</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>                                             <span class="c1"># would that text touch nothing?</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="n">api</span><span class="o">.</span><span class="n">place</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">candidates</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">bold</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>                                             <span class="c1"># add the text at the first free candidate,</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>                                             <span class="c1"># each (x, y) or (x, y, rot); False if none</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="n">api</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>                    <span class="c1"># report something that did not fit</span>
+</code></pre></div>
+<p><code>pcbkit.silk</code> also has the functions behind these, for code that wants them directly:
+<code>add_text(board, text, x, y, size, rot, layer, bold, obstacles)</code>, <code>text_box(x, y, text,
+size, vertical)</code> (the box a text is taken to fill), <code>bbox_of(item)</code> and <code>iloc(item)</code> (a
+board item's box and position in layout millimetres), and the <code>Boxes</code> class. A text
+added with any of them counts, and is guarded, like one added with <code>api.text</code>.
+<code>pcbkit.silk.add_text</code> is not <code>api.add_text</code> of the routing hooks: its stroke is never
+under 0.15 mm, the least a fab house prints.</p>
+<h4 id="once-per-board">Once per board<a class="headerlink" href="#once-per-board" title="Permanent link">&para;</a></h4>
+<p>The pass never removes a text. Run twice on one board it leaves the first run's labels where
+they were and draws the new ones beside them, or exactly on top of them. So <code>apply_silk</code>
+refuses a board that has had the pass: it raises <code>SilkError</code> (a click error: the command
+prints it and exits 1), says why, and writes nothing. It looks for two signs:</p>
+<ul>
+<li>The title block already has a title. The pass writes one every time and no other stage
+  does, so this catches a second run even after <code>silk.py</code> was edited and every label moved.
+  A board titled by hand is refused too: clear the title to go on.</li>
+<li>The pass would draw a text exactly on one that is already there: the same text, on
+  the same layer, in the same place.</li>
+</ul>
+<p>Run it on the board as the router left it. <code>pcbkit finalize</code> starts from the golden route
+every time, so it never meets this. Texts of the board's own that the pass does not draw
+on top of (a logo, a note) are fine.</p>
+<h2 id="fab-outputs">Fab outputs<a class="headerlink" href="#fab-outputs" title="Permanent link">&para;</a></h2>
+<p><code>pcbkit finalize</code> ends by exporting what you send to a fab house and an assembler, and the
+documents that go with it. <code>pcbkit quote</code> reads those files back and prints each number
+the PCBWay order form asks for, so you never count parts by hand.</p>
+<h3 id="what-is-written">What is written<a class="headerlink" href="#what-is-written" title="Permanent link">&para;</a></h3>
+<p>An export reads the saved board <code>kicad/&lt;stem&gt;.kicad_pcb</code>, its schematic, <code>design.py</code> and
+the board height <code>H</code> in <code>layout.py</code>, and writes two folders. <code>&lt;fab_name&gt;</code> is the
+<code>[board] fab_name</code> of <code>pcbkit.toml</code>.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>out/fab/&lt;fab_name&gt;_gerbers.zip</code></td>
+<td>The Gerber and drill files in one zip: the file to upload.</td>
+</tr>
+<tr>
+<td><code>out/fab/gerbers/</code></td>
+<td>The same files, loose: the nine plotted layers, the Excellon drill files with their maps, and KiCad's job file.</td>
+</tr>
+<tr>
+<td><code>out/fab/&lt;fab_name&gt;_BOM.csv</code> and <code>_BOM.xlsx</code></td>
+<td>The bill of materials, as CSV and as a workbook.</td>
+</tr>
+<tr>
+<td><code>out/fab/&lt;fab_name&gt;_centroid.csv</code></td>
+<td>Where each BOM part sits, for the pick-and-place machine.</td>
+</tr>
+<tr>
+<td><code>out/docs/&lt;fab_name&gt;_schematic.pdf</code></td>
+<td>The schematic.</td>
+</tr>
+<tr>
+<td><code>out/docs/&lt;fab_name&gt;_assembly_top.pdf</code> and <code>.png</code></td>
+<td>The assembly drawing: board edge and each part's outline.</td>
+</tr>
+<tr>
+<td><code>out/docs/&lt;fab_name&gt;_top_copper.pdf</code> and <code>_bottom_copper.pdf</code></td>
+<td>The copper of each side.</td>
+</tr>
+<tr>
+<td><code>out/docs/&lt;fab_name&gt;_render_iso.png</code>, <code>_render_top.png</code> and <code>_render_bottom.png</code></td>
+<td>3D renders. <code>pcbkit finalize --no-render</code> leaves them out.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Only <code>out/fab/</code> and <code>out/docs/</code> are emptied before an export, so a file left by an
+  earlier run cannot end up in the zip. Anything else you keep under <code>out/</code> stays.</li>
+<li>The Gerbers and the centroid are measured from the bottom-left corner of the board:
+  the export saves the board with its aux origin there. The centroid has x to the right
+  and y up, and lists the top side only. For a surface-mount part whose anchor is more
+  than 0.1 mm from the middle of its <code>F.Fab</code> outline, it gives the middle of the outline,
+  which is what an assembler places by.</li>
+<li>The workbook has one sheet, <code>BOM</code>, with the same rows as the CSV.</li>
+</ul>
+<h3 id="what-the-bom-lists">What the BOM lists<a class="headerlink" href="#what-the-bom-lists" title="Permanent link">&para;</a></h3>
+<p>Every part that is in the bill of materials: not a power flag (a reference starting with
+<code>#</code>), not <code>dnp=True</code>, not <code>bom=False</code>. Parts with the same manufacturer part number and
+footprint share a line, and a part with no part number is grouped by its value. A line
+takes its manufacturer, description and value from the first of its parts that
+<code>design.py</code> declares, and its quantity is the sum of theirs.</p>
+<p>Lines are sorted surface-mount first, then through-hole, each by the letters and number
+of the line's first reference (<code>C2</code> before <code>C10</code>). A line is through-hole (Type <code>THT</code>)
+when its footprint has a plated through-hole pad on the board. A footprint with only SMD
+pads, or only unplated holes such as locating pegs, is surface-mount.</p>
+<p>A resistor made with <code>R()</code> and no <code>mpn</code> has a stand-in part number, <code>0603 &lt;value&gt; 1%</code>,
+which cannot be ordered. For these values, in an <code>R_0603</code> footprint, the BOM uses a
+Yageo RC0603FR-07 part number instead:</p>
+<table>
+<thead>
+<tr>
+<th>Values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>10</code>, <code>100</code>, <code>220</code>, <code>300</code>, <code>330</code>, <code>560</code>, <code>1k</code>, <code>1.5k</code>, <code>2.2k</code>, <code>3.3k</code>, <code>4.7k</code>, <code>5.23k</code>, <code>10k</code>, <code>18k</code>, <code>22k</code>, <code>30.1k</code>, <code>100k</code></td>
+</tr>
+</tbody>
+</table>
+<p>A part number you wrote yourself is never replaced. Any other value keeps the stand-in
+until you give the part an <code>mpn</code>.</p>
+<p>A fitted part whose part number is empty, is still a stand-in, or has a space in it
+(a real part number is one word; one with a space is a description) cannot be ordered.
+<code>pcbkit.fab.bom.parts_without_mpn(parts, overrides)</code> lists such parts, judged on what the
+BOM will show after the <code>bom.py</code> below, and <code>export_fab</code> returns them in
+<code>FabResult.without_mpn</code> without failing.</p>
+<h3 id="bompy">bom.py<a class="headerlink" href="#bompy" title="Permanent link">&para;</a></h3>
+<p>Optional. Write the part number a buyer needs in <code>design.py</code>, and you need no <code>bom.py</code>.
+It is for when the schematic should say one thing and the BOM another, for example a
+generic part number in the schematic that is bought as one real part. It may define
+these names, all optional:</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MPN_OVERRIDE</code></td>
+<td>dict of an MPN to fields</td>
+<td>Keys are part numbers as written in <code>design.py</code>; every part with that part number gets the fields. A key no part uses is ignored.</td>
+</tr>
+<tr>
+<td><code>REF_OVERRIDE</code></td>
+<td>dict of a reference to fields</td>
+<td>The same for one reference, and it wins over <code>MPN_OVERRIDE</code>. A reference that is not in the design is an error.</td>
+</tr>
+<tr>
+<td><code>line</code></td>
+<td>function taking a <code>Group</code></td>
+<td>Called for each finished BOM line. Returns <code>None</code>, or a dict that sets the line's <code>value</code> and <code>desc</code>.</td>
+</tr>
+<tr>
+<td><code>NOT_IN_BOM</code></td>
+<td>list of strings</td>
+<td>Text for the workbook, one row each, under a bold "Not assembled / not in BOM:" heading. With none, the workbook has no such rows.</td>
+</tr>
+</tbody>
+</table>
+<p>The fields of an override are <code>mfr</code>, <code>mpn</code>, <code>desc</code> (strings) and <code>qty</code> (a whole number
+of 1 or more, how many physical parts the reference stands for; default 1). A field you
+leave out keeps the part's own. A <code>Group</code> has <code>parts</code> (the <code>design.py</code> parts, in the
+order declared), <code>refs</code>, <code>footprint</code> (without its library), <code>mfr</code>, <code>mpn</code>, <code>value</code>,
+<code>desc</code>, <code>qty</code> and <code>through_hole</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">MPN_OVERRIDE</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="s2">"HDR 1x3 male"</span><span class="p">:</span> <span class="p">{</span>  <span class="c1"># what design.py calls the part: the BOM says what to buy</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="s2">"mfr"</span><span class="p">:</span> <span class="s2">"Acme"</span><span class="p">,</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="s2">"mpn"</span><span class="p">:</span> <span class="s2">"AC-HDR-1X3"</span><span class="p">,</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>        <span class="s2">"desc"</span><span class="p">:</span> <span class="s2">"Pin header 1x3 2.54mm vertical"</span><span class="p">,</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="p">},</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="p">}</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="n">REF_OVERRIDE</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="s2">"BT1"</span><span class="p">:</span> <span class="p">{</span>  <span class="c1"># one reference that is two parts: a battery holder bought as two clips</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>        <span class="s2">"mfr"</span><span class="p">:</span> <span class="s2">"Acme"</span><span class="p">,</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>        <span class="s2">"mpn"</span><span class="p">:</span> <span class="s2">"AC-CLIP-18650"</span><span class="p">,</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>        <span class="s2">"desc"</span><span class="p">:</span> <span class="s2">"18650 cell clip"</span><span class="p">,</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>        <span class="s2">"qty"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>    <span class="p">},</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="p">}</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>
+<a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="n">NOT_IN_BOM</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"W1 is a wire pad. H1 is a mounting hole."</span><span class="p">]</span>
+<a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a>
+<a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>
+<a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a><span class="k">def</span><span class="w"> </span><span class="nf">line</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
+<a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a><span class="w">    </span><span class="sd">"""Show the three-pin headers as one kind of part, whatever each was named."""</span>
+<a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a>    <span class="k">if</span> <span class="n">group</span><span class="o">.</span><span class="n">footprint</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"PinHeader_1x03"</span><span class="p">):</span>
+<a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a>        <span class="k">return</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="s2">"Header 3-pin"</span><span class="p">}</span>
+</code></pre></div>
+<p>pcbkit reports a mistake in <code>bom.py</code> with what to fix: a field it does not know, a value
+of the wrong type, and an upper-case name that looks like a misspelling of one above.</p>
+<h3 id="pcbkit-quote">pcbkit quote<a class="headerlink" href="#pcbkit-quote" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>pcbkit quote [--assembled N] [--fab-qty N] [--self-solder-tht] [--notes FILE]
+</code></pre></div>
+<p>Reads the files an export wrote, from <code>out/fab/</code> (else <code>fab/</code>), and prints each value of
+the PCBWay order form. If they are not there it says to run <code>pcbkit finalize</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Where it comes from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Layers, thickness, finish, copper weight</td>
+<td>The Gerber job file in the zip. The finish is shown as the form words it (KiCad's "HAL lead-free" is "HASL lead-free").</td>
+</tr>
+<tr>
+<td>Board size</td>
+<td>The job file's size less one outline line width, which KiCad adds.</td>
+</tr>
+<tr>
+<td>Min track and spacing</td>
+<td>The smallest track width and the smallest spacing in the job file's design rules, in mm and mil.</td>
+</tr>
+<tr>
+<td>Min hole size</td>
+<td>The smallest tool in the Excellon files, plated or not.</td>
+</tr>
+<tr>
+<td>Unique parts</td>
+<td>With <code>--assembled</code>: the BOM lines the assembler places. All of them, or with <code>--self-solder-tht</code> the surface-mount ones only.</td>
+</tr>
+<tr>
+<td>SMD placements</td>
+<td>The sum of the surface-mount lines' quantities, per board.</td>
+</tr>
+<tr>
+<td>BGA/QFP/QFN parts</td>
+<td>Parts whose footprint name has <code>BGA</code>, <code>QFP</code> or <code>QFN</code> in it (so <code>LQFP</code>, <code>VQFN</code> and <code>LFBGA</code> count), with their references. Pitch is not looked at.</td>
+</tr>
+<tr>
+<td>Through-hole parts</td>
+<td>The sum of the through-hole lines' quantities and the number of references, then the references with each run of three or more numbers written as a range (<code>J3-J9</code>). With <code>--self-solder-tht</code>, 0 for the assembler and these as the ones you solder.</td>
+</tr>
+</tbody>
+</table>
+<p><code>--assembled N</code> adds the assembly numbers (they are per board; N is how many boards).
+<code>--self-solder-tht</code> needs <code>--assembled</code>. <code>--fab-qty N</code> is the number of bare boards and
+must be at least <code>--assembled</code>. <code>--notes FILE</code> checks the order notes against the form's
+limit of 600 characters, counting a line break as one and ignoring trailing whitespace; if
+they are over it, the command fails and says how many characters there are.</p>
+<p>It also warns, after the numbers, when the copper in the Gerbers is not <code>[stackup]
+copper_mm</code>, and when the Gerber zip is older than the saved board: the numbers then
+describe an earlier export.</p>
+<h2 id="checks-specspy-circuitspy-checks-and-mutantspy">Checks: specs.py, circuits.py, checks/ and mutants.py<a class="headerlink" href="#checks-specspy-circuitspy-checks-and-mutantspy" title="Permanent link">&para;</a></h2>
+<p><code>pcbkit check [-k EXPR]</code> runs two kinds of check with pytest, in one run: the built-in
+checks of the groups listed in <code>[checks] groups</code>, and your own, the <code>test_*.py</code> files in
+<code>checks/</code>. It needs pcbnew (<code>pcbkit setup</code> makes the project's <code>.venv</code> that has it) and
+exits with pytest's code: 0 all passed, 1 a check failed, 5 nothing matched. <code>-k</code> is
+pytest's own expression. <code>pcbkit mutants</code> shows that the checks bite (below), and
+<code>pcbkit report</code> turns the last run into a report.</p>
+<p>A built-in check reads its numbers from your <code>specs.py</code>, and the operating points of the
+circuit from your <code>circuits.py</code>. A group that is switched on but is missing a name it
+needs does not skip: the check fails, naming the name and the file ("specs.PINOUT is not
+defined in .../specs.py"). A table a check runs once per row of does not vanish when
+its table is missing either: it fails once, as <code>missing-spec</code>. A name documented as
+optional below may be left out.</p>
+<p>The checks run in a child pytest that loads <code>pcbkit.check.plugin</code> by name (there is no
+entry point, so a plain pytest run never loads it) and ignores any other pytest
+configuration. To run them yourself:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>pytest -p pcbkit.check.plugin --pcbkit-project . --pyargs pcbkit.check.builtin checks
+</code></pre></div>
+<h3 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h3>
+<p>A run leaves <code>out/checks/results.json</code> (a run that selects nothing leaves an empty one);
+<code>pcbkit report</code> writes <code>out/checks/VALIDATION.md</code> from it. Plots made by checks go in
+<code>out/checks/</code> too.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span><span class="nt">"format"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">"board"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"stem"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my_board"</span><span class="p">,</span><span class="w"> </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"My Board"</span><span class="p">,</span><span class="w"> </span><span class="nt">"rev"</span><span class="p">:</span><span class="w"> </span><span class="s2">"A"</span><span class="p">},</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w"> </span><span class="nt">"copper_mm"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.035</span><span class="p">,</span><span class="w"> </span><span class="nt">"groups"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"kicad"</span><span class="p">,</span><span class="w"> </span><span class="s2">"outputs"</span><span class="p">],</span><span class="w"> </span><span class="nt">"exit_status"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w"> </span><span class="nt">"counts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"passed"</span><span class="p">:</span><span class="w"> </span><span class="mi">40</span><span class="p">,</span><span class="w"> </span><span class="nt">"failed"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">},</span><span class="w"> </span><span class="nt">"seconds"</span><span class="p">:</span><span class="w"> </span><span class="mf">12.3</span><span class="p">,</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w"> </span><span class="nt">"selection"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"keyword"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">,</span><span class="w"> </span><span class="nt">"markexpr"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">,</span><span class="w"> </span><span class="nt">"deselected"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">"complete"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">},</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w"> </span><span class="nt">"checks"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"pcbkit.check.builtin.test_kicad::test_erc_clean"</span><span class="p">:</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">              </span><span class="p">{</span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kicad"</span><span class="p">,</span><span class="w"> </span><span class="nt">"outcome"</span><span class="p">:</span><span class="w"> </span><span class="s2">"passed"</span><span class="p">,</span><span class="w"> </span><span class="nt">"numbers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"erc"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">}},</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">            </span><span class="nt">"checks/test_power.py::test_rail"</span><span class="p">:</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">              </span><span class="p">{</span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"project"</span><span class="p">,</span><span class="w"> </span><span class="nt">"outcome"</span><span class="p">:</span><span class="w"> </span><span class="s2">"failed"</span><span class="p">,</span><span class="w"> </span><span class="nt">"numbers"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">               </span><span class="nt">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"AssertionError: ..."</span><span class="p">}}}</span>
+</code></pre></div>
+<p>A check's id is <code>pcbkit.check.builtin.&lt;module&gt;::&lt;name&gt;[param]</code> for a built-in one and its
+path from the project root for yours, whatever folder pytest was started in. <code>outcome</code> is
+<code>passed</code>, <code>failed</code>, <code>skipped</code> or <code>error</code> (a fixture or set-up that raised); a skipped check
+has a <code>reason</code> and a failed or errored one a <code>message</code>. <code>numbers</code> holds what the check
+recorded. <code>selection</code> says whether the run was cut short: after <code>pcbkit check -k ...</code>
+(or any run that left checks out) <code>complete</code> is false, so treat those results as partial
+and run the checks in full before you order boards. <code>pcbkit report</code> marks such a report as
+partial, under its counts.</p>
+<h3 id="writing-a-check">Writing a check<a class="headerlink" href="#writing-a-check" title="Permanent link">&para;</a></h3>
+<p>Put <code>test_*.py</code> files in <code>checks/</code>. They are ordinary pytest tests, and these fixtures are
+available (session-wide unless noted):</p>
+<table>
+<thead>
+<tr>
+<th>Fixture</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>project</code></td>
+<td>The <code>pcbkit.project.Project</code>: <code>root</code>, <code>config</code>, <code>kicad_dir</code>, <code>out_dir</code>.</td>
+</tr>
+<tr>
+<td><code>specs</code>, <code>circuits</code>, <code>layout</code></td>
+<td>Your <code>specs.py</code>, <code>circuits.py</code> and <code>layout.py</code>. <code>specs.NAME</code> returns the value, or fails the check with a message naming the missing name; <code>specs.get("NAME", default)</code> and <code>"NAME" in specs</code> ask without failing. Your folder is on <code>sys.path</code>, so <code>import specs</code> works too.</td>
+</tr>
+<tr>
+<td><code>nl</code></td>
+<td>The <code>pcbkit.check.netlist.Netlist</code> of a fresh kicad-cli export of the schematic (<code>parts</code>, <code>nets</code>, <code>net(ref, pin)</code>, <code>refs_on(net)</code>, <code>kind(ref)</code>, <code>by_kind(*kinds)</code>). Net names have no leading "/".</td>
+</tr>
+<tr>
+<td><code>board</code></td>
+<td>The routed board, loaded with pcbnew from <code>kicad/&lt;stem&gt;.kicad_pcb</code>.</td>
+</tr>
+<tr>
+<td><code>record</code> (per check)</td>
+<td><code>record(key, value)</code> keeps a number for <code>results.json</code> and the report.</td>
+</tr>
+<tr>
+<td><code>out_dir</code></td>
+<td><code>out/checks/</code>, made if it is not there.</td>
+</tr>
+</tbody>
+</table>
+<p>The engines the built-in checks are made of are yours to call: <code>pcbkit.check.dc</code> (a DC
+operating-point solver over the netlist: <code>build</code>, <code>Circuit</code>, <code>Solution</code>),
+<code>pcbkit.check.spice</code> (<code>run</code> and bench netlists for ngspice), <code>pcbkit.check.copper</code>
+(<code>NetCopper</code>, a current-flow solve over a net's real copper, and <code>ipc2221_rise</code>),
+<code>pcbkit.check.coupling</code>, <code>pcbkit.check.stitching</code> and <code>pcbkit.check.reserved</code> (copper
+in a region). <code>pcbkit.check.plugin.spec_params(metafunc, argnames, values, ids)</code> runs a
+check once per row of one of your tables:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.check.plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">spec_params</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">pytest_generate_tests</span><span class="p">(</span><span class="n">metafunc</span><span class="p">):</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="n">spec_params</span><span class="p">(</span><span class="n">metafunc</span><span class="p">,</span> <span class="s2">"ref"</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">specs</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">specs</span><span class="o">.</span><span class="n">PINOUT</span><span class="p">))</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_part_is_in_the_design</span><span class="p">(</span><span class="n">nl</span><span class="p">,</span> <span class="n">ref</span><span class="p">):</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>    <span class="k">assert</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">nl</span><span class="o">.</span><span class="n">parts</span>
+</code></pre></div>
+<p>Never loosen a check to make it pass, and show that it can fail: plant the mistake it is
+for (see <code>mutants.py</code>, or a test that builds a bad fixture and asserts it is caught).</p>
+<h3 id="built-in-groups-and-what-they-read">Built-in groups and what they read<a class="headerlink" href="#built-in-groups-and-what-they-read" title="Permanent link">&para;</a></h3>
+<p>Names are <code>specs.NAME</code> unless a <code>circuits.</code> prefix says otherwise. Tables say what a name
+holds; "optional" means a check does without it (or skips, naming why).</p>
+<p><strong><code>kicad</code></strong> reads nothing: <code>test_erc_clean</code> and <code>test_drc_clean_with_schematic_parity</code> run
+kicad-cli on <code>kicad/&lt;stem&gt;.kicad_sch</code> and <code>.kicad_pcb</code>.</p>
+<p><strong><code>outputs</code></strong> reads the files in <code>out/fab</code> (or <code>fab</code>) named after <code>[board] fab_name</code>, the
+stackup from pcbkit.toml, and <code>layout.W</code> and <code>layout.H</code>. <code>test_gerber_set_complete</code>,
+<code>test_job_file_stackup</code>, <code>test_outline_size</code>, <code>test_drill_files_match_board</code>,
+<code>test_bom_matches_schematic</code> and <code>test_centroid_matches_board</code> parse the Gerbers, drill
+files, BOM and centroid back and compare them with the board and the schematic.
+<code>test_bom_complete</code> reads design.py and bom.py instead: it fails a fitted part a buyer
+cannot order (no part number, the stand-in <code>R()</code> makes up for a resistor, or a
+description with a space in it), judged after bom.py's overrides.</p>
+<p><strong><code>fab</code></strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PCBWAY</code></td>
+<td>The fab house's limits in mm: <code>min_annular</code>, <code>min_drill</code>, <code>min_plated_slot</code>, <code>silk_min_height</code>, <code>silk_min_stroke</code>, <code>min_track_2oz</code>, <code>min_space_2oz</code>.</td>
+</tr>
+<tr>
+<td><code>WIRE_PADS</code></td>
+<td><code>{ref: (positive pad, negative pad)}</code> for bare pads that take a wire; each needs a "+" and a "-" on the silkscreen nearer its own pad. <code>{}</code> for none.</td>
+</tr>
+<tr>
+<td><code>DECOUPLING</code></td>
+<td>Rows <code>(ic, pin, (capacitor refs), limit mm)</code>: a listed capacitor must have a pad that close to the pin.</td>
+</tr>
+<tr>
+<td><code>POWER_FOOTPRINTS</code></td>
+<td>One dict per part whose pads must match its datasheet: a <code>ref</code>, and any of <code>tab_pad</code> (the largest pad is this one) with <code>tab_net</code>, <code>smaller</code> (pairs <code>(small pad, large pad)</code>) and <code>drill_mm</code> (<code>{pad: drill}</code>).</td>
+</tr>
+<tr>
+<td><code>I2C_BUSES</code></td>
+<td><code>{bus: (sda net, scl net, speed Hz, off-board devices)}</code>, devices as <code>(name, 7-bit address, pin capacitance pF)</code> (the rise-time model counts every device at <code>I2C_PIN_C</code>; the third value is kept for your own reference).</td>
+</tr>
+<tr>
+<td><code>I2C_TR_MAX</code>, <code>I2C_PIN_C</code>, <code>TRACE_C_PER_MM</code>, <code>I2C_CABLE_LEN</code>, <code>I2C_CABLE_C_PER_M</code></td>
+<td>The I2C rise-time model: limit per speed (s), capacitance per device pin and per mm of trace (F), cable length (m) and its capacitance per metre (F).</td>
+</tr>
+<tr>
+<td><code>I2C_PULLUP_NET</code>, <code>I2C_DEVICE_PREFIXES</code></td>
+<td>Optional: the pull-up rail (default <code>"+3V3"</code>) and the reference prefixes that count as devices on a bus (default <code>"UA"</code>).</td>
+</tr>
+<tr>
+<td><code>ASSEMBLY_TEXT_EXEMPT</code></td>
+<td>Optional: references whose pin labels may sit over their own through-hole pins on the assembly drawing.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>copper</code></strong> (the copper thickness is <code>[stackup] copper_mm</code>, the board thickness
+<code>[stackup] thickness_mm</code>, the stitching pitch <code>[stitch] pitch_mm</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RESERVED_COPPER</code></td>
+<td>Rows <code>(name, layer, x0, y0, x1, y1, allowed nets)</code>: a region (layout mm, layer "top" or "bottom") only the nets named, spelled as KiCad does ("/GND"), may put copper in. Add the keep-out to <code>routing.py</code> too: the router only keeps clear of a region it is told about.</td>
+</tr>
+<tr>
+<td><code>COUPLING</code></td>
+<td>Sensitive signals beside high-current or switching copper (the basis is in <code>pcbkit/check/coupling.py</code>): <code>classes</code> (class to (noise budget V, victim source ohm, dI/dt A/s)), <code>sensitive</code> (class to nets), <code>aggressors</code> (name to <code>{"nets": [...], "kind": "bar"/"current"/"switch", "region": (x0, y0, x1, y1)}</code>), any physical constant to change (<code>c_per_mm</code>, <code>dv_dt</code>, <code>dv_sw</code>, <code>cn_default</code>, <code>cn_net</code>, <code>bar_min_w</code>, <code>bar_w_cap</code>, <code>res</code>), and optional <code>filters</code>: <code>{net: {"t_edge": s, "pin_ref": ref, "max_mm": mm}}</code> for a node with an RC filter whose capacitor must sit near its pin.</td>
+</tr>
+<tr>
+<td><code>SENSE_LOOPS</code></td>
+<td>Optional: measurement pairs judged by the area they enclose: dicts with <code>name</code>, <code>nets</code> (the pair), <code>from_ref</code>, <code>to_ref</code>, <code>to_pads</code> and <code>max_mm2</code>.</td>
+</tr>
+<tr>
+<td><code>COPPER_SEGMENTS</code>, <code>COPPER_BUDGETS</code></td>
+<td>The high-current copper: each segment has a <code>name</code>, a <code>net</code>, <code>terminals</code> as <code>(ref, pad, share[, role])</code> (the share of the test current that enters at that pad, negative for leaving; the last terminal is the 0 V reference) and <code>heating</code> (False for a segment judged on its voltage drop alone). <code>COPPER_BUDGETS</code>: <code>i_cont</code> (A, judged on the IPC-2221 rise), <code>i_peak</code> (A, judged on the drop), <code>segment_drop_max_v</code>, <code>max_rise_c</code>.</td>
+</tr>
+<tr>
+<td><code>SUPPLY_REGULATION</code></td>
+<td>Optional: what the farthest load loses to supply sag and ground lift: <code>supply</code> and <code>ground</code> (segment names), <code>label</code>, <code>nominal_v</code> and <code>max_fraction</code>; terminals with the role <code>"source"</code> and <code>"load"</code> say where.</td>
+</tr>
+<tr>
+<td><code>GROUND_NET</code>, <code>STITCH_BASIS</code></td>
+<td>Optional: the ground net (default <code>"GND"</code>), and <code>{"f_hz": ..., "er_fr4": ...}</code> for the stitching limit (default the top of the 2.4 GHz Wi-Fi band in FR4).</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>circuit</code></strong> (runs on the netlist and on <code>circuits.scenario</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PINOUT</code></td>
+<td><code>{ref: {pad: datasheet function}}</code>. Optional <code>PIN_ALIASES</code> maps the symbol's spelling to the datasheet's (<code>None</code>: an unnamed pin), and <code>ABSENT_REFS</code> <code>{ref: reason}</code> skips a part this revision does not carry. A part that is neither in the design nor listed compares nothing, with a warning.</td>
+</tr>
+<tr>
+<td><code>STRESS_SCENARIOS</code></td>
+<td>Keyword arguments of <code>circuits.scenario</code> for the operating points that stress parts hardest.</td>
+</tr>
+<tr>
+<td><code>RESISTOR_POWER_W</code></td>
+<td><code>{"default": watts, ref: watts}</code>: resistors must stay under half.</td>
+</tr>
+<tr>
+<td><code>CAP_VRATED</code></td>
+<td>Capacitor MPN to rated volts: capacitors must stay under 80 %.</td>
+</tr>
+<tr>
+<td><code>LED_REFS</code>, <code>LED_SCENARIO</code>, <code>LED_I_MIN</code>, <code>LED_I_MAX</code></td>
+<td>The LEDs (a name the scenario adds stands for an off-board one), the conditions, and the current window in amps.</td>
+</tr>
+<tr>
+<td><code>SUPPLY_SCENARIO</code>, <code>SUPPLY_PINS</code>, <code>SUPPLY_LIMITS</code></td>
+<td>Rows <code>(ref, pin, (min V, max V))</code> for supply pins, and rows <code>(what, value, "&lt;=" or "&lt;", limit)</code> (or a function of the netlist that returns one) for the limits a design range must fit inside.</td>
+</tr>
+<tr>
+<td><code>I2C_BUSES</code>, <code>I2C_IOL</code></td>
+<td>As in <code>fab</code>, and the sink current per speed (A). Optional <code>I2C_PULLUP_NET</code> and <code>I2C_VDD</code> (default 3.3).</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>esp32s3</code></strong> (a board that carries an ESP32-S3-DevKitC-1 in sockets; the chip's own
+facts, <code>RESERVED</code>, <code>UART0</code>, <code>ADC1</code>, <code>INPUT_ONLY</code>, <code>STRAPS</code>, <code>ESP32_VDD</code>, <code>ESP32_VIH</code>,
+<code>ESP32_VIL</code>, <code>ESP32_VOH_MIN</code>, <code>ESP32_PIN_ABS_MAX</code>, <code>ESP32_GPIO_SOURCE_MAX</code> and
+<code>ESP32_INTERNAL_PULL</code>, are defaults in <code>pcbkit/check/packs/esp32s3.py</code> that you may
+override):</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DEVKIT_REF</code>, <code>DEVKIT_GPIO</code></td>
+<td>The DevKit's reference, and <code>{header pin as your symbol numbers it: GPIO}</code>.</td>
+</tr>
+<tr>
+<td><code>ANALOG_NETS</code></td>
+<td>The nets that carry analogue inputs: they must be on ADC1.</td>
+</tr>
+<tr>
+<td><code>STRAP_SCENARIO</code>, <code>GPIO_SOURCE_SCENARIO</code></td>
+<td>Keyword arguments of <code>circuits.scenario</code> for judging the strapping pins at reset and the current each GPIO sources.</td>
+</tr>
+<tr>
+<td><code>GPIO_SCENARIOS</code></td>
+<td><code>{id: keyword arguments}</code>: no GPIO may exceed its absolute maximum in any of them.</td>
+</tr>
+<tr>
+<td><code>OPEN_DRAIN_NETS</code>, <code>RAIL_3V3</code></td>
+<td>Optional: nets exempt from the source-current check (default: the I2C lines of <code>I2C_BUSES</code>), and the 3.3 V rail the strapping pulls go to (default <code>"+3V3"</code>).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="circuitspy">circuits.py<a class="headerlink" href="#circuitspy" title="Permanent link">&para;</a></h3>
+<p>Functions the <code>circuit</code> and <code>esp32s3</code> checks call, and that your own checks may too:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scenario(nl, **kw)</code></td>
+<td>An unsolved <code>pcbkit.check.dc.Circuit</code> for one operating condition: start from <code>pcbkit.check.dc.build(nl)</code> (every resistor, LED, diode and FET of the netlist), hold the supplies with <code>fix</code>, add what the netlist cannot know (off-board loads, a driven pin) and return it. The checks call <code>.solve()</code>.</td>
+</tr>
+<tr>
+<td><code>i2c_devices(nl)</code></td>
+<td><code>(sda net, name, 7-bit address)</code> for each on-board I2C device, address pins read from the netlist.</td>
+</tr>
+</tbody>
+</table>
+<p>It also holds whatever SPICE decks your own checks build, with <code>pcbkit.check.spice.run</code>.</p>
+<h3 id="mutantspy">mutants.py<a class="headerlink" href="#mutantspy" title="Permanent link">&para;</a></h3>
+<p>A check that has never been seen to fail is not trusted. <code>mutants.py</code> lists planted
+mistakes the checks must catch:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">MUTANTS</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    <span class="p">(</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>        <span class="s2">"pull-up resistor missing"</span><span class="p">,</span>  <span class="c1"># what the mistake is</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>        <span class="p">[</span>  <span class="c1"># edits to design.py: (text to find, text to put there)</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>            <span class="p">(</span><span class="s1">'R("R7", "10k", "EN", "+3V3", B)'</span><span class="p">,</span> <span class="s1">'R("R7", "10k", "EN", "NC_X", B)'</span><span class="p">),</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>        <span class="p">],</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>        <span class="s2">"test_boot_state_is_safe"</span><span class="p">,</span>  <span class="c1"># the pytest -k expression that must then fail</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>    <span class="p">),</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="p">]</span>
+</code></pre></div>
+<p><code>pcbkit mutants</code> first runs the control: the checks every entry names, on an unedited
+scratch copy of the project, must all pass. Then each mistake is planted in <code>design.py</code> in
+a fresh scratch copy, the schematic is made again there, and the checks run (the same
+command as <code>pcbkit check</code>, so built-in and project checks are both in play). A mistake is
+caught when a check fails; it is missed when every check still passes or when the text to
+find is not in <code>design.py</code> (a stale entry is a miss, not a pass). The board layout is not
+regenerated, so a mutant tests the schematic, netlist and circuit checks; checks on the
+copper are shown to fail by planting the mistake in a test board. Exit codes: 0 all
+caught, 1 one missed, 2 the control did not pass. Other lists whose name ends in
+<code>_MUTANTS</code> are parked: counted, named, not run.</p>
+<h2 id="comparing-boards-and-taking-shots">Comparing boards and taking shots<a class="headerlink" href="#comparing-boards-and-taking-shots" title="Permanent link">&para;</a></h2>
+<p>Two commands for looking at boards rather than building them. <code>compare</code> needs pcbnew, so
+run it in the project's <code>.venv</code> (<code>pcbkit setup</code> makes it); <code>shots</code> needs only kicad-cli
+and rsvg-convert, so it runs anywhere.</p>
+<h3 id="pcbkit-compare">pcbkit compare<a class="headerlink" href="#pcbkit-compare" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>pcbkit compare OLD NEW [--json] [--piece-tol MM2] [--fill-tol MM2] [--top N]
+</code></pre></div>
+<p>Compares the routed copper of two board files and says what moved. It takes any two
+<code>.kicad_pcb</code> files, so it does not need a project: use it to check that a refactor, a new
+KiCad or a rebuilt route changed nothing, or to see what a re-route did.</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Measured as</th>
+<th>A difference when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tracks</td>
+<td>how many track segments (arcs included) and their total length</td>
+<td>the counts differ, or the lengths differ by more than 0.001 mm</td>
+</tr>
+<tr>
+<td>Vias</td>
+<td>how many vias</td>
+<td>the counts differ</td>
+</tr>
+<tr>
+<td>Zones</td>
+<td>each zone's filled area</td>
+<td>the fill moved by <code>--fill-tol</code> or more, or only one board has the zone</td>
+</tr>
+<tr>
+<td>Copper</td>
+<td>what F.Cu and B.Cu have on one board only, in pieces</td>
+<td>a piece is larger than <code>--piece-tol</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>A zone is matched across the boards by its net, its first layer and its outline area to
+  0.1 mm2. Zones that share all three are one entry, and a zone's fill is added up over
+  every layer it fills, so a pour that a router split into pieces still compares as one.
+  A keep-out area is an entry with no fill: one that only one board has is a difference
+  even though it moves no copper.</li>
+<li>The copper comparison turns each outer layer into polygons and subtracts each board's
+  from the other's. What is left on one board only is judged <strong>piece by piece</strong>, not as a
+  layer total: refilling a pour twice leaves a few hundredths of a square millimetre of
+  slivers, in pieces far smaller than any real change, and a layer total would call that a
+  difference. The totals are printed for information. A piece's area is the area inside
+  its outer outline, so a thin ring (a track made a little wider) counts as the whole area
+  it surrounds: that can over-report a change, never hide one.</li>
+<li>Only copper and its numbers are compared. Silkscreen, fab layers, footprint properties
+  and the 3D model do not count, so a board that differs only in a label matches.</li>
+<li>Positions are layout millimetres, so a piece reported at (15.0, 10.0) is where
+  <code>layout.py</code> coordinates would put it.</li>
+<li><code>--piece-tol</code> (default 0.01) and <code>--fill-tol</code> (default 0.5) are in mm2. <code>--top</code> (default
+  8) is how many pieces the text report lists for each layer and board; <code>--json</code> always
+  lists them all.</li>
+</ul>
+<p>The exit code says the result: <strong>0</strong> the boards match, <strong>1</strong> they differ, <strong>2</strong> a file is
+not a KiCad board (or could not be read), so a script can tell "different" from "could not
+compare". A machine where pcbnew does not import gets the message every command that needs
+pcbnew gives, with exit code 1.
+With <code>--json</code> the report is printed as JSON and nothing else goes to standard output:
+<code>identical</code>, <code>differences</code> (one sentence each), <code>tolerances</code>, <code>tracks</code>, <code>vias</code>, <code>zones</code> (a
+fill of <code>null</code> means the board has no such zone) and <code>copper</code> (for each layer and side:
+the total, the number of pieces and <code>over_tolerance</code>, each with its area and position).</p>
+<p>A change of one track, as the text report shows it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>pcbkit compare
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>  old  before.kicad_pcb
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>  new  after.kicad_pcb
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>  a copper piece over 0.01 mm2 is a difference, and so is a zone fill that moved by 0.5 mm2 or more
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>Tracks  old 2 (14.0 mm)  new 2 (14.0 mm)  same
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>Vias    old 1  new 1  same
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>Zone fill, mm2 (a zone is matched by net, first layer and outline area)
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>  net       layer  outline    old    new  change
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>  keep-out  F.Cu       6.0    0.0    0.0     0.0
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>  keep-out  F.Cu      18.0    0.0    0.0     0.0
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a>  /GND      B.Cu     570.4  543.0  543.0     0.0
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>Copper on one board only (the layer totals include slivers: they are for information)
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a>  F.Cu only in old: total 2.888 mm2 in 1 piece, 1 over 0.01 mm2  DIFFERENT
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a>          2.888 mm2 at (15.0, 10.0)
+<a id="__codelineno-18-18" name="__codelineno-18-18" href="#__codelineno-18-18"></a>  F.Cu only in new: total 3.135 mm2 in 1 piece, 1 over 0.01 mm2  DIFFERENT
+<a id="__codelineno-18-19" name="__codelineno-18-19" href="#__codelineno-18-19"></a>          3.135 mm2 at (15.0, 11.0)
+<a id="__codelineno-18-20" name="__codelineno-18-20" href="#__codelineno-18-20"></a>  B.Cu only in old: total 0.000 mm2 in 0 pieces, 0 over 0.01 mm2
+<a id="__codelineno-18-21" name="__codelineno-18-21" href="#__codelineno-18-21"></a>  B.Cu only in new: total 0.000 mm2 in 0 pieces, 0 over 0.01 mm2
+<a id="__codelineno-18-22" name="__codelineno-18-22" href="#__codelineno-18-22"></a>
+<a id="__codelineno-18-23" name="__codelineno-18-23" href="#__codelineno-18-23"></a>The boards differ: 2 differences.
+</code></pre></div>
+<h3 id="pcbkit-shots">pcbkit shots<a class="headerlink" href="#pcbkit-shots" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>pcbkit shots [--out DIR] [--pcb FILE] [--region NAME]... [--no-render]
+</code></pre></div>
+<p>Pictures of the board for a review, in the folder <code>out/shots/</code> (or <code>--out</code>): for each
+region an SVG and a PNG of it, and three 3D renders, <code>render_iso.png</code> (angled),
+<code>render_top.png</code> and <code>render_bottom.png</code>. It shoots the project's board,
+<code>kicad/&lt;stem&gt;.kicad_pcb</code>, or the one named by <code>--pcb</code>. <code>--region</code> takes only the regions
+named (repeat it for several); <code>--no-render</code> skips the renders, which take the longest.
+It needs kicad-cli, and rsvg-convert for the PNGs: without rsvg-convert it stops before
+doing anything and says how to install it.</p>
+<p>A region is one side of the board, cut to a box. The top view shows <code>F.Cu</code>, <code>F.SilkS</code>,
+<code>F.CrtYd</code>, <code>F.Fab</code> and <code>Edge.Cuts</code>, the bottom view the <code>B.</code> equivalents. The bottom view is
+not mirrored: a point has the same x on both sides. The colours are those of the PCB
+editor's colour theme, which is where kicad-cli takes them from. There are always two
+regions, <code>board_top</code> and <code>board_bottom</code>, the whole board at 1800 pixels wide. The project
+adds its own with <code>SHOTS</code> in layout.py.</p>
+<p>A box is read from the origin of the SVG that kicad-cli draws, which is the top-left corner
+of the bounding box of the board outline. That is layout (0, 0) when the outline starts
+there, as the default rectangle does. An outline whose bounding box starts somewhere else
+shifts every box by the same amount.</p>
+<h4 id="shots-in-layoutpy">SHOTS in layout.py<a class="headerlink" href="#shots-in-layoutpy" title="Permanent link">&para;</a></h4>
+<p>Optional. A dict of region name to <code>(side, x0, y0, x1, y1)</code>, with the box in layout
+millimetres (from the board's top-left corner, y down, as everywhere in layout.py):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">SHOTS</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    <span class="s2">"input"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"top"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="s2">"input_back"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"bottom"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>    <span class="s2">"regulator"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"top"</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">2400</span><span class="p">),</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>name</td>
+<td>The file name: <code>input.svg</code> and <code>input.png</code>. Letters, digits, <code>_</code>, <code>-</code> and <code>.</code>, starting with a letter, digit or <code>_</code>. A name starting <code>render_</code> is kept for the 3D renders. A region called <code>board_top</code> or <code>board_bottom</code> replaces the whole-board shot of that name.</td>
+</tr>
+<tr>
+<td>side</td>
+<td><code>"top"</code> or <code>"bottom"</code>.</td>
+</tr>
+<tr>
+<td>x0, y0, x1, y1</td>
+<td>The corners of the box, with <code>x0 &lt; x1</code> and <code>y0 &lt; y1</code>, in mm.</td>
+</tr>
+<tr>
+<td>width in pixels</td>
+<td>Optional sixth value, a whole number from 100 to 10000. The default is 1600; the height follows from the box.</td>
+</tr>
+</tbody>
+</table>
+<p>Every problem in <code>SHOTS</code> is reported together, naming layout.py and the region, and
+nothing is exported until it is right.</p>
+<h2 id="starting-a-board-pcbkit-new-and-pcbkit-setup">Starting a board: pcbkit new and pcbkit setup<a class="headerlink" href="#starting-a-board-pcbkit-new-and-pcbkit-setup" title="Permanent link">&para;</a></h2>
+<p>Two commands take you from nothing to a board that builds. <code>pcbkit new</code> makes the project
+folder from a template, and <code>pcbkit setup</code> makes the folder ready to run: it builds the
+project's own <code>.venv</code> on KiCad's Python and makes sure the router is there. Neither needs
+that <code>.venv</code> (<code>setup</code> is what makes it), so both run from any Python that has pcbkit,
+<code>uvx</code> included. Everything after them runs from the project's <code>.venv</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>pcbkit new my-board
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>cd my-board
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>pcbkit setup
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>.venv/bin/pcbkit build
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>.venv/bin/pcbkit route
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>.venv/bin/pcbkit promote
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>.venv/bin/pcbkit finalize
+<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>.venv/bin/pcbkit check
+<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>.venv/bin/pcbkit mutants
+</code></pre></div>
+<h3 id="pcbkit-new">pcbkit new<a class="headerlink" href="#pcbkit-new" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>pcbkit new NAME [--from blinky] [--pcbkit-source PATH]
+</code></pre></div>
+<p>Copies a template into the new folder <code>NAME</code> and names the board after it. <code>NAME</code> may be
+a path (<code>boards/my-board</code>): the board is named after the last part. The folder must not
+exist, or must be empty, and <code>new</code> never writes into one that holds anything. If it fails
+half way it takes out what it wrote.</p>
+<p>The name is split into words at hyphens, underscores, dots and spaces, and may use
+letters and digits besides those, because the stem and the fab name end up in file names.
+A name with anything else in it is refused, naming the characters.</p>
+<table>
+<thead>
+<tr>
+<th><code>NAME</code></th>
+<th><code>[board]</code> stem</th>
+<th><code>[board]</code> title</th>
+<th><code>[board]</code> fab_name</th>
+<th><code>[project]</code> name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>my-board</code></td>
+<td><code>my_board</code></td>
+<td><code>My Board</code></td>
+<td><code>My_Board_revA</code></td>
+<td><code>my-board</code></td>
+</tr>
+<tr>
+<td><code>ESP32-carrier</code></td>
+<td><code>esp32_carrier</code></td>
+<td><code>ESP32 Carrier</code></td>
+<td><code>ESP32_Carrier_revA</code></td>
+<td><code>esp32-carrier</code></td>
+</tr>
+<tr>
+<td><code>blinky2</code></td>
+<td><code>blinky2</code></td>
+<td><code>Blinky2</code></td>
+<td><code>Blinky2_revA</code></td>
+<td><code>blinky2</code></td>
+</tr>
+</tbody>
+</table>
+<p>What is written:</p>
+<ul>
+<li>The template's files. The three <code>[board]</code> values in <code>pcbkit.toml</code> are replaced; its
+  comments and every other key stay as they are. <code>rev</code> stays <code>"A"</code>.</li>
+<li><code>golden/</code>, the template's route, with <code>&lt;stem&gt;.ses</code> and <code>&lt;stem&gt;.dsn</code> renamed to the new
+  stem and the old stem replaced inside the three files (the session's design name, the
+  DSN's first line, the schematic file each footprint names). <code>pcbkit finalize</code> looks for
+  those names, so a board made by <code>new</code> can be finalized the moment it is built.</li>
+<li><code>pyproject.toml</code>, written for the board (below), and a <code>README.md</code> with the commands.</li>
+</ul>
+<p><code>--from</code> names the example to start from. <code>blinky</code> is the only one so far: see the end of
+this section.</p>
+<h4 id="the-projects-pyprojecttoml">The project's pyproject.toml<a class="headerlink" href="#the-projects-pyprojecttoml" title="Permanent link">&para;</a></h4>
+<p><code>pcbkit setup</code> makes the project's <code>.venv</code> from it. The project is not a package
+(<code>package = false</code>: <code>uv sync</code> installs its dependencies and nothing else), and it needs
+Python 3.9 or newer because KiCad's own Python is 3.9. <code>pytest</code> is in the list because
+<code>pcbkit check</code> runs your checks with it.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="k">[project]</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my-board"</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"0.1.0"</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"My Board: a PCB project made with pcbkit"</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=3.9"</span>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="w">    </span><span class="s2">"pcbkit @ git+https://github.com/bruk-io/pcbkit"</span><span class="p">,</span>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">    </span><span class="s2">"pytest&gt;=8"</span><span class="p">,</span>
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="p">]</span>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>
+<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="k">[tool.uv]</span>
+<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="n">package</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+</code></pre></div>
+<p>By default pcbkit comes from its git repository. To install it from your own copy of the
+repository instead (to work on pcbkit, or while it is not published), give the folder you
+cloned it into:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>pcbkit new my-board --pcbkit-source ~/src/pcbkit
+</code></pre></div>
+<p>or set <code>PCBKIT_SOURCE</code> to it, which every <code>new</code> then uses. The folder must be a pcbkit
+checkout (a <code>pyproject.toml</code> that names pcbkit, and a <code>pcbkit/</code> package), or <code>new</code> stops
+before writing anything. The dependency is then the bare name, and uv is told where it
+lives, as an editable path source, so a change you make to pcbkit shows up in the
+project at once:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a><span class="w">    </span><span class="s2">"pcbkit"</span><span class="p">,</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="w">    </span><span class="s2">"pytest&gt;=8"</span><span class="p">,</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="p">]</span>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="k">[tool.uv.sources]</span>
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="n">pcbkit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"/home/me/src/pcbkit"</span><span class="p">,</span><span class="w"> </span><span class="n">editable</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>The path is absolute, so it is only good on the machine that wrote it. Commit the
+default form, and keep the path form for yourself.</p>
+<h3 id="pcbkit-setup">pcbkit setup<a class="headerlink" href="#pcbkit-setup" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>pcbkit setup
+</code></pre></div>
+<p>Run it in a board project (the nearest folder at or above the current one that holds a
+<code>pcbkit.toml</code>, which must also hold a <code>pyproject.toml</code>): once after <code>pcbkit new</code>, and
+again after changing the dependencies. It does these things in order and says each one:</p>
+<ol>
+<li>Finds <code>uv</code> and KiCad's own Python, the interpreter that imports <code>pcbnew</code> (the
+   <code>KiCad Python</code> line of <code>pcbkit doctor</code>). KiCad 10 or newer is required.</li>
+<li>Makes <code>.venv</code> with <code>uv venv --python &lt;KiCad's Python&gt; --system-site-packages</code>. A <code>.venv</code>
+   that already imports <code>pcbnew</code> is kept (<code>uv venv</code> refuses to replace one, and running
+   <code>setup</code> again must do no harm); one that does not is made again. A <code>.venv</code> that is not
+   a virtual environment is never touched.</li>
+<li>Runs <code>uv sync --python &lt;KiCad's Python&gt;</code> to install the dependencies of
+   <code>pyproject.toml</code> into it. The interpreter is named again because a bare <code>uv sync</code>
+   rebuilds <code>.venv</code> on the Python that a <code>.python-version</code> file in the project folder
+   (or a <code>UV_PYTHON</code> variable) names, without the system site packages, and pcbnew cannot
+   be imported there. Run <code>pcbkit setup</code>, not a bare <code>uv sync</code>, to change dependencies.</li>
+<li>Checks that <code>.venv/bin/python</code> imports <code>pcbnew</code>. That is the point of all of it.</li>
+<li>Makes sure the Freerouting 1.9.0 jar is there (below).</li>
+<li>Looks for Java 17 or newer, which the router needs. A missing Java is reported with
+   how to install it and does not make <code>setup</code> fail.</li>
+</ol>
+<p>It ends by printing the commands to run next, as <code>.venv/bin/pcbkit ...</code>.</p>
+<p>Anything that goes wrong is a message that says what failed and what to do, not a
+traceback:</p>
+<table>
+<thead>
+<tr>
+<th>It says</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>uv is not installed</code></td>
+<td>Install uv (<code>brew install uv</code>).</td>
+</tr>
+<tr>
+<td><code>no Python that can import pcbnew was found</code></td>
+<td>Install KiCad 10 (<code>brew install --cask kicad</code>); the message lists each interpreter it tried and why it failed.</td>
+</tr>
+<tr>
+<td><code>pcbnew ... is older than the 10.0 pcbkit needs</code></td>
+<td>Update KiCad.</td>
+</tr>
+<tr>
+<td><code>pyproject.toml not found</code></td>
+<td>Add one that lists pcbkit and pytest as dependencies, or start the project again with <code>pcbkit new</code>.</td>
+</tr>
+<tr>
+<td><code>.venv exists and is not a virtual environment</code></td>
+<td>Move that folder or file away and run <code>setup</code> again.</td>
+</tr>
+<tr>
+<td><code>uv venv failed</code> or <code>uv sync failed</code></td>
+<td>Read uv's message above it. A dependency that cannot be found or built is the usual cause: check the network, and the dependencies and <code>[tool.uv.sources]</code> in <code>pyproject.toml</code>.</td>
+</tr>
+<tr>
+<td><code>pcbnew does not import in .venv</code></td>
+<td><code>uv sync</code> rebuilt <code>.venv</code> on another Python. Delete <code>.venv</code>, make sure no <code>.python-version</code> file or <code>UV_PYTHON</code> variable names a different Python, and run <code>setup</code> again.</td>
+</tr>
+<tr>
+<td><code>FREEROUTING_JAR=... does not exist</code></td>
+<td>Unset it, so that <code>setup</code> downloads Freerouting, or point it at the jar.</td>
+</tr>
+<tr>
+<td><code>... is not a valid jar</code></td>
+<td>The file is damaged (a download cut short): delete it, or point <code>FREEROUTING_JAR</code> at a good one.</td>
+</tr>
+<tr>
+<td><code>the Freerouting download was N bytes and should be 5044336</code></td>
+<td>The download was cut short or is not the right file; nothing was kept. Run <code>setup</code> again, or download the file by hand to the path the message gives.</td>
+</tr>
+<tr>
+<td><code>could not download Freerouting</code></td>
+<td>The network, or GitHub, failed; the message has the URL and where to save the file by hand.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="the-freerouting-jar">The Freerouting jar<a class="headerlink" href="#the-freerouting-jar" title="Permanent link">&para;</a></h4>
+<p><code>setup</code> uses a jar it finds, in this order: the file <code>FREEROUTING_JAR</code> names (when that
+is set it is the only place looked at, and a name that does not exist is an error, never
+a reason to download somewhere else), then <code>~/.local/share/pcbkit/freerouting-1.9.0.jar</code>,
+then <code>~/.local/share/freerouting/freerouting-1.9.0.jar</code>. A jar it finds must be a whole
+zip file.</p>
+<p>If there is none, <code>setup</code> downloads Freerouting 1.9.0 from its GitHub release
+(<code>https://github.com/freerouting/freerouting/releases/download/v1.9.0/freerouting-1.9.0.jar</code>)
+to <code>~/.local/share/pcbkit/freerouting-1.9.0.jar</code>. The bytes are written to a <code>.part</code> file
+first, and the jar is put in place only if it is exactly 5044336 bytes and a zip file; a
+short or damaged download is thrown away, so the folder never holds a half jar. A damaged
+jar in that folder is fetched again; a damaged one anywhere else is left for you to deal
+with.</p>
+<h3 id="the-blinky-example-and-the-template">The blinky example and the template<a class="headerlink" href="#the-blinky-example-and-the-template" title="Permanent link">&para;</a></h3>
+<p><code>examples/blinky</code> in the pcbkit repository is a real, tiny board: a 2-pin power connector
+(<code>VIN</code>, <code>GND</code>), a 330 ohm resistor and a green LED on a 30 x 20 mm two-layer board. It
+has every file a project needs, a <code>golden/</code> route made by <code>pcbkit route</code> and
+<code>pcbkit promote</code>, and two checks of its own (the LED's current across the supply range, and
+the resistor's power) with three planted mistakes in <code>mutants.py</code> that they must catch.
+<code>pcbkit check</code> runs 11 checks on it and all pass: ERC and DRC (<code>kicad</code>), the seven checks of
+<code>outputs</code>, and the two of its own. The <code>fab</code> group is not switched on, but <code>specs.py</code> holds
+what it reads; with <code>"fab"</code> added to <code>[checks] groups</code> there are 19 checks, 17 pass and two
+are skipped, the ones that read the tables blinky leaves empty (decoupling capacitors, I2C
+buses), because the board has no IC and no bus.</p>
+<p>The folder <code>pcbkit/templates/board</code>, which ships inside the package, is a copy of it:
+the example's files without what commands generate (<code>kicad/</code>, <code>out/</code>, <code>fab/</code>, <code>.venv/</code>)
+and without the <code>pyproject.toml</code> and <code>README.md</code> that <code>pcbkit new</code> writes for each board.
+A unit test compares the two folders and fails when they differ. After changing the
+example, bring the template up to date from a pcbkit checkout:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>uv run python examples/sync_template.py
+</code></pre></div>
+<p>and <code>--check</code> says whether they differ without changing anything. Change the example's
+route (<code>design.py</code> or <code>layout.py</code>) and the golden route has to be made again in the
+example (<code>route</code>, then <code>promote</code>), or <code>finalize</code> rebuilds the old board.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../concepts/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Concepts">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Concepts
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../routing-recipes/" class="md-footer__link md-footer__link--next" aria-label="Next: Routing recipes">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Routing recipes
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      pcbkit is licensed under AGPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.top", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

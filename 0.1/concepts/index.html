@@ -1,0 +1,1289 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="PCB as Python. Generate, route, check and export KiCad boards from code.">
+      
+      
+      
+        <link rel="canonical" href="https://bruk-io.github.io/pcbkit/0.1/concepts/">
+      
+      
+        <link rel="prev" href="../getting-started/">
+      
+      
+        <link rel="next" href="../project-interface/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Concepts - pcbkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#concepts" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pcbkit" class="md-header__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pcbkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Concepts
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pcbkit" class="md-nav__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pcbkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-board-is-a-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A board is a project
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The pipeline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#golden-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Golden routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks-specs-and-mutants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checks, specs and mutants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Checks, specs and mutants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mutants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mutants
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-two-tiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The two tiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generated-folders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generated folders
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board project interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Routing recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ordering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering boards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Claude plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-board-is-a-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A board is a project
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The pipeline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#golden-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Golden routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks-specs-and-mutants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checks, specs and mutants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Checks, specs and mutants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mutants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mutants
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-two-tiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The two tiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generated-folders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generated folders
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="concepts">Concepts<a class="headerlink" href="#concepts" title="Permanent link">&para;</a></h1>
+<p>pcbkit is a pipeline of small stages that hand files to each other. The
+<a href="../project-interface/">board project interface</a> is the reference for every file and key;
+this page explains how the pieces fit, and links there for the details.</p>
+<h2 id="a-board-is-a-project">A board is a project<a class="headerlink" href="#a-board-is-a-project" title="Permanent link">&para;</a></h2>
+<p>A board project is a folder with a <code>pcbkit.toml</code>. Every command finds it from the current
+folder upwards. These are the files you write:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it says</th>
+<th>Reference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pcbkit.toml</code></td>
+<td>The board's names and revision, the stackup, the router and stitching settings, the fab profile, and which check groups run.</td>
+<td><a href="../project-interface/#pcbkittoml">pcbkit.toml</a></td>
+</tr>
+<tr>
+<td><code>design.py</code></td>
+<td>The circuit: every part, and the net on each of its pins.</td>
+<td><a href="../project-interface/#designpy">design.py</a></td>
+</tr>
+<tr>
+<td><code>layout.py</code></td>
+<td>The board's size, corners and mounting holes, and where each part sits.</td>
+<td><a href="../project-interface/#layoutpy">layout.py</a></td>
+</tr>
+<tr>
+<td><code>routing.py</code></td>
+<td>What routing needs from you: net classes, design rules, hand-made routes, keep-outs and the ground pours.</td>
+<td><a href="../project-interface/#routingpy">routing.py</a></td>
+</tr>
+<tr>
+<td><code>silk.py</code></td>
+<td>The silkscreen text: labels, polarity marks, the title block.</td>
+<td><a href="../project-interface/#silkpy">silk.py</a></td>
+</tr>
+<tr>
+<td><code>specs.py</code></td>
+<td>The numbers the checks read, such as datasheet limits.</td>
+<td><a href="../project-interface/#checks-specspy-circuitspy-checks-and-mutantspy">Checks</a></td>
+</tr>
+<tr>
+<td><code>checks/test_*.py</code></td>
+<td>Your own checks, written as pytest functions.</td>
+<td><a href="../project-interface/#writing-a-check">Writing a check</a></td>
+</tr>
+<tr>
+<td><code>mutants.py</code></td>
+<td>Planted mistakes that the checks must catch.</td>
+<td><a href="../project-interface/#mutantspy">mutants.py</a></td>
+</tr>
+</tbody>
+</table>
+<p>Three more are optional: <code>bom.py</code> (when the BOM should say something other than the
+schematic), <code>footprints.py</code> and <code>footprints/</code> (a symbol or footprint that KiCad does not
+have), and <code>circuits.py</code> (operating-point and SPICE helpers for the circuit checks).</p>
+<p>In <code>design.py</code>, two pins that name the same net are connected: pcbkit draws the schematic
+with a label on each pin and no wires. The board is built from the netlist that KiCad
+exports from that schematic, not from <code>design.py</code> directly, so the two cannot drift apart.
+Coordinates in <code>layout.py</code> and in the routing hooks are millimetres from the board's
+top-left corner, with y pointing down; pcbkit adds KiCad's page offset itself.</p>
+<h2 id="the-pipeline">The pipeline<a class="headerlink" href="#the-pipeline" title="Permanent link">&para;</a></h2>
+<p>Eight stages take the project from circuit to fab files. The second column says which
+command runs each one, and the last what you steer it with.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Run by</th>
+<th>What happens</th>
+<th>You steer it with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Schematic and ERC</td>
+<td><code>sch</code>, <code>build</code></td>
+<td>Draws the schematic from <code>design.py</code>, runs KiCad's ERC on it and exports the netlist.</td>
+<td><code>design.py</code></td>
+</tr>
+<tr>
+<td>2. Placement</td>
+<td><code>build</code></td>
+<td>Builds the board from the netlist: each footprint at its position, the outline, the mounting holes and the stackup.</td>
+<td><code>layout.py</code>, <code>[stackup]</code></td>
+</tr>
+<tr>
+<td>3. Pre-route</td>
+<td><code>route</code></td>
+<td>Applies the net classes and design rules, runs your <code>prerouted</code> and <code>keepouts</code> hooks (hand-made copper is locked, so the router goes round it), adds a keep-out strip along each board edge and exports the router's input.</td>
+<td><code>routing.py</code></td>
+</tr>
+<tr>
+<td>4. Freerouting</td>
+<td><code>route</code></td>
+<td>The autorouter completes what is left. It runs up to <code>[route] tries</code> times, and a run that never starts routing is killed after <code>stall_timeout_s</code>.</td>
+<td><code>[route]</code></td>
+</tr>
+<tr>
+<td>5. Post</td>
+<td><code>route</code>, <code>finalize</code></td>
+<td>Imports the router's result, runs your <code>gnd_links</code> and <code>zones</code> hooks, fills the pours, stitches the ground layers together with vias, and takes out vias that carry copper on one layer only and tracks that end nowhere.</td>
+<td><code>routing.py</code>, <code>[stitch]</code></td>
+</tr>
+<tr>
+<td>6. Silkscreen</td>
+<td><code>route</code>, <code>finalize</code></td>
+<td>Adds your labels, a reference designator for every part, the assembly drawing text and the title block.</td>
+<td><code>silk.py</code></td>
+</tr>
+<tr>
+<td>7. DRC</td>
+<td><code>route</code>, <code>promote</code>, <code>finalize</code></td>
+<td>KiCad's design rule check, with schematic parity: the board must match the schematic as well as obey the rules.</td>
+<td>the rules in <code>routing.py</code></td>
+</tr>
+<tr>
+<td>8. Fab files</td>
+<td><code>finalize</code></td>
+<td>The Gerbers and drill files in a zip, the BOM, the pick-and-place file, PDFs and 3D renders.</td>
+<td><code>bom.py</code>, <code>[fab]</code></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>build      design.py -&gt; [1 schematic, ERC, netlist] -&gt; [2 placement]
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>route      [3 pre-route] -&gt; [4 router] -&gt; [5 post] -&gt; [6 silk] -&gt; [7 DRC]
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>promote    the routed board, if its DRC is clean -&gt; golden/
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>finalize   golden/ -&gt; [5 post] -&gt; [6 silk] -&gt; [7 DRC] -&gt; [8 fab files]
+</code></pre></div>
+<p><code>route</code> runs stage 3, then stages 4 and 5 with a DRC after each try, until a try comes out
+with no copper problem; it finishes with stages 6 and 7. <code>finalize</code> starts from <code>golden/</code>
+instead of the router: it runs stages 5 to 8, and stops without exporting anything if DRC
+finds a single problem.
+<a href="../project-interface/#the-commands-that-run-these-hooks">The commands that run these hooks</a>
+has the details of both, and the files each stage hands to the next.</p>
+<h2 id="golden-routes">Golden routes<a class="headerlink" href="#golden-routes" title="Permanent link">&para;</a></h2>
+<p>Freerouting does not promise the same board for the same input. On one Mac a run once left
+a net unrouted and the next run completed it. So a fresh route is a new layout, and you
+should look at it before you order boards made from it.</p>
+<p><code>pcbkit promote</code> is how you say "this one". It runs DRC on the routed board, refuses unless
+there is nothing to report, and copies three files into <code>golden/</code>: the placed board with
+your hand-made routes (<code>prerouted.kicad_pcb</code>), the router's result (<code>&lt;stem&gt;.ses</code>) and its
+input (<code>&lt;stem&gt;.dsn</code>). <code>pcbkit finalize</code> rebuilds the board from those, with no router, so
+the fab files always come from a route you accepted. <code>golden/</code> is part of your project:
+commit it.</p>
+<p>When you change the circuit or the layout, you do not have to lose that route. <code>pcbkit
+route --eco golden</code> copies the golden route's copper onto the new board and locks it,
+except where it clashes with what changed, and lets Freerouting complete the rest. If the
+router stalls, <code>route</code> routes the whole board instead and says so. Use a plain <code>route</code> when
+the placement really changed: it is a new layout, so review it again. Either way, <code>promote</code>
+and <code>finalize</code> follow.</p>
+<p><code>finalize</code> runs DRC with schematic parity on what it rebuilt, so a golden route that has
+fallen out of step with the schematic, after a part's value changed for instance, stops it
+before anything is exported (see
+<a href="../getting-started/#if-you-skip-a-step">Getting started</a>). To see what a re-route moved,
+keep a copy of the old <code>kicad/&lt;stem&gt;.kicad_pcb</code> and run <code>pcbkit compare OLD NEW</code>
+(<a href="../project-interface/#comparing-boards-and-taking-shots">comparing boards</a>).</p>
+<h2 id="checks-specs-and-mutants">Checks, specs and mutants<a class="headerlink" href="#checks-specs-and-mutants" title="Permanent link">&para;</a></h2>
+<p><code>pcbkit check</code> runs two kinds of check with pytest, in one run: the built-in checks of the
+groups listed in <code>[checks] groups</code>, and your own, the <code>test_*.py</code> files in <code>checks/</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>What it judges</th>
+<th>Reads</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kicad</code> (on by default)</td>
+<td>ERC on the schematic, and DRC with schematic parity.</td>
+<td>nothing</td>
+</tr>
+<tr>
+<td><code>outputs</code> (on by default)</td>
+<td>The Gerbers, drill files, BOM and pick-and-place file, read back and compared with the board and the schematic; and that every fitted part has a part number a buyer can order.</td>
+<td>the fab files, <code>pcbkit.toml</code>, <code>layout.py</code>; <code>design.py</code> and <code>bom.py</code> for the part numbers</td>
+</tr>
+<tr>
+<td><code>fab</code></td>
+<td>The fab house's limits, polarity marks on wire pads, decoupling capacitors close to their pins, the rise time of an I2C bus.</td>
+<td><code>specs.py</code></td>
+</tr>
+<tr>
+<td><code>copper</code></td>
+<td>Regions reserved for some nets, ground stitching, coupling into sensitive traces, the current and voltage drop of the heavy copper.</td>
+<td><code>specs.py</code></td>
+</tr>
+<tr>
+<td><code>circuit</code></td>
+<td>Operating points solved from the netlist: pins against the datasheet, LED currents, resistor power, capacitor voltage, supply pins.</td>
+<td><code>specs.py</code>, <code>circuits.py</code></td>
+</tr>
+<tr>
+<td><code>esp32s3</code></td>
+<td>Pin rules for a board that carries an ESP32-S3 DevKit: strapping pins, analogue inputs, the current each GPIO sources.</td>
+<td><code>specs.py</code></td>
+</tr>
+</tbody>
+</table>
+<p>What each group reads, name by name, is in
+<a href="../project-interface/#built-in-groups-and-what-they-read">Built-in groups</a>.</p>
+<p><code>specs.py</code> is where the numbers live: a datasheet limit, a design range, the fab house's
+minimums. Write each one's source in a comment next to it, as blinky's <code>specs.py</code> does. A
+group that you switch on but give no number to does not skip: its check fails and names
+the missing name and the file, so a check cannot go quiet because nobody wrote down what
+it should hold the board to.</p>
+<p>Your own checks are ordinary pytest functions that ask for fixtures: <code>nl</code> (the netlist),
+<code>board</code> (the routed board), <code>specs</code>, <code>record</code>. The blinky example has two, in
+<code>checks/test_indicator.py</code>
+(<a href="https://github.com/bruk-io/pcbkit/blob/main/examples/blinky/checks/test_indicator.py">source</a>).
+<a href="../writing-checks/">Writing checks</a> shows how to write your own.</p>
+<p>A run leaves <code>out/checks/results.json</code>, and <code>pcbkit report</code> turns it into
+<code>out/checks/VALIDATION.md</code>. A run with <code>-k</code> leaves a partial result, marked as such, which
+the order skill in the <a href="../claude-plugin/">Claude plugin</a> refuses.</p>
+<h3 id="mutants">Mutants<a class="headerlink" href="#mutants" title="Permanent link">&para;</a></h3>
+<p>A check that has never been seen to fail is not trusted. A check that is always green may
+be checking nothing: a net name with a typo, a limit that is far too loose, a table that
+came out empty. So every hazard gets a planted mistake, and you watch the check fail on it.</p>
+<p><code>mutants.py</code> lists mistakes as edits to <code>design.py</code>: what is wrong, the text to find and
+its replacement, and the check that must then fail. <code>pcbkit mutants</code> first runs a control,
+the same checks on an unedited scratch copy of the project, which must pass. Then it plants
+each mistake in a fresh scratch copy, rebuilds the schematic there and runs the checks. A
+mistake is <strong>caught</strong> when a check fails, and <strong>missed</strong> when every check still passes, or
+when the text to find is not in <code>design.py</code>: a stale entry counts as a miss. The exit code
+is 0 when every mistake is caught, 1 when one is missed and 2 when the control fails.</p>
+<p>Mutants edit <code>design.py</code> only, so they prove the checks that read the netlist. A check on
+the copper or the layout is proven another way: a test that builds a bad board and asserts
+that the check fails on it.</p>
+<p>A failing check is information. Never loosen a limit, skip a check or delete it to get a
+green run: fix the design, or change the limit and write down the source for the new
+number.</p>
+<h2 id="the-two-tiers">The two tiers<a class="headerlink" href="#the-two-tiers" title="Permanent link">&para;</a></h2>
+<p>KiCad's <code>pcbnew</code> Python module is how pcbkit reads and edits a board: it moves tracks,
+fills pours and runs the design rules. It only imports under the Python that ships inside
+KiCad (3.9 in KiCad 10 on macOS), so it cannot be imported from whichever Python you
+installed pcbkit with. That is why pcbkit runs on Python 3.9 and newer, and why its
+commands come in two tiers:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Tier 1</th>
+<th>Tier 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Commands</td>
+<td><code>new</code>, <code>doctor</code>, <code>setup</code>, <code>sch</code>, <code>report</code>, <code>quote</code>, <code>shots</code></td>
+<td><code>build</code>, <code>route</code>, <code>promote</code>, <code>finalize</code>, <code>check</code>, <code>mutants</code>, <code>compare</code></td>
+</tr>
+<tr>
+<td>Imports <code>pcbnew</code></td>
+<td>no</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Runs in</td>
+<td>any Python that has pcbkit: <code>uvx</code>, <code>uv tool install</code>, a virtual environment</td>
+<td>the board project's own <code>.venv</code>, as <code>.venv/bin/pcbkit</code></td>
+</tr>
+<tr>
+<td>Also needs</td>
+<td><code>sch</code> and <code>shots</code> call <code>kicad-cli</code>; <code>shots</code> also needs <code>rsvg-convert</code></td>
+<td><code>kicad-cli</code>, and <code>rsvg-convert</code> for <code>finalize</code>; <code>route</code> also needs Java and Freerouting</td>
+</tr>
+</tbody>
+</table>
+<p><code>pcbkit setup</code> joins the two. It builds <code>.venv</code> on KiCad's own Python with
+<code>--system-site-packages</code>, installs the project's dependencies (pcbkit and pytest) into it,
+and checks that <code>import pcbnew</code> works there. From then on you run tier 2 commands as
+<code>.venv/bin/pcbkit</code>; you never activate the environment. Run one anywhere else and it stops
+at once, with a message instead of a traceback:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Error: pcbnew isn't importable here. In the board project, run: pcbkit setup
+</code></pre></div>
+<p>If you change the project's dependencies, run <code>pcbkit setup</code> again rather than a bare <code>uv
+sync</code>, which can rebuild <code>.venv</code> on a Python that cannot import <code>pcbnew</code>.</p>
+<h2 id="generated-folders">Generated folders<a class="headerlink" href="#generated-folders" title="Permanent link">&para;</a></h2>
+<p>pcbkit writes three folders and treats a fourth as generated too. Never edit them by hand:
+the next command that writes them overwrites your edit, and so does a save from KiCad's GUI.
+Change the Python instead.</p>
+<table>
+<thead>
+<tr>
+<th>Folder</th>
+<th>What is in it</th>
+<th>Written by</th>
+<th>In git</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kicad/</code></td>
+<td>The schematic, netlist, placed and routed boards, the ERC and DRC reports, the router's files.</td>
+<td><code>sch</code>, <code>build</code>, <code>route</code>, <code>promote</code>, <code>finalize</code></td>
+<td>No: <code>.gitignore</code> leaves it out.</td>
+</tr>
+<tr>
+<td><code>out/</code></td>
+<td><code>out/fab/</code> (what you send to the fab house), <code>out/docs/</code> (PDFs and renders), <code>out/checks/</code>, <code>out/shots/</code>.</td>
+<td><code>finalize</code>, <code>check</code>, <code>report</code>, <code>shots</code></td>
+<td>No.</td>
+</tr>
+<tr>
+<td><code>golden/</code></td>
+<td>The route you accepted.</td>
+<td><code>promote</code></td>
+<td>Yes: <code>finalize</code> needs it.</td>
+</tr>
+<tr>
+<td><code>fab/</code></td>
+<td>Not written by any pcbkit command. If it exists, <code>quote</code> and the <code>outputs</code> checks read it when <code>out/fab/</code> is not there.</td>
+<td>you</td>
+<td>Your choice.</td>
+</tr>
+</tbody>
+</table>
+<p>pcbkit never deletes a file that it no longer makes. When <code>kicad/</code> has gone stale, delete
+the folder and run <code>pcbkit build</code>: <code>golden/</code> keeps the route. Opening the files in KiCad to
+look at them is fine. The guard hooks of the <a href="../claude-plugin/">Claude plugin</a> stop Claude
+Code from editing these folders, though they cannot see a shell command that does.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../getting-started/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Getting started">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Getting started
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../project-interface/" class="md-footer__link md-footer__link--next" aria-label="Next: Board project interface">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Board project interface
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      pcbkit is licensed under AGPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.top", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

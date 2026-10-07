@@ -1,0 +1,1279 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="PCB as Python. Generate, route, check and export KiCad boards from code.">
+      
+      
+      
+        <link rel="canonical" href="https://bruk-io.github.io/pcbkit/0.1/writing-checks/">
+      
+      
+        <link rel="prev" href="../routing-recipes/">
+      
+      
+        <link rel="next" href="../ordering/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Writing checks - pcbkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#writing-checks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pcbkit" class="md-header__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pcbkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Writing checks
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pcbkit" class="md-nav__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pcbkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board project interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Routing recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing checks
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-things-go" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where things go
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixtures
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#specspy-numbers-with-their-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs.py: numbers with their sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-a-check-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a check fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prove-a-check-can-fail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prove a check can fail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example-the-leds-current-in-blinky" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worked example: the LED's current in blinky
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ordering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering boards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Claude plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-things-go" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where things go
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixtures
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#specspy-numbers-with-their-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs.py: numbers with their sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-a-check-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a check fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prove-a-check-can-fail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prove a check can fail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example-the-leds-current-in-blinky" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worked example: the LED's current in blinky
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="writing-checks">Writing checks<a class="headerlink" href="#writing-checks" title="Permanent link">&para;</a></h1>
+<p>A check is a pytest function that fails when the board breaks a rule. pcbkit ships checks
+of its own (ERC and DRC, the fab files, PCBWay's limits, copper, circuit rules) and runs
+yours in the same pass, so one <code>pcbkit check</code> says whether the board is fit to order. This
+page is about writing yours, and about the habit that makes a check worth having: watch it
+fail before you trust it.</p>
+<p>The file formats are in the <a href="../project-interface/">project interface</a>. This page shows how
+they fit together, using the blinky example (<code>examples/blinky/</code> in the pcbkit repository: a
+connector, a resistor and an LED).</p>
+<h2 id="where-things-go">Where things go<a class="headerlink" href="#where-things-go" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>checks/test_*.py</code></td>
+<td>Your checks: ordinary pytest functions. Nothing to register.</td>
+</tr>
+<tr>
+<td><code>specs.py</code></td>
+<td>The numbers they read: datasheet values and design limits, each with its source.</td>
+</tr>
+<tr>
+<td><code>mutants.py</code></td>
+<td>Planted mistakes that show each check can fail.</td>
+</tr>
+<tr>
+<td><code>circuits.py</code></td>
+<td>Optional: operating points for the circuit checks.</td>
+</tr>
+</tbody>
+</table>
+<p><code>pcbkit check</code> runs the built-in checks of the groups in <code>[checks] groups</code>, then every
+<code>test_*.py</code> under <code>checks/</code>. The smallest check:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_j1_carries_vin</span><span class="p">(</span><span class="n">nl</span><span class="p">):</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">assert</span> <span class="n">nl</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="s2">"J1"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"VIN"</span><span class="p">,</span> <span class="s2">"J1 pin 1 should be on VIN"</span>
+</code></pre></div>
+<p>pytest hands <code>nl</code> to the function because the argument has that name: it is a fixture.</p>
+<p>Before you write a check, see whether a built-in one already covers the hazard. This lists
+them (a file's name gives its group, and a group reads its numbers from <code>specs.py</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grep -n '^def test_' "$(.venv/bin/python -c 'import pcbkit.check.builtin as m; print(m.__path__[0])')"/*.py
+</code></pre></div>
+<p>If one fits, switch its group on in <code>pcbkit.toml</code> and fill in the numbers it reads
+(<a href="../project-interface/#built-in-groups-and-what-they-read">Built-in groups and what they read</a>
+lists them) instead of writing a second check for the same thing.</p>
+<h2 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h2>
+<p>These come from pcbkit's check plugin. Run checks with <code>pcbkit check</code>, not plain <code>pytest</code>:
+only <code>pcbkit check</code> loads the plugin.</p>
+<table>
+<thead>
+<tr>
+<th>Fixture</th>
+<th>What you get</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nl</code></td>
+<td>The netlist of a fresh export of the schematic: <code>nl.parts</code>, <code>nl.nets</code>, <code>nl.net(ref, pin)</code>, <code>nl.refs_on(net)</code>, <code>nl.kind(ref)</code>, <code>nl.by_kind("Device:R", ...)</code>. Net names have no leading <code>/</code>.</td>
+</tr>
+<tr>
+<td><code>board</code></td>
+<td>The routed board, loaded with pcbnew from <code>kicad/&lt;stem&gt;.kicad_pcb</code>.</td>
+</tr>
+<tr>
+<td><code>specs</code>, <code>circuits</code>, <code>layout</code></td>
+<td>Your <code>specs.py</code>, <code>circuits.py</code> and <code>layout.py</code>.</td>
+</tr>
+<tr>
+<td><code>project</code></td>
+<td>The project: <code>root</code>, <code>config</code>, <code>kicad_dir</code>, <code>out_dir</code>.</td>
+</tr>
+<tr>
+<td><code>record</code></td>
+<td><code>record(key, value)</code> keeps a number for <code>results.json</code> and the report.</td>
+</tr>
+<tr>
+<td><code>out_dir</code></td>
+<td><code>out/checks/</code>, where plots go.</td>
+</tr>
+</tbody>
+</table>
+<p>All of them last for the whole run except <code>record</code>, which belongs to one check. Two things
+to know:</p>
+<ul>
+<li><code>nl</code> is read from the schematic that <code>pcbkit sch</code> (or <code>build</code>) last wrote, not from
+  <code>design.py</code>. After you change <code>design.py</code>, run <code>pcbkit sch</code> before <code>pcbkit check</code>.</li>
+<li><code>board</code> is the finished board, so use it after <code>route</code> or <code>finalize</code>. A position you read
+  from it is in KiCad's file coordinates, which are layout millimetres plus (50, 50):
+  <code>pcbkit.kicad.board.to_local(pad.GetPosition())</code> gives layout millimetres.</li>
+</ul>
+<p>A check on copper reads <code>board</code>. This one fails if the router made any VIN track narrower
+than the net class in <code>routing.py</code> asks for. With <code>VIN_TRACK_MM = 0.4</code> in <code>specs.py</code>
+(blinky's <code>Supply</code> net class routes VIN at 0.4 mm) it passes on blinky's board:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_vin_tracks_keep_their_class_width</span><span class="p">(</span><span class="n">board</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">record</span><span class="p">):</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">pcbnew</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">widths</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="n">pcbnew</span><span class="o">.</span><span class="n">ToMM</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">GetWidth</span><span class="p">())</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">board</span><span class="o">.</span><span class="n">GetTracks</span><span class="p">()</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">GetClass</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"PCB_TRACK"</span> <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">GetNetname</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"/VIN"</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="p">]</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="k">assert</span> <span class="n">widths</span><span class="p">,</span> <span class="s2">"VIN has no track on the board: route it first"</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">record</span><span class="p">(</span><span class="s2">"VIN track widths (mm)"</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">widths</span><span class="p">)))</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="k">assert</span> <span class="nb">min</span><span class="p">(</span><span class="n">widths</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">specs</span><span class="o">.</span><span class="n">VIN_TRACK_MM</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"VIN has a </span><span class="si">{</span><span class="nb">min</span><span class="p">(</span><span class="n">widths</span><span class="p">)</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> mm track"</span>
+</code></pre></div>
+<p>Net names read from the board keep KiCad's leading <code>/</code>, as in <code>"/VIN"</code>.</p>
+<p>To run a check once per row of a table in <code>specs.py</code>, use <code>spec_params</code> from
+<code>pcbkit.check.plugin</code>; <a href="../project-interface/#writing-a-check">Writing a check</a> has an
+example. A table that is missing then fails the check by name instead of making it vanish
+from the run.</p>
+<h2 id="specspy-numbers-with-their-sources">specs.py: numbers with their sources<a class="headerlink" href="#specspy-numbers-with-their-sources" title="Permanent link">&para;</a></h2>
+<p><code>specs.py</code> is plain Python: names and values. Put each limit there with its source beside
+it (the datasheet, the page, the date you read it), so a reader can tell a limit from a
+guess. A limit you made up is worse than none, because it looks like evidence. This is the
+LED's block from blinky:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Kingbright APT1608SGC, datasheet DSAD0932 rev V.22B (2023-12-07), page 2.</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># Forward voltage at 20 mA: 2.2 V typical, 2.5 V maximum. It gives no minimum, so the</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># lowest voltage is the typical one less the +-0.1 V of the measurement and the 0.12 V</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># the voltage falls by at 85 C (-2.0 mV/C), rounded down. A lower voltage means more</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># current, so this is the safe end for the brightest case.</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">LED_VF_MAX</span> <span class="o">=</span> <span class="mf">2.5</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">LED_VF_MIN</span> <span class="o">=</span> <span class="mf">1.9</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Absolute maximum DC current is 25 mA, and the permitted current falls as the air</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># warms (page 3): 20 mA, the datasheet's test current, leaves room for a warm room.</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">LED_I_MAX</span> <span class="o">=</span> <span class="mf">0.020</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="c1"># The dimmest current that still reads as lit (the LED is 12 mcd typical at 20 mA).</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">LED_I_MIN</span> <span class="o">=</span> <span class="mf">0.001</span>
+</code></pre></div>
+<p>In a check, <code>specs.LED_I_MAX</code> returns the value. A name that is not defined fails the check
+and says which file and name are missing:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>E   pcbkit.check.plugin.MissingSpec: specs.LED_I_MAX is not defined in /path/to/blinky/specs.py: add it (docs/project-interface.md says what each check group reads)
+</code></pre></div>
+<p><code>specs.get("NAME", default)</code> and <code>"NAME" in specs</code> ask without failing. The built-in groups
+read <code>specs.py</code> the same way: a group you switch on whose names are missing does not skip,
+it fails, naming each one.</p>
+<h2 id="running-checks">Running checks<a class="headerlink" href="#running-checks" title="Permanent link">&para;</a></h2>
+<p><code>check</code> and <code>mutants</code> need pcbnew, so run them from the project's own <code>.venv</code>, which
+<code>pcbkit setup</code> makes. <code>report</code> only reads a file and runs anywhere.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>.venv/bin/pcbkit check                              # the built-in groups you switched on, then checks/
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>.venv/bin/pcbkit check -k test_led_current_window   # only the checks that match
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>pcbkit report                                       # write out/checks/VALIDATION.md
+</code></pre></div>
+<p><code>-k</code> is pytest's own expression (<code>-k led</code>, <code>-k "led or resistor"</code>, <code>-k "not drc"</code>). The
+exit code is pytest's: 0 all passed, 1 a check failed, 5 nothing matched.</p>
+<p>Every run writes <code>out/checks/results.json</code>: one entry per check with its outcome, the
+message of a failure or the reason for a skip, and the numbers it recorded. <code>pcbkit report</code>
+turns it into <code>out/checks/VALIDATION.md</code>, a table per group and per file of checks. It
+lists what the last run ran and nothing more, and it exits 1 if a check failed.</p>
+<p>A <code>-k</code> run replaces the results with the few checks it ran, and says so in the file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">"selection"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"keyword"</span><span class="p">:</span><span class="w"> </span><span class="s2">"test_led_current_window"</span><span class="p">,</span><span class="w"> </span><span class="nt">"markexpr"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">,</span><span class="w"> </span><span class="nt">"deselected"</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="nt">"complete"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">}</span>
+</code></pre></div>
+<p>Treat those results as partial. <code>pcbkit report</code> says so under the counts of the report it
+writes from them, and the order preflight refuses results with <code>complete: false</code>
+(<a href="../ordering/">ordering</a>). Run <code>pcbkit check</code> with no <code>-k</code> before you order.</p>
+<h3 id="when-a-check-fails">When a check fails<a class="headerlink" href="#when-a-check-fails" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Read the <code>E</code> lines of the output, or the <code>message</code> in <code>results.json</code>. A good message
+  names the part, the value and the limit.</li>
+<li>Do not loosen the check, widen a tolerance, or delete it to get a green run. The failure
+  is the information: fix the design, the layout or the routing.</li>
+<li>If the limit itself is wrong, change it in <code>specs.py</code> with a source for the new number.</li>
+<li>Skip only when a check does not apply to this board, with
+  <code>pytest.skip("D1 is off-board on this revision")</code>. The reason is listed in
+  <code>results.json</code>.</li>
+</ul>
+<h2 id="prove-a-check-can-fail">Prove a check can fail<a class="headerlink" href="#prove-a-check-can-fail" title="Permanent link">&para;</a></h2>
+<p>A check that has never been seen to fail is not trusted: it may pass because it looks at
+the wrong thing. <code>mutants.py</code> lists planted mistakes, each a small edit to <code>design.py</code>,
+with the check that must then fail:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">MUTANTS</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="p">(</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>        <span class="s2">"R1 is 10 ohm: the LED is overdriven"</span><span class="p">,</span>  <span class="c1"># what the mistake is</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        <span class="p">[</span>  <span class="c1"># edits to design.py: (text to find, text to put there)</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>            <span class="p">(</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>                <span class="s1">'R("R1", "330", "VIN", "LED_A", B, "RC0603FR-07330RL"'</span><span class="p">,</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>                <span class="s1">'R("R1", "10", "VIN", "LED_A", B, "RC0603FR-0710RL"'</span><span class="p">,</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>            <span class="p">),</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>        <span class="p">],</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>        <span class="s2">"test_led_current_window"</span><span class="p">,</span>  <span class="c1"># the -k expression that must then fail</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="p">),</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="p">]</span>
+</code></pre></div>
+<p><code>pcbkit mutants</code> first runs the control: the checks the entries name, on an unedited
+scratch copy of the project, must pass. Then, for each entry, it plants the edits in
+another scratch copy, makes the schematic again there and runs the checks. A mistake is
+<strong>caught</strong> when a check fails. It is <strong>missed</strong> when every check still passes, or when the
+text to find is not in <code>design.py</code>, so a stale entry cannot pass for a catch. The exit code
+is 0 when everything is caught, 1 when one is missed and 2 when the control does not pass.</p>
+<p>Mutants edit <code>design.py</code> only and leave the layout alone, so they test the schematic,
+netlist and circuit checks. To show that a copper check fails, plant the mistake in a
+scratch copy of the project instead: copy it without <code>.venv</code>, narrow the track or move the
+part there, rebuild what the check reads, and run the check from inside the copy with the
+original project's <code>.venv/bin/pcbkit</code>. Never plant a mistake in the project itself.</p>
+<h2 id="worked-example-the-leds-current-in-blinky">Worked example: the LED's current in blinky<a class="headerlink" href="#worked-example-the-leds-current-in-blinky" title="Permanent link">&para;</a></h2>
+<p><strong>The hazard.</strong> An LED must carry enough current to be seen and no more than its datasheet
+allows, whatever the supply does. Blinky's supply may be anything from 3 V to 5.5 V, so the
+question is asked at both ends: the dimmest case is the lowest supply with the highest
+forward voltage, and the brightest is the highest supply with the lowest forward voltage.</p>
+<p><strong>The numbers</strong> are the block of <code>specs.py</code> above, plus the supply: <code>SUPPLY_NET = "VIN"</code>,
+<code>GROUND_NET = "GND"</code> and <code>SUPPLY_V = (3.0, 5.5)</code>.</p>
+<p><strong>The check</strong>, from <code>checks/test_indicator.py</code> (its module docstring left out). <code>dc</code> is
+pcbkit's DC solver: <code>Circuit.fix</code> holds a net at a voltage, <code>R</code> adds a resistor, <code>D</code> a
+diode (a forward voltage plus a small resistance), and <code>solve()</code> returns a <code>Solution</code> that
+knows each diode's current.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.check</span><span class="w"> </span><span class="kn">import</span> <span class="n">dc</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.check.netlist</span><span class="w"> </span><span class="kn">import</span> <span class="n">Netlist</span><span class="p">,</span> <span class="n">parse_value</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pcbkit.check.plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProjectModule</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">solve</span><span class="p">(</span><span class="n">nl</span><span class="p">:</span> <span class="n">Netlist</span><span class="p">,</span> <span class="n">specs</span><span class="p">:</span> <span class="n">ProjectModule</span><span class="p">,</span> <span class="n">vin</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">vf</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dc</span><span class="o">.</span><span class="n">Solution</span><span class="p">:</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">    </span><span class="sd">"""Return the DC operating point with VIN at ``vin`` and every LED dropping ``vf``.</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="sd">    Built here from the netlist and specs.py rather than with ``dc.build``, which gives</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="sd">    an LED a forward voltage by colour (2.9 V for green) and 20 ohm, where this LED's</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="sd">    datasheet says 2.2 V typical and 2.5 V at most. Resistors take their values from</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="sd">    the netlist. An LED is a fixed forward voltage plus 1 ohm, which the solver wants</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="sd">    above zero.</span>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="sd">    """</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>    <span class="n">circuit</span> <span class="o">=</span> <span class="n">dc</span><span class="o">.</span><span class="n">Circuit</span><span class="p">()</span>
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>    <span class="n">circuit</span><span class="o">.</span><span class="n">fix</span><span class="p">(</span><span class="n">specs</span><span class="o">.</span><span class="n">SUPPLY_NET</span><span class="p">,</span> <span class="n">vin</span><span class="p">)</span><span class="o">.</span><span class="n">fix</span><span class="p">(</span><span class="n">specs</span><span class="o">.</span><span class="n">GROUND_NET</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>    <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">nl</span><span class="o">.</span><span class="n">by_kind</span><span class="p">(</span><span class="s2">"Device:R"</span><span class="p">):</span>
+<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>        <span class="n">circuit</span><span class="o">.</span><span class="n">R</span><span class="p">(</span>
+<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>            <span class="n">nl</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">nl</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">parse_value</span><span class="p">(</span><span class="n">nl</span><span class="o">.</span><span class="n">parts</span><span class="p">[</span><span class="n">ref</span><span class="p">][</span><span class="s2">"value"</span><span class="p">]),</span> <span class="n">ref</span>
+<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>        <span class="p">)</span>
+<a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>    <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">nl</span><span class="o">.</span><span class="n">by_kind</span><span class="p">(</span><span class="s2">"Device:LED"</span><span class="p">):</span>
+<a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>        <span class="c1"># KiCad's LED symbol: pin 1 is the cathode, pin 2 the anode</span>
+<a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>        <span class="n">circuit</span><span class="o">.</span><span class="n">D</span><span class="p">(</span><span class="n">nl</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">nl</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">vf</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">ref</span><span class="p">)</span>
+<a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a>    <span class="k">return</span> <span class="n">circuit</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+<a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>
+<a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a>
+<a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_led_current_window</span><span class="p">(</span><span class="n">nl</span><span class="p">:</span> <span class="n">Netlist</span><span class="p">,</span> <span class="n">specs</span><span class="p">:</span> <span class="n">ProjectModule</span><span class="p">,</span> <span class="n">record</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a><span class="w">    </span><span class="sd">"""Light every LED at the lowest supply and keep it under its limit at the highest.</span>
+<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>
+<a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a><span class="sd">    The dimmest case is the lowest VIN with the highest forward voltage, the brightest</span>
+<a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a><span class="sd">    the highest VIN with the lowest forward voltage. A reversed LED, or a supply that</span>
+<a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a><span class="sd">    cannot reach the forward voltage, carries no current and fails the low end.</span>
+<a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a><span class="sd">    """</span>
+<a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a>    <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">specs</span><span class="o">.</span><span class="n">SUPPLY_V</span>
+<a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a>    <span class="n">cases</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"dimmest"</span><span class="p">:</span> <span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">specs</span><span class="o">.</span><span class="n">LED_VF_MAX</span><span class="p">),</span> <span class="s2">"brightest"</span><span class="p">:</span> <span class="p">(</span><span class="n">high</span><span class="p">,</span> <span class="n">specs</span><span class="o">.</span><span class="n">LED_VF_MIN</span><span class="p">)}</span>
+<a id="__codelineno-8-40" name="__codelineno-8-40" href="#__codelineno-8-40"></a>    <span class="n">leds</span> <span class="o">=</span> <span class="n">nl</span><span class="o">.</span><span class="n">by_kind</span><span class="p">(</span><span class="s2">"Device:LED"</span><span class="p">)</span>
+<a id="__codelineno-8-41" name="__codelineno-8-41" href="#__codelineno-8-41"></a>    <span class="k">assert</span> <span class="n">leds</span><span class="p">,</span> <span class="s2">"the design has no LED"</span>
+<a id="__codelineno-8-42" name="__codelineno-8-42" href="#__codelineno-8-42"></a>    <span class="n">found</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-8-43" name="__codelineno-8-43" href="#__codelineno-8-43"></a>    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">vin</span><span class="p">,</span> <span class="n">vf</span><span class="p">)</span> <span class="ow">in</span> <span class="n">cases</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-8-44" name="__codelineno-8-44" href="#__codelineno-8-44"></a>        <span class="n">solved</span> <span class="o">=</span> <span class="n">solve</span><span class="p">(</span><span class="n">nl</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">vin</span><span class="p">,</span> <span class="n">vf</span><span class="p">)</span>
+<a id="__codelineno-8-45" name="__codelineno-8-45" href="#__codelineno-8-45"></a>        <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">leds</span><span class="p">:</span>
+<a id="__codelineno-8-46" name="__codelineno-8-46" href="#__codelineno-8-46"></a>            <span class="n">found</span><span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">ref</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span> <span class="o">=</span> <span class="n">solved</span><span class="o">.</span><span class="n">diode_current</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+<a id="__codelineno-8-47" name="__codelineno-8-47" href="#__codelineno-8-47"></a>    <span class="n">record</span><span class="p">(</span><span class="s2">"LED mA"</span><span class="p">,</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="n">amps</span> <span class="o">*</span> <span class="mf">1e3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">amps</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>
+<a id="__codelineno-8-48" name="__codelineno-8-48" href="#__codelineno-8-48"></a>    <span class="n">bad</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-8-49" name="__codelineno-8-49" href="#__codelineno-8-49"></a>        <span class="n">key</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="n">amps</span> <span class="o">*</span> <span class="mf">1e3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-8-50" name="__codelineno-8-50" href="#__codelineno-8-50"></a>        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">amps</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-8-51" name="__codelineno-8-51" href="#__codelineno-8-51"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">specs</span><span class="o">.</span><span class="n">LED_I_MIN</span> <span class="o">&lt;=</span> <span class="n">amps</span> <span class="o">&lt;=</span> <span class="n">specs</span><span class="o">.</span><span class="n">LED_I_MAX</span>
+<a id="__codelineno-8-52" name="__codelineno-8-52" href="#__codelineno-8-52"></a>    <span class="p">}</span>
+<a id="__codelineno-8-53" name="__codelineno-8-53" href="#__codelineno-8-53"></a>    <span class="k">assert</span> <span class="ow">not</span> <span class="n">bad</span><span class="p">,</span> <span class="p">(</span>
+<a id="__codelineno-8-54" name="__codelineno-8-54" href="#__codelineno-8-54"></a>        <span class="sa">f</span><span class="s2">"LED current (mA) outside </span><span class="si">{</span><span class="n">specs</span><span class="o">.</span><span class="n">LED_I_MIN</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> to "</span>
+<a id="__codelineno-8-55" name="__codelineno-8-55" href="#__codelineno-8-55"></a>        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">specs</span><span class="o">.</span><span class="n">LED_I_MAX</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> mA: </span><span class="si">{</span><span class="n">bad</span><span class="si">}</span><span class="s2">"</span>
+<a id="__codelineno-8-56" name="__codelineno-8-56" href="#__codelineno-8-56"></a>    <span class="p">)</span>
+</code></pre></div>
+<p>The built-in <code>circuit</code> group has an LED check too: it reads <code>LED_REFS</code>, <code>LED_SCENARIO</code>,
+<code>LED_I_MIN</code> and <code>LED_I_MAX</code> and a <code>scenario</code> function in <code>circuits.py</code>. Use that one when
+the stock LED model suits your part. Blinky's own check exists because <code>solve</code> needs this
+LED's datasheet voltages, which is what its docstring says.</p>
+<p>Three things to copy from it. The limits come from <code>specs</code>, never from the check. The
+failure message names the part, the case and the numbers. And <code>record</code> keeps the currents
+for the report, so a pass shows how much margin there is.</p>
+<p><strong>Run it.</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>$ .venv/bin/pcbkit check -k test_led_current_window
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>.                                                                        [100%]
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>1 passed, 10 deselected in 0.45s
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>Results: out/checks/results.json (pcbkit report)
+</code></pre></div>
+<p><code>results.json</code> now holds <code>"LED mA": {"D1 dimmest": 1.51, "D1 brightest": 10.88}</code> for it:
+the LED is lit at 3 V, and at 5.5 V it is at about half its limit.</p>
+<p><strong>Make it fail.</strong> Blinky's <code>mutants.py</code> plants three mistakes: R1 at 10 ohm, named once
+for this check and once for the resistor's power check, and D1 turned the wrong way round:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>$ .venv/bin/pcbkit mutants
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>control (no edits)                                             PASSES  2 passed, 9 deselected in 7.44s
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>R1 is 10 ohm: the LED is overdriven                            CAUGHT  (1 failed, 10 deselected in 3.24s)
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>R1 is 10 ohm: the resistor overheats                           CAUGHT  (1 failed, 10 deselected in 0.78s)
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>D1 is the wrong way round: the LED never lights                CAUGHT  (1 failed, 10 deselected in 0.71s)
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>3/3 planted mistakes caught
+</code></pre></div>
+<p>To read the failure yourself, make the 10 ohm edit in a scratch copy of the project, run
+<code>pcbkit sch</code> there, then <code>pcbkit check -k test_led_current_window</code> from inside the copy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>E       AssertionError: LED current (mA) outside 1 to 20 mA: {'D1 dimmest': 45.45, 'D1 brightest': 327.27}
+</code></pre></div>
+<p><strong>Add a mistake of your own.</strong> The window has a bottom edge too, and none of the three
+plants a mistake against it. At 1 kohm the LED gets under 1 mA at 3 V. Add this line above
+<code>MUTANTS</code> in <code>mutants.py</code>, next to <code>R1_AT_10_OHM</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">R1_AT_1K</span> <span class="o">=</span> <span class="s1">'R("R1", "1k", "VIN", "LED_A", B, "RC0603FR-071KL"'</span>
+</code></pre></div>
+<p>and this entry at the end of the <code>MUTANTS</code> list, then run <code>pcbkit mutants</code> again:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">MUTANTS</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="o">...</span><span class="p">,</span>  <span class="c1"># the three entries that are already there</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="p">(</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>        <span class="s2">"R1 is 1 kohm: the LED is too dim at 3 V"</span><span class="p">,</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>        <span class="p">[(</span><span class="n">R1</span><span class="p">,</span> <span class="n">R1_AT_1K</span><span class="p">)],</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>        <span class="s2">"test_led_current_window"</span><span class="p">,</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>    <span class="p">),</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="p">]</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>R1 is 1 kohm: the LED is too dim at 3 V                        CAUGHT  (1 failed, 10 deselected in 0.67s)
+</code></pre></div>
+<p>Name <code>test_resistor_power_margin</code> in that entry instead and the mistake is reported as
+<code>MISSED</code>: the resistor is fine at 1 kohm, so the check you named cannot see it. An entry
+whose text to find is no longer in <code>design.py</code> is reported as missed too, with <code>SETUP
+ERROR: pattern not found in design.py</code>.</p>
+<p>If you use Claude Code, the pcbkit plugin's <code>add-check</code> skill and <code>check-writer</code> agent
+follow the rules on this page; see <a href="../claude-plugin/">the Claude plugin</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../routing-recipes/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Routing recipes">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Routing recipes
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../ordering/" class="md-footer__link md-footer__link--next" aria-label="Next: Ordering boards">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Ordering boards
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      pcbkit is licensed under AGPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.top", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

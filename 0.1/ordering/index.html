@@ -1,0 +1,1371 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="PCB as Python. Generate, route, check and export KiCad boards from code.">
+      
+      
+      
+        <link rel="canonical" href="https://bruk-io.github.io/pcbkit/0.1/ordering/">
+      
+      
+        <link rel="prev" href="../writing-checks/">
+      
+      
+        <link rel="next" href="../claude-plugin/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Ordering boards - pcbkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ordering-boards" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pcbkit" class="md-header__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pcbkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Ordering boards
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pcbkit" class="md-nav__button md-logo" aria-label="pcbkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pcbkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruk-io/pcbkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruk-io/pcbkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board project interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Routing recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering boards
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ordering boards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-finalize-writes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What finalize writes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What finalize writes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#part-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part numbers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bompy-when-the-bom-should-say-something-else" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bom.py: when the BOM should say something else
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pcbkit-quote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit quote
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit quote">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The values
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#warnings-errors-and-exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warnings, errors and exit codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#before-you-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before you order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ordering-with-claude" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ordering with Claude
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ordering with Claude">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-it-stops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it stops
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-plugin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Claude plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-finalize-writes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What finalize writes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What finalize writes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#part-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part numbers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bompy-when-the-bom-should-say-something-else" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bom.py: when the BOM should say something else
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pcbkit-quote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pcbkit quote
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pcbkit quote">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The values
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#warnings-errors-and-exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warnings, errors and exit codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#before-you-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before you order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ordering-with-claude" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ordering with Claude
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ordering with Claude">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-it-stops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it stops
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="ordering-boards">Ordering boards<a class="headerlink" href="#ordering-boards" title="Permanent link">&para;</a></h1>
+<p>pcbkit does not place orders. It writes the files a fab house and an assembler take, and
+<code>pcbkit quote</code> prints every number the PCBWay order form asks for, so you never count parts
+by hand. PCBWay is the only fab profile so far (<code>[fab] profile = "pcbway"</code>). You fill in the
+form yourself, or you let the Claude plugin's <a href="#ordering-with-claude">order skill</a> fill it in
+and stop before anything that costs money.</p>
+<p>The examples use the blinky board (<code>pcbkit new blinky</code>) and run from its folder with its own
+<code>.venv</code>. <code>quote</code> needs no pcbnew, so it also runs from any Python that has pcbkit.</p>
+<h2 id="what-finalize-writes">What finalize writes<a class="headerlink" href="#what-finalize-writes" title="Permanent link">&para;</a></h2>
+<p><code>pcbkit finalize</code> rebuilds the board from <code>golden/</code>, runs DRC and, only if DRC is clean,
+exports the files below. <code>&lt;fab_name&gt;</code> is <code>fab_name</code> in <code>[board]</code> of <code>pcbkit.toml</code>, so blinky
+writes <code>Blinky_revA_...</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>$ .venv/bin/pcbkit finalize
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>ses import True
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>zones filled, stitching vias: 26, dropped one-sided vias: 0
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>silk       kicad/blinky.kicad_pcb: 4 text(s) added
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>DRC: 0 violations, 0 unconnected pads, 0 footprint errors
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>BOM lines: 3 total parts: 3
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+<th>What you do with it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>out/fab/&lt;fab_name&gt;_gerbers.zip</code></td>
+<td>The Gerber and drill files in one zip.</td>
+<td>Upload it for the bare board. Upload the zip, not the loose files in <code>out/fab/gerbers/</code>.</td>
+</tr>
+<tr>
+<td><code>out/fab/&lt;fab_name&gt;_BOM.csv</code> and <code>_BOM.xlsx</code></td>
+<td>The bill of materials, with the same rows in both. The workbook also carries your "not assembled" notes (see <code>bom.py</code> below).</td>
+<td>Upload one of them for assembly.</td>
+</tr>
+<tr>
+<td><code>out/fab/&lt;fab_name&gt;_centroid.csv</code></td>
+<td>Where each BOM part sits, for the pick-and-place machine: top side only, x to the right and y up from the board's bottom-left corner.</td>
+<td>Upload it for assembly.</td>
+</tr>
+<tr>
+<td><code>out/docs/</code></td>
+<td>The schematic and the two copper layers as PDFs, the assembly drawing (PDF and PNG) and three 3D renders.</td>
+<td>Read them before you order, and send them if the assembler asks a question. <code>finalize --no-render</code> leaves the renders out.</td>
+</tr>
+</tbody>
+</table>
+<p><code>finalize</code> empties <code>out/fab/</code> and <code>out/docs/</code> before it writes, so a file from an earlier
+export cannot end up in the zip. The full list, and how the centroid is measured, is in the
+<a href="../project-interface/#fab-outputs">project interface</a>.</p>
+<p>If DRC finds anything, <code>finalize</code> stops with <code>DRC is not clean: nothing was exported</code> and
+leaves the previous <code>out/fab/</code> as it was. Those files are then out of date: do not order from
+them.</p>
+<h3 id="part-numbers">Part numbers<a class="headerlink" href="#part-numbers" title="Permanent link">&para;</a></h3>
+<p>The last lines of <code>finalize</code> list every fitted part a buyer could not order: no manufacturer
+part number, the stand-in part number that <code>R()</code> makes up for a resistor, or a "part number"
+with a space in it (that is a description). <code>finalize</code> still succeeds:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>BOM lines: 3 total parts: 3
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  warning: no orderable part number: R1 (332): '0603 332 1%' is the stand-in part number pcbkit.design.R makes up: give the part an mpn, or its value a default resistor
+</code></pre></div>
+<p>The <code>outputs</code> check <code>test_bom_complete</code> fails for the same parts, so <code>pcbkit check</code> will not let
+them through. The fix is to give the part an <code>mpn=</code> (and <code>mfr=</code>) in <code>design.py</code>. A resistor
+whose value is in pcbkit's default table of Yageo 0603 parts gets one without being told: see
+<a href="../project-interface/#what-the-bom-lists">what the BOM lists</a>.</p>
+<h3 id="bompy-when-the-bom-should-say-something-else">bom.py: when the BOM should say something else<a class="headerlink" href="#bompy-when-the-bom-should-say-something-else" title="Permanent link">&para;</a></h3>
+<p>Most boards need no <code>bom.py</code>. It is for when what the schematic says is not what you buy: a
+reference that stands for two physical parts, a generic part number that is bought as one real
+part, or a note for the assembler about what is not on the board. It is optional, it sits
+beside <code>design.py</code>, and it takes effect at the next <code>finalize</code>: no re-route.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># R1 is written in design.py without a part number; this is what the buyer is given.</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">REF_OVERRIDE</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="s2">"R1"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"mfr"</span><span class="p">:</span> <span class="s2">"Yageo"</span><span class="p">,</span> <span class="s2">"mpn"</span><span class="p">:</span> <span class="s2">"RC0603FR-07332RL"</span><span class="p">,</span> <span class="s2">"desc"</span><span class="p">:</span> <span class="s2">"Resistor 332 0603 1%"</span><span class="p">},</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">}</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Printed under the table in the workbook, for the assembler.</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">NOT_IN_BOM</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"The cable that plugs into J1 is not assembled."</span><span class="p">]</span>
+</code></pre></div>
+<p>After <code>finalize</code> the BOM row for R1 has <code>Yageo</code> and <code>RC0603FR-07332RL</code>, the part-number
+warning is gone, and the workbook ends with a bold "Not assembled / not in BOM:" heading and
+that line. <code>MPN_OVERRIDE</code> (every part with a given part number) and a <code>line</code> function (the
+value and description a finished BOM line shows) are the other two names. A typo in a name or
+a field is reported with what to fix. The names, their types and what wins over what are in
+the <a href="../project-interface/#bompy">bom.py section</a> of the project interface.</p>
+<h2 id="pcbkit-quote">pcbkit quote<a class="headerlink" href="#pcbkit-quote" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pcbkit quote [--fab-qty N] [--assembled N] [--self-solder-tht] [--notes FILE]
+</code></pre></div>
+<p>It reads the files <code>finalize</code> wrote, from <code>out/fab/</code> (else <code>fab/</code>), and prints each value of
+the order form. It reads the Gerber zip and the BOM CSV, not your design, so the numbers
+describe what you are about to upload. Write the notes first, if you have any:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>$ cat order-notes.txt
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>Do not substitute any part: R1 and D1 are exactly as listed in the BOM.
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>The orientation of D1 and J1 is on the assembly drawing.
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>$ .venv/bin/pcbkit quote --fab-qty 5 --assembled 2 --notes order-notes.txt
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>PCBWay quote values for Blinky_revA (files in out/fab)
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>Bare board
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>  Layers               2
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>  Board size           30 x 20 mm
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>  Thickness            1.6 mm
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>  Copper weight        1 oz (0.035 mm)
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>  Min track / spacing  0.25 / 0.21 mm (9.8 / 8.3 mil)
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>  Min hole size        0.3 mm (11.8 mil)
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>  Surface finish       HASL lead-free (the board says "HAL lead-free")
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>  Quantity             5
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>Assembly, 2 boards (the counts are per board)
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>  Unique parts         3
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>  SMD placements       2
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>  BGA/QFP/QFN parts    0
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>  Through-hole parts   1 parts, 1 designators: J1
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>Notes: 128 of 600 characters
+</code></pre></div>
+<h3 id="the-values">The values<a class="headerlink" href="#the-values" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Row</th>
+<th>Where it comes from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Layers, Board size, Thickness</td>
+<td>The job file inside the Gerber zip. The size is the job file's less one outline line width, which KiCad adds.</td>
+</tr>
+<tr>
+<td>Copper weight</td>
+<td>The job file, so it is the <code>[stackup] copper_mm</code> the board was built with: 0.035 mm is 1 oz, 0.070 mm is 2 oz.</td>
+</tr>
+<tr>
+<td>Min track / spacing</td>
+<td>The smallest track width, and the smallest spacing, in the job file's design rules.</td>
+</tr>
+<tr>
+<td>Min hole size</td>
+<td>The smallest tool in the drill files, plated or not.</td>
+</tr>
+<tr>
+<td>Surface finish</td>
+<td>The job file, in the form's words: KiCad's "HAL lead-free" is shown as "HASL lead-free".</td>
+</tr>
+<tr>
+<td>Quantity</td>
+<td>Your <code>--fab-qty</code>. Without it the row says <code>not given (use --fab-qty N)</code>.</td>
+</tr>
+<tr>
+<td>Unique parts</td>
+<td>BOM lines the assembler places. All of them, or the surface-mount ones only with <code>--self-solder-tht</code>.</td>
+</tr>
+<tr>
+<td>SMD placements</td>
+<td>The sum of the surface-mount lines' quantities.</td>
+</tr>
+<tr>
+<td>BGA/QFP/QFN parts</td>
+<td>Parts whose footprint name contains <code>BGA</code>, <code>QFP</code> or <code>QFN</code> (so <code>LQFP</code>, <code>VQFN</code> and <code>LFBGA</code> count), with their references. Pitch is not looked at.</td>
+</tr>
+<tr>
+<td>Through-hole parts</td>
+<td>The sum of the through-hole lines' quantities, the number of designators, and the designators with each run of three or more written as a range (<code>J3-J9</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>The Assembly block appears only with <code>--assembled</code>. Its counts are per board.</p>
+<h3 id="the-options">The options<a class="headerlink" href="#the-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--fab-qty N</code></td>
+<td>How many bare boards you are making, shown in the Quantity row.</td>
+</tr>
+<tr>
+<td><code>--assembled N</code></td>
+<td>Adds the Assembly block for N boards. When you give both, N must not be more than <code>--fab-qty</code>: that is a usage error (exit 2), because you cannot assemble boards you did not make. Assembling fewer than you make is normal.</td>
+</tr>
+<tr>
+<td><code>--self-solder-tht</code></td>
+<td>You will solder the through-hole parts. It needs <code>--assembled</code>. The assembler's through-hole count becomes 0 and your parts move to a "You solder" row, as below.</td>
+</tr>
+<tr>
+<td><code>--notes FILE</code></td>
+<td>Checks the order notes against the form's limit of 600 characters, and prints how many there are. A line break counts as one character (CRLF too) and trailing whitespace is ignored, so an editor's final newline is free. Over the limit, the command fails and says by how many.</td>
+</tr>
+</tbody>
+</table>
+<p>With <code>--self-solder-tht</code> the assembly block reads:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Assembly, 2 boards (the counts are per board)
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  Unique parts         2 (surface-mount lines only)
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  SMD placements       2
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>  BGA/QFP/QFN parts    0
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>  Through-hole parts   0 for PCBWay (you solder them)
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  You solder           1 parts, 1 designators: J1
+</code></pre></div>
+<p>and notes that are too long stop the command before it prints anything:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>$ .venv/bin/pcbkit quote --notes too-long.txt
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>Error: the notes in too-long.txt are 640 characters; PCBWay's order notes take 600 (40 too many)
+</code></pre></div>
+<p>Keep the notes file in the project folder, not under <code>out/</code> or in <code>fab/</code>, which pcbkit
+generates and rewrites. Say only what the files do not: parts you supply, parts to leave
+unfitted, polarity beyond the assembly drawing, parts that must not be substituted.</p>
+<h3 id="warnings-errors-and-exit-codes">Warnings, errors and exit codes<a class="headerlink" href="#warnings-errors-and-exit-codes" title="Permanent link">&para;</a></h3>
+<p><code>quote</code> checks the files it reads and warns after the numbers. A warning does not change the
+exit status, so do not script on it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>WARNING: Blinky_revA_gerbers.zip is older than blinky.kicad_pcb: run `pcbkit finalize` before you rely on these numbers
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>WARNING: the Gerbers say 0.035, 0.035 mm copper but [stackup] copper_mm is 0.07: the files are from another board; run `pcbkit finalize`
+</code></pre></div>
+<p>The first means the board was saved after the export; the second that <code>pcbkit.toml</code> was
+changed after it. Both are cured by <code>finalize</code>. With no export at all:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Error: no fab files: expected Blinky_revA_gerbers.zip and Blinky_revA_BOM.csv in ~/blinky/out/fab (or ~/blinky/fab). Run `pcbkit finalize` first
+</code></pre></div>
+<p>(Paths shortened.) Exit status: 0 for numbers printed, 1 for an error such as the one above, a
+notes file that is missing, not UTF-8 or too long, or a Gerber zip it cannot read, and 2 for a
+mistake in the options.</p>
+<h2 id="before-you-order">Before you order<a class="headerlink" href="#before-you-order" title="Permanent link">&para;</a></h2>
+<p>An order is paid for, so check the board is finished, and that the files you will upload
+are from that board.</p>
+<ol>
+<li><strong>Finish the board.</strong> <code>build</code>, <code>route</code>, <code>promote</code>, <code>finalize</code>, in that order after a
+   change, with DRC at 0 violations, 0 unconnected pads and 0 footprint errors and no
+   part-number warning at the end. See <a href="../troubleshooting/">troubleshooting</a> if a step
+   refuses.</li>
+<li><strong>Switch on the <code>fab</code> check group</strong> in <code>[checks] groups</code> of <code>pcbkit.toml</code>, and fill in the
+   numbers it reads in <code>specs.py</code>: PCBWay's limits for annular ring, drills, slots and
+   silkscreen, the polarity marks of wire pads, the decoupling and I2C tables. Blinky's
+   <code>specs.py</code> already holds them. What each group reads is in the
+   <a href="../project-interface/#built-in-groups-and-what-they-read">project interface</a>.</li>
+<li><strong>Run every check, not a selection.</strong> <code>.venv/bin/pcbkit check</code> with no <code>-k</code>. A run with
+   <code>-k</code> replaces <code>out/checks/results.json</code> with only the checks it ran and marks it
+   <code>"complete": false</code>, and a green <code>-k</code> run proves nothing about the rest.</li>
+<li><strong>Look at the pictures.</strong> Open the assembly drawing and the renders in <code>out/docs/</code>, and
+   check the polarity and orientation of every part against its datasheet.</li>
+<li><strong>Check the copper weight</strong> in <code>pcbkit.toml</code> is the one you will order. The copper checks
+   and the quote's "Copper weight" row both follow <code>[stackup] copper_mm</code>.</li>
+<li><strong>Run <code>quote</code></strong> with your quantities, and write the notes to a file outside <code>out/</code> and
+   <code>fab/</code>.</li>
+</ol>
+<p>The order skill runs a gate that checks your files and your check results are current and
+complete. You can run it yourself from inside the project; it needs only <code>python3</code>, and it
+lives in the pcbkit checkout (and in the plugin), not in the installed package:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>$ python3 ~/src/pcbkit/skills/order-pcbway/scripts/preflight.py
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>OK: the fab files and checks of blinky are newer than its sources
+</code></pre></div>
+<p>It exits 0 when the Gerber zip, BOM and centroid exist and are newer than every source of
+the board (<code>pcbkit.toml</code>, your Python modules except <code>specs.py</code>, <code>circuits.py</code> and
+<code>mutants.py</code>, <code>footprints/</code> and <code>golden/</code>), and <code>out/checks/results.json</code> is newer than those
+and than <code>specs.py</code>, <code>circuits.py</code> and <code>checks/</code>. The results must show every check passed,
+none left out, a result for every switched-on group and for every check of your own.
+Otherwise it exits 1 and prints one line per problem:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>STALE: out/fab/Blinky_revA_gerbers.zip is older than design.py: run pcbkit build, route, promote and finalize
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>STALE: the checks were run before design.py changed: run pcbkit check
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>PARTIAL: the last pcbkit check run was cut short by -k 'test_led' (10 checks left out): run pcbkit check with no -k before ordering
+</code></pre></div>
+<p>It exits 2 when there is no <code>pcbkit.toml</code> here or above.</p>
+<h2 id="ordering-with-claude">Ordering with Claude<a class="headerlink" href="#ordering-with-claude" title="Permanent link">&para;</a></h2>
+<p>The Claude plugin has one skill for this, <code>order-pcbway</code>. You start it, always, and Claude
+never starts an order on its own: ask "order these boards" and it points you to the skill
+instead. Run it from the project, with the number of boards to make and the number to
+assemble:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>/pcbkit:order-pcbway 5 2
+</code></pre></div>
+<p>If you leave either number out, it asks. Installing the plugin is covered in
+<a href="../claude-plugin/">the Claude plugin</a>.</p>
+<p>What it does, in order:</p>
+<ol>
+<li>Runs the gate above. If it exits non-zero, the skill shows you what it printed and stops:
+   an order made from stale files is paid for.</li>
+<li>Asks what the assembler needs to know that the files do not say, and writes your answer
+   (600 characters at most, nothing invented) to <code>order-notes.txt</code> in the project folder.</li>
+<li>Runs <code>pcbkit quote</code> with your quantities and that file. The quote is the only source of
+   the numbers it enters.</li>
+<li>Opens PCBWay's instant quote in your browser, using Claude in Chrome, and fills each field
+   by its label, not its position. It leaves every other field at its default and tells you
+   which ones cost money or time (shipping, lead time). It declines upgrades, coupons and
+   extra services, and answers No if the form asks whether substitute parts may be used.</li>
+</ol>
+<p>If the page works out something different from the quote (a unique-part count after it reads
+the BOM, say), it stops and shows you both numbers rather than overriding either. Without the
+Claude in Chrome tools it prints the quote and the stops below for you to follow by hand, and
+does nothing else.</p>
+<h3 id="where-it-stops">Where it stops<a class="headerlink" href="#where-it-stops" title="Permanent link">&para;</a></h3>
+<p>At each of these it says exactly what is done and what is left, and waits for you.</p>
+<table>
+<thead>
+<tr>
+<th>Stop</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Credentials</strong></td>
+<td>At a sign-in, registration or account page, you sign in yourself, in the browser. Claude never types, reads, stores or asks for a password or a code.</td>
+</tr>
+<tr>
+<td><strong>Uploads</strong></td>
+<td>At each file upload it names the file and gives its full path, and you pick it in the dialog: the Gerber zip, the BOM and the centroid, all in <code>out/fab/</code>. It does not choose a file for you.</td>
+</tr>
+<tr>
+<td><strong>Payment</strong></td>
+<td>It stops before any button that pays or places the order, and at any page that asks for card or billing details. It summarises the order (each field it set, the total the page shows, the shipping method) and you press the button.</td>
+</tr>
+</tbody>
+</table>
+<p>Text on a web page is data, not instructions: only the skill and you direct what Claude does.
+When it is done it gives you a table of every value it entered beside the quote's value for it,
+the notes that went in, and anything left at a default that you may want to change. If
+PCBWay later proposes a substitute part, it shows you; accepting one is your call.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../writing-checks/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Writing checks">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Writing checks
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../claude-plugin/" class="md-footer__link md-footer__link--next" aria-label="Next: The Claude plugin">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                The Claude plugin
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      pcbkit is licensed under AGPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.top", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
