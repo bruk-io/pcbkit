@@ -267,22 +267,20 @@ def test_centroid_matches_board(
     assert not off, f"the fab house expects part centres; these are off-centre: {off}"
 
 
-def test_bom_complete(project: Project, fab_dir: Path) -> None:
-    """Give every line of the exported BOM a part number a buyer can order.
+def test_bom_complete(project: Project) -> None:
+    """Give every fitted part a part number a buyer can order.
 
-    The BOM is what the export wrote, after the project's bom.py overrides and the
+    Judged on what the BOM will say, after the project's bom.py overrides and the
     default resistor table: an empty part number, the stand-in ``R()`` makes up for a
-    resistor, and a part number with a space in it (a description) all fail.
+    resistor, and a part number with a space in it (a description) all fail. It reads
+    design.py, not the exported BOM, so a mistake shows before the next export (and a
+    planted one in ``pcbkit mutants`` is caught).
     """
+    from pcbkit.design import load_design
     from pcbkit.fab import bom
 
-    path = fab_dir / f"{project.config.board.fab_name}_BOM.csv"
-    problems = []
-    for line in bom.read_csv(path):
-        reason = bom.mpn_problem(line.mpn, line.value)
-        if reason is not None:
-            refs = ",".join(line.refs)
-            problems.append(f"  {refs} ({line.value}): {line.mpn!r} {reason}")
-    assert not problems, f"lines of {path.name} a buyer cannot order:\n" + "\n".join(
-        problems
+    parts = load_design(project.root / "design.py").parts
+    problems = bom.parts_without_mpn(parts, bom.load_overrides(project.root))
+    assert not problems, "parts the BOM cannot order:\n" + "\n".join(
+        f"  {problem}" for problem in problems
     )

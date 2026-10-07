@@ -423,20 +423,25 @@ def test_a_stale_part_number_fails_the_bom_check(lab: Lab) -> None:
 # --- test_bom_complete ----------------------------------------------------------------
 
 
-def test_a_bom_line_with_no_part_number_fails_the_bom_complete_check(lab: Lab) -> None:
-    """Fail a BOM line whose part number was emptied, naming its parts.
+def test_a_part_with_no_part_number_in_the_design_fails_bom_complete(lab: Lab) -> None:
+    """Fail R1 once design.py gives it no part number, naming it; nothing else fails.
 
-    The schematic still has the part number, so the BOM check fails too.
+    R1 becomes a 12k with no part number: 12k is not in the default resistor table, so
+    the BOM would carry R()'s stand-in. The exports and the schematic are untouched, as
+    after a design mistake not yet exported, so the BOM check still agrees.
     """
 
-    def blank(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-        rows[0]["Manufacturer Part Number"] = ""
-        return rows
+    def blank_r1(root: Path) -> None:
+        design = root / "design.py"
+        text = design.read_text(encoding="utf-8")
+        old = f'R("R1", "10k", "NET_A", "NET_B", "Tiny", mpn={gb.MPN!r})'
+        assert old in text
+        design.write_text(text.replace(old, 'R("R1", "12k", "NET_A", "NET_B", "Tiny")'))
 
-    result = lab.result("bom_blank_mpn", Variant(edit_csv("BOM.csv", blank)))
-    result.planted("test_bom_complete", BOM)
+    result = lab.result("design_blank_mpn", Variant(blank_r1))
+    result.planted("test_bom_complete")
     message = result.run.message("test_bom_complete")
-    assert "R1,R2" in message and "has no manufacturer part number" in message
+    assert "R1 (12k)" in message and "stand-in part number" in message
 
 
 # --- test_centroid_matches_board ------------------------------------------------------

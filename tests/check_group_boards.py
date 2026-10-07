@@ -701,17 +701,28 @@ def export_fab(root: Path, stem: str, fab_name: str) -> Path:
     return fab
 
 
+# The design behind the tiny board's schematic, for checks that read design.py.
+OUTPUTS_DESIGN = f"""\
+from pcbkit.design import R
+
+R("R1", "10k", "NET_A", "NET_B", "Tiny", mpn={MPN!r})
+R("R2", "10k", "NET_B", "GND", "Tiny", mpn={MPN!r})
+"""
+
+
 def outputs_project(root: Path, copper_mm: float = 0.035) -> Path:
     """Build the outputs-group project in ``root``: the tiny board, extras and exports.
 
     ``kicad/`` holds the tiny board's schematic (with an MPN on each resistor) and its
     board (30 x 20 mm, with a header and a mounting hole added, at ``copper_mm``);
     ``out/fab`` holds the files exported from them; ``layout.py`` gives the board's
-    size. The caller writes ``pcbkit.toml``. Return ``root``.
+    size; ``design.py`` is the design behind the schematic. The caller writes
+    ``pcbkit.toml``. Return ``root``.
     """
     built = tiny_board.build(root / "kicad")
     add_mpn(built.sch)
     add_extras(built.pcb, copper_mm)
     (root / "layout.py").write_text(f"W, H = {BOARD_W}, {BOARD_H}\n", encoding="utf-8")
+    (root / "design.py").write_text(OUTPUTS_DESIGN, encoding="utf-8")
     export_fab(root, tiny_board.STEM, FAB_NAME)
     return root
