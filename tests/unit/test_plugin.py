@@ -478,6 +478,11 @@ def test_the_command_scan_catches_a_renamed_command_and_a_dropped_option() -> No
     ]
 
 
+def test_a_url_that_ends_in_pcbkit_is_not_a_call() -> None:
+    text = "See `https://github.com/bruk-io/pcbkit issues` and `git clone https://x/pcbkit`."
+    assert command_problems(text) == []
+
+
 def test_the_option_scan_catches_a_lone_option_no_command_takes() -> None:
     text = "More `--tries`, or `--assembled M`, or `--retries 3`, or `-k` and `--nope`."
     assert lone_option_problems(text) == [
