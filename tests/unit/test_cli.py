@@ -32,17 +32,25 @@ WORKFLOW = [
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
 # is the independent record of who fills in what: `new` and `setup` are WP11, check,
-# mutants and report are WP7, compare and shots are WP8. The commands in BUILT have
-# their own tests and no row here.
-BUILT = {"doctor", "sch", "build", "quote", "route", "promote", "finalize"}
+# mutants and report are WP7. The commands in BUILT have their own tests and no row
+# here.
+BUILT = {
+    "doctor",
+    "sch",
+    "build",
+    "quote",
+    "route",
+    "promote",
+    "finalize",
+    "compare",
+    "shots",
+}
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
     "check": ("WP7", ["check"]),
     "mutants": ("WP7", ["mutants"]),
     "report": ("WP7", ["report"]),
-    "compare": ("WP8", ["compare", "old.kicad_pcb", "new.kicad_pcb"]),
-    "shots": ("WP8", ["shots"]),
 }
 
 # The same commands with every option they are meant to take: each must be accepted and

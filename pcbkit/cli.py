@@ -309,20 +309,104 @@ def quote_cmd(
 
 
 @cli.command("compare")
-@click.argument("old", type=click.Path(path_type=Path))
-@click.argument("new", type=click.Path(path_type=Path))
-def compare_cmd(old: Path, new: Path) -> None:
+@click.argument("old", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True, help="Print the report as JSON.")
+@click.option(
+    "--piece-tol",
+    type=click.FloatRange(min=0),
+    default=0.01,
+    show_default=True,
+    metavar="MM2",
+    help="Copper on one board only is a difference when a piece is larger than this.",
+)
+@click.option(
+    "--fill-tol",
+    type=click.FloatRange(min=0),
+    default=0.5,
+    show_default=True,
+    metavar="MM2",
+    help="A zone's fill is a difference when it moved by this much or more.",
+)
+@click.option(
+    "--top",
+    type=click.IntRange(min=0),
+    default=8,
+    show_default=True,
+    metavar="N",
+    help="Pieces to list for each layer and board in the text report.",
+)
+def compare_cmd(
+    old: Path, new: Path, as_json: bool, piece_tol: float, fill_tol: float, top: int
+) -> None:
     """Compare the copper of two boards; exit 1 if they differ.
 
-    Not implemented yet (WP8).
+    Compares the number and length of tracks, the number of vias, each zone's filled
+    area, and the copper itself on F.Cu and B.Cu: what exists on one board only,
+    judged piece by piece. Exits 0 when the boards match, 1 when they differ and 2
+    when a file cannot be read as a board.
     """
-    _not_implemented("WP8")
+    env.require_pcbnew()
+    import json
+
+    from pcbkit import compare
+
+    report = compare.compare_boards(
+        old, new, piece_tol_mm2=piece_tol, fill_tol_mm2=fill_tol
+    )
+    if as_json:
+        click.echo(json.dumps(compare.report_to_dict(report), indent=2))
+    else:
+        click.echo(compare.format_report(report, top=top))
+    if report.differs:
+        click.get_current_context().exit(1)
 
 
 @cli.command("shots")
-def shots_cmd() -> None:
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    metavar="DIR",
+    help="Folder for the shots (default: out/shots in the project).",
+)
+@click.option(
+    "--pcb",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="FILE",
+    help="Board to shoot (default: the project's kicad/<stem>.kicad_pcb).",
+)
+@click.option(
+    "--region",
+    "names",
+    multiple=True,
+    metavar="NAME",
+    help="Only this region; repeat the option for more (default: every region).",
+)
+@click.option(
+    "--no-render", is_flag=True, help="Skip the 3D renders, which take the longest."
+)
+def shots_cmd(
+    out_dir: Path | None, pcb: Path | None, names: tuple[str, ...], no_render: bool
+) -> None:
     """Export crops and renders of named board regions for review.
 
-    Not implemented yet (WP8).
+    Saves each region as an SVG and a PNG, and three 3D renders. The regions are the
+    whole board, top and bottom, and the ones the project names in SHOTS in layout.py.
+    Needs rsvg-convert for the PNGs.
     """
-    _not_implemented("WP8")
+    env.require_pcbnew()
+    from pcbkit import shots
+
+    proj = load_project()
+    if pcb is None:
+        pcb = proj.kicad_dir / f"{proj.config.board.stem}.kicad_pcb"
+        if not pcb.is_file():
+            raise click.ClickException(
+                f"no board at {pcb}: run `pcbkit finalize`, or give a board with --pcb"
+            )
+    regions = shots.select_regions(shots.load_regions(proj), names)
+    result = shots.take_shots(
+        pcb, out_dir or proj.out_dir / "shots", regions, render=not no_render
+    )
+    click.echo(shots.format_result(result, proj.root))
