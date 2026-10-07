@@ -405,7 +405,9 @@ KiCad or a rebuilt route changed nothing, or to see what a re-route did.
   lists them all.
 
 The exit code says the result: **0** the boards match, **1** they differ, **2** a file is
-not a KiCad board (or could not be read), so a script can tell "different" from "broken".
+not a KiCad board (or could not be read), so a script can tell "different" from "could not
+compare". A machine where pcbnew does not import gets the message every command that needs
+pcbnew gives, with exit code 1.
 With `--json` the report is printed as JSON and nothing else goes to standard output:
 `identical`, `differences` (one sentence each), `tolerances`, `tracks`, `vias`, `zones` (a
 fill of `null` means the board has no such zone) and `copper` (for each layer and side:
@@ -455,9 +457,15 @@ doing anything and says how to install it.
 
 A region is one side of the board, cut to a box. The top view shows `F.Cu`, `F.SilkS`,
 `F.CrtYd`, `F.Fab` and `Edge.Cuts`, the bottom view the `B.` equivalents. The bottom view is
-not mirrored: a point has the same x on both sides. There are always two regions,
-`board_top` and `board_bottom`, the whole board at 1800 pixels wide. The project adds its
-own with `SHOTS` in layout.py.
+not mirrored: a point has the same x on both sides. The colours are those of the PCB
+editor's colour theme, which is where kicad-cli takes them from. There are always two
+regions, `board_top` and `board_bottom`, the whole board at 1800 pixels wide. The project
+adds its own with `SHOTS` in layout.py.
+
+A box is read from the origin of the SVG that kicad-cli draws, which is the top-left corner
+of the bounding box of the board outline. That is layout (0, 0) when the outline starts
+there, as the default rectangle does. An outline whose bounding box starts somewhere else
+shifts every box by the same amount.
 
 #### SHOTS in layout.py
 

@@ -133,6 +133,14 @@ def test_the_layers_in_the_docs_are_the_ones_each_view_shows() -> None:
     )
 
 
+def test_the_docs_say_where_a_boxs_origin_is_and_where_colours_come_from() -> None:
+    """Keep the two conditions on a region's picture in the docs: not obvious ones."""
+    text = " ".join(section_text(SECTION).split())
+    assert "top-left corner of the bounding box of the board outline" in text
+    assert "layout (0, 0) when the outline starts there" in text
+    assert "colours are those of the PCB editor's colour theme" in text
+
+
 def test_the_section_is_written_and_uses_plain_hyphens() -> None:
     text = section_text(SECTION)
     assert "To be written" not in text
