@@ -125,7 +125,7 @@ MISSING = [
         "find_rsvg_convert",
         None,
         "rsvg-convert",
-        "finalize draws the assembly PDF",
+        "finalize and shots draw PNGs",
         "brew install librsvg",
     ),
     ("find_uv", None, "uv", "pcbkit projects use it", "brew install uv"),

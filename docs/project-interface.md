@@ -725,8 +725,9 @@ To be written with `pcbkit check`, `pcbkit mutants` and `pcbkit report` (WP7).
 
 ## Comparing boards and taking shots
 
-Two commands for looking at boards rather than building them. Both need pcbnew, so run
-them in the project's `.venv` (`pcbkit setup` makes it).
+Two commands for looking at boards rather than building them. `compare` needs pcbnew, so
+run it in the project's `.venv` (`pcbkit setup` makes it); `shots` needs only kicad-cli
+and rsvg-convert, so it runs anywhere.
 
 ### pcbkit compare
 

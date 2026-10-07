@@ -186,7 +186,7 @@ def test_stubs_do_not_need_pcbnew(monkeypatch: pytest.MonkeyPatch) -> None:
     each built command has its own test that it needs pcbnew.
     """
     monkeypatch.setitem(sys.modules, "pcbnew", None)
-    tier2 = {"route", "promote", "finalize", "check", "mutants", "compare", "shots"}
+    tier2 = {"route", "promote", "finalize", "check", "mutants", "compare"}
     for name in sorted(tier2 & set(STUBS)):
         wp, argv = STUBS[name]
         assert invoke(*argv).output.strip() == f"Error: not implemented yet ({wp})"

@@ -596,16 +596,14 @@ def invoke(*args: str) -> Result:
     return CliRunner().invoke(cli, ["shots", *args])
 
 
-def test_shots_needs_pcbnew_for_now_and_says_how_to_get_it(
-    monkeypatch: pytest.MonkeyPatch,
+def test_shots_runs_where_pcbnew_cannot_import(
+    project: Path, tools: Tools, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Keep the plan's tier: shots needs only kicad-cli, but it is a tier 2 command."""
+    """Run as a tier 1 command: kicad-cli and rsvg-convert are all it needs."""
     monkeypatch.setitem(sys.modules, "pcbnew", None)
     result = invoke()
-    assert result.exit_code == 1
-    assert "pcbnew isn't importable here. In the board project, run: pcbkit setup" in (
-        result.output
-    )
+    assert result.exit_code == 0, result.output
+    assert "pcbnew" not in result.output
 
 
 def test_shots_in_a_project_makes_every_region_and_render_in_out_shots(

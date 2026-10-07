@@ -7,10 +7,11 @@ Command functions are called ``<command>_cmd`` and registered under an explicit 
 a command named ``check`` or ``report`` never shadows the module of the same name that
 the work package implementing it will import here.
 
-Tier 2 commands (build, route, promote, finalize, check, mutants, compare, shots) need
+Tier 2 commands (build, route, promote, finalize, check, mutants, compare) need
 pcbnew. Whoever implements one must call ``pcbkit.kicad.env.require_pcbnew()`` first, so
 a missing pcbnew is a message rather than a traceback. The stubs do not, on purpose:
-they say "not implemented yet" wherever they run.
+they say "not implemented yet" wherever they run. ``shots`` is tier 1: it needs only
+kicad-cli and rsvg-convert.
 """
 
 from __future__ import annotations
@@ -395,7 +396,6 @@ def shots_cmd(
     whole board, top and bottom, and the ones the project names in SHOTS in layout.py.
     Needs rsvg-convert for the PNGs.
     """
-    env.require_pcbnew()
     from pcbkit import shots
 
     proj = load_project()

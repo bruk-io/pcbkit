@@ -7,7 +7,7 @@ anything.
 
 Required (exit status 1 if one is missing): KiCad 10.0 or newer, kicad-cli, KiCad's
 libraries, KiCad's Python importing pcbnew, Java 17 or newer, the Freerouting jar,
-rsvg-convert (finalize draws the assembly PDF with it) and uv.
+rsvg-convert (finalize draws the assembly drawing with it, shots every PNG) and uv.
 
 Optional: ngspice, which only checks that run SPICE need, and pcbnew in the Python that
 is running pcbkit, which only the tier 2 commands need (`pcbkit setup` makes a project
@@ -214,7 +214,7 @@ def diagnose() -> list[Check]:
             "rsvg-convert",
             env.find_rsvg_convert(),
             "rsvg-convert",
-            "finalize draws the assembly PDF with it",
+            "finalize and shots draw PNGs with it",
         )
     )
     checks.append(_check_tool("uv", env.find_uv(), "uv", "pcbkit projects use it"))

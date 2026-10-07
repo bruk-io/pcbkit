@@ -86,25 +86,16 @@ def _to(out: Path, source: Path) -> list[str]:
     return ["-o", str(out), str(source)]
 
 
-# The three views: the file name's attribute on DocNames, then what kicad-cli is told.
-_VIEWS = (
-    (
-        "render_iso",
-        {"side": "top", "rotate": (-40, 0, -20), "height": 1600, "zoom": 1.1},
-    ),
-    ("render_top", {"side": "top", "height": 1500, "zoom": 1.25}),
-    ("render_bottom", {"side": "bottom", "height": 1500, "zoom": 1.25}),
-)
-
-
 def renders(pcb: Path, names: DocNames, folder: Path) -> list[Path]:
-    """Render the board in 3D: an isometric view, then the top and the bottom."""
-    written = []
-    for attribute, view in _VIEWS:
-        out = folder / getattr(names, attribute)
-        cli.render_3d(pcb, out, width=2400, quality="high", **view)
-        written.append(out)
-    return written
+    """Render the board in 3D: an isometric view, then the top and the bottom.
+
+    The views are ``pcbkit.shots.RENDER_VIEWS``, so the fab export and ``pcbkit
+    shots`` make the same three pictures; these file names start with the fab name.
+    """
+    from pcbkit.shots import render_views
+
+    prefix = names.render_iso[: -len("render_iso.png")]
+    return render_views(pcb, folder, prefix=prefix)
 
 
 def export_documents(
