@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import pty
 import subprocess
 import sys
 from pathlib import Path
@@ -220,6 +221,48 @@ def test_a_relative_path_without_a_cwd_in_the_event_uses_the_process_cwd(
     assert run_guard(edit("design.py"), project).returncode == 0
 
 
+@pytest.mark.parametrize(
+    "cwd",
+    ["checks", "", 7, None, ["x"]],
+    ids=["relative", "empty", "number", "null", "list"],
+)
+def test_an_event_cwd_that_is_no_absolute_path_is_ignored(
+    project: Path, cwd: object
+) -> None:
+    """The process's own folder stands in, as when the event has no cwd at all.
+
+    A relative cwd that was trusted would turn kicad/x.kicad_pcb into
+    checks/kicad/x.kicad_pcb, which is not a generated folder, and let the edit through.
+    """
+    event = edit("kicad/x.kicad_pcb")
+    event["cwd"] = cwd
+    done = run_guard(event, project)
+    assert done.returncode == 2, stderr(done)
+
+
+def test_a_path_that_starts_with_a_tilde_is_read_against_the_home_folder(
+    tmp_path: Path,
+) -> None:
+    """~/my-board/kicad/x is in the project when $HOME holds my-board.
+
+    The event's cwd is outside every project, so a ``~`` taken as a plain folder name
+    (``<cwd>/~/my-board/...``) would find no project and let the edit through.
+    """
+    home = tmp_path / "home"
+    (home / "my-board" / "kicad").mkdir(parents=True)
+    (home / "my-board" / "pcbkit.toml").write_text("[board]\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    env = {**os.environ, "HOME": str(home)}
+    generated = run_guard(
+        edit("~/my-board/kicad/x.kicad_pcb", cwd=elsewhere), elsewhere, env=env
+    )
+    source = run_guard(edit("~/my-board/design.py", cwd=elsewhere), elsewhere, env=env)
+    assert generated.returncode == 2, stderr(generated)
+    assert "~/my-board/kicad/x.kicad_pcb" in stderr(generated)
+    assert source.returncode == 0, stderr(source)
+
+
 def test_dotdot_segments_are_resolved_before_judging(project: Path) -> None:
     into = project / "checks" / ".." / "kicad" / "x.kicad_pcb"
     out_of = project / "kicad" / ".." / "design.py"
@@ -316,6 +359,27 @@ def test_an_event_with_nothing_to_check_is_allowed(
 
 
 # --- the script itself ----------------------------------------------------------------
+
+
+def test_run_by_hand_in_a_terminal_it_says_what_it_is_instead_of_waiting(
+    tmp_path: Path,
+) -> None:
+    """A person who runs the hook from a shell gets a hint, not a silent wait."""
+    master, slave = pty.openpty()
+    try:
+        done = subprocess.run(
+            [sys.executable, str(HOOK)],
+            stdin=slave,
+            capture_output=True,
+            cwd=tmp_path,
+            timeout=15,
+        )
+    finally:
+        os.close(master)
+        os.close(slave)
+    assert done.returncode == 1, stderr(done)
+    assert stderr(done).startswith("guard_generated.py: a Claude Code hook")
+    assert stderr(done).endswith("\n")
 
 
 def test_the_script_imports_only_the_standard_library() -> None:
