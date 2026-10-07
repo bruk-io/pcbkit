@@ -52,6 +52,13 @@ from typing import Any
 
 import pytest
 
+from pcbkit.check.results import (
+    BUILTIN_GROUPS,
+    BUILTIN_PACKAGE,
+    RESULTS_FILE,
+    RESULTS_FORMAT,
+    results_dir,
+)
 from pcbkit.project import (
     Project,
     ProjectError,
@@ -60,20 +67,6 @@ from pcbkit.project import (
 )
 
 OPTION = "--pcbkit-project"
-RESULTS_DIR = "checks"
-RESULTS_FILE = "results.json"
-RESULTS_FORMAT = 1
-
-# The built-in check modules and the group each belongs to.
-BUILTIN_GROUPS = {
-    "test_kicad": "kicad",
-    "test_outputs": "outputs",
-    "test_fab": "fab",
-    "test_copper": "copper",
-    "test_circuit": "circuit",
-    "test_esp32s3": "esp32s3",
-}
-BUILTIN_PACKAGE = "pcbkit.check.builtin"
 
 STATE = pytest.StashKey[Any]()
 
@@ -190,11 +183,6 @@ def builtin_dir() -> Path:
     import pcbkit.check.builtin as builtin
 
     return Path(builtin.__file__).resolve().parent
-
-
-def results_dir(project: Project) -> Path:
-    """Return the folder the results, the report and the plots go in."""
-    return project.out_dir / RESULTS_DIR
 
 
 # --- options and set-up -----------------------------------------------------------
