@@ -289,22 +289,35 @@ def test_the_front_matter_reader_reads_the_subset_these_files_use() -> None:
 
 
 @pytest.mark.parametrize(
-    "line",
+    ("line", "why"),
     [
-        "argument-hint: [boards to make] [boards to assemble]",
-        'argument-hint: "unterminated',
-        "key: a: b",
-        "key: value # comment",
-        "key: *alias",
-        "key:",
-        "  indented: nonsense",
-        "target: { a: b, c }",
+        (
+            "argument-hint: [boards to make] [boards to assemble]",
+            "outside the supported subset",
+        ),
+        ('argument-hint: "unterminated', "unterminated quote"),
+        ("key: a: b", "outside the supported subset"),
+        ("key: value # comment", "outside the supported subset"),
+        ("key: *alias", "outside the supported subset"),
+        ("key:", "has no value"),
+        ("  indented: nonsense", "not understood"),
+        ("target: { a: b, c }", "map not understood"),
+    ],
+    ids=[
+        "two-lists",
+        "open-quote",
+        "colon-in-scalar",
+        "comment-after-scalar",
+        "alias",
+        "no-value",
+        "indented-key",
+        "half-a-map",
     ],
 )
 def test_the_front_matter_reader_refuses_what_a_yaml_parser_may_read_differently(
-    line: str,
+    line: str, why: str
 ) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=why):
         parse_frontmatter(f"---\n{line}\n---\nbody\n")
 
 
