@@ -14,9 +14,11 @@ my-board/
   pcbkit.toml          board names, stackup, router and stitching settings, fab profile, checks
   pyproject.toml       depends on pcbkit; `pcbkit new` writes it
   design.py            the circuit: parts and nets, written with pcbkit.design
-  layout.py            W, H, outline, holes, P = {ref: (x, y, rot)}
+  layout.py            W, H, P = {ref: (x, y, rot)}; optional CORNER_R, HOLES, outline(), SHOTS
   routing.py           hooks for routing (below)
-  silk.py              labels and silkscreen choices (LABELS, CONN_LABELS, HIDE_REF, ...)
+  silk.py              optional: labels and silkscreen choices (LABELS, CONN_LABELS, HIDE_REF,
+                       KEEP_REF, extra(), title block)
+  bom.py               optional: how parts are bought and shown in the BOM (MPN_OVERRIDE, ...)
   footprints.py        optional: custom symbols and footprints; footprints/ holds .kicad_mod files
   specs.py             datasheet numbers and design limits the checks read
   circuits.py          optional: SPICE deck builders

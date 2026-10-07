@@ -80,6 +80,16 @@ pcbkit/kicad/board.py pcbnew helpers (units, nets, tracks, vias, zones, keep-out
 pcbkit/design.py      the design DSL (part, R, C, LED, FP) and load_design -> Design
 pcbkit/libs.py        the project's own symbol and footprint libraries, lib tables, project file
 pcbkit/sch.py         schematic generator, ERC, netlist; build_schematic is `pcbkit sch`
+pcbkit/place.py       placement, outline, holes, stackup from layout.py (`pcbkit build`)
+pcbkit/silk.py        the silkscreen pass, apply_silk; refuses a board that already has it
+pcbkit/route/         files (stage file names), hooks (loads routing.py), rules, pre, eco,
+                      post (+ stitch, cleanup), freerouting (process, watchdog, retry
+                      loop), flow (route, promote, finalize)
+pcbkit/fab/           export (export_fab), bom (grouping, CSV/XLSX, the project's bom.py,
+                      parts_without_mpn), centroid, gerbers, docs (PDFs, assembly drawing,
+                      renders), pcbway (file names, the 600-character notes, the quote)
+pcbkit/compare.py     copper, track, via and zone-fill comparison of two boards
+pcbkit/shots.py       SVG crops, PNGs and 3D renders (kicad-cli + rsvg-convert, no pcbnew)
 docs/                 project-interface.md
 tests/unit/           one module each, nothing real touched; the fake machine is automatic
 tests/integration/    several modules together; the tests marked kicad need real KiCad
@@ -88,7 +98,13 @@ tests/fake_pcbnew.py  a pcbnew stand-in (unit tests): the `fake_pcbnew` fixture 
 tests/tiny_board.py   builds a small real board and schematic, in production order
 tests/fixtures/reports/  real KiCad 10.0.6 ERC and DRC reports from generic boards
 tests/board_files.py, tests/netlist_norm.py   write a throwaway project; reduce a netlist
-tests/fixtures/       golden/ (schematic generator), tiny_board/ (real-KiCad `pcbkit sch`)
+tests/fixtures/       golden/ (schematic generator), tiny_board/ (real-KiCad `pcbkit sch`),
+                      shots/tiny_top.svg (real kicad-cli SVG for the crop tests)
+tests/tiny_project.py the tiny board project (two holes, a layout.py) for placement and silk
+tests/route_project.py  a six-part board project for the routing tests, with a session file
+tests/fab_files.py    a made-up fab output set (job file, outline, Excellon, BOM)
+tests/e2e/            real Freerouting: .venv-kicad/bin/python -m pytest tests/e2e -m e2e -q
+                      (about 4 minutes; needs Java and the jar; macOS shows the router window)
 ```
 
 `tests/fixtures/golden/expected.kicad_sch` was made by the generator that `sch.py` was
@@ -118,6 +134,29 @@ is meant to change.
   `board.pt` so numpy scalars become floats; write the stackup copper with
   `board.set_copper` after the last `SaveBoard`. Layout millimetres and KiCad file
   millimetres differ by (50, 50): reports and saved files hold the latter.
+- KiCad 10.0.6 facts the code relies on (measured, keep them true):
+  - `pcbnew.LoadBoard` returns None for an unreadable file, `ImportSpecctraSES` returns
+    False for a missing or broken session, and `FootprintLoad` on a missing library folder
+    raises AttributeError: check each, none raises a useful error.
+  - Two identical board texts (text, layer, position, style) are merged into one on save.
+  - `SaveBoard` writes `<name>.kicad_pro` and `.kicad_prl` beside the board; `post` relies
+    on that to carry the rules through its save and reload. `NewBoard` + `SaveBoard`
+    writes no stackup: only the placement inserts one, and `set_copper` needs it.
+  - `ExportSpecctraDSN` writes the path it is given into the DSN as the design name, so
+    `export_dsn` exports from the project root as `kicad/<stem>.dsn`.
+  - kicad-cli's Gerber and drill exports do not clear their folder: empty it first.
+  - ERC report positions have two decimals (`63.50 mm`), DRC four.
+  - An SVG from `pcb export svg --fit-page-to-board` has its origin at the outline's
+    bounding box, not layout (0, 0); its colours follow the user's PCB editor theme, so
+    picture tests judge white against not white. 3D renders come out a few pixels
+    smaller than asked for.
+- Freerouting 1.9.0 prints `Starting auto-routing` about 20 s after launch; the watchdog
+  keys on it. It runs in its own process group (Ctrl-C does not reach it; `watch()` ends
+  the group). On this Mac it gave the same route for the same DSN every try.
+- A test that imports project modules inside `restored_imports()` makes numpy reload:
+  import numpy, scipy and openpyxl at the top of such a test module.
+- `tests/unit/test_docs.py`'s section helpers are not fence-aware: a Python example in
+  the docs must not have a `# comment` at column 0.
 - Report fixtures are real kicad-cli output on small generic boards. Make a new one by
   running kicad-cli on one, then rename the board and anything specific.
 - Generated files in a board project (`kicad/`, `out/`, `golden/`, `fab/`) are never
