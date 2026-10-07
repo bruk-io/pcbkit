@@ -270,6 +270,22 @@ def test_dotdot_segments_are_resolved_before_judging(project: Path) -> None:
     assert run_guard(edit(out_of), project).returncode == 0
 
 
+def test_dotdot_after_a_link_to_another_project_is_read_as_written(
+    project: Path, tmp_path: Path
+) -> None:
+    """other/../kicad/x is project/kicad/x as written, not what the link makes it.
+
+    Folding ``..`` before judging keeps the guard on the side of blocking: the link
+    leads to a project of its own, which must not hide the generated folder.
+    """
+    scratch = tmp_path / "scratch" / "my-board"
+    scratch.mkdir(parents=True)
+    (scratch / "pcbkit.toml").write_text("[board]\n", encoding="utf-8")
+    (project / "other").symlink_to(scratch, target_is_directory=True)
+    into = project / "other" / ".." / "kicad" / "x.kicad_pcb"
+    assert run_guard(edit(into), project).returncode == 2
+
+
 def test_letter_case_does_not_hide_a_generated_folder(project: Path) -> None:
     """The default macOS file system treats Kicad/ and kicad/ as one folder."""
     for name in ("KiCad", "OUT", "Golden"):

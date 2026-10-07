@@ -241,6 +241,39 @@ def test_dotdot_segments_are_resolved_before_judging(project: Path) -> None:
     assert run_hook(write(into, cwd=project), project).returncode == 0
 
 
+def test_a_path_that_climbs_out_of_the_project_with_dotdot_is_not_the_projects(
+    project: Path,
+) -> None:
+    """The project's folder is not a place to write to, but its parent is no project."""
+    for climbing in (
+        project / ".." / "notes.txt",
+        project / "checks" / ".." / ".." / "notes.txt",
+    ):
+        done = run_hook(write(climbing, cwd=project), project)
+        assert done.returncode == 0, (str(climbing), stderr(done))
+
+
+def test_dotdot_after_a_link_to_another_project_is_read_as_written(
+    project: Path, tmp_path: Path
+) -> None:
+    """other/../design.py is project/design.py as written, not what the link says.
+
+    The session was started in checks/, so a project found through the link (other/ is
+    a project of its own) is not the session's and would let the write through.
+    """
+    scratch = tmp_path / "scratch" / "my-board"
+    scratch.mkdir(parents=True)
+    (scratch / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    (project / "other").symlink_to(scratch, target_is_directory=True)
+    inside = project / "checks"
+    done = run_hook(
+        write(project / "other" / ".." / "design.py", cwd=inside),
+        inside,
+        session=inside,
+    )
+    assert done.returncode == 2, stderr(done)
+
+
 def test_a_link_inside_checks_that_leads_out_is_a_write_outside(project: Path) -> None:
     (project / "checks" / "link.py").symlink_to(project / "design.py")
     done = run_hook(write(project / "checks" / "link.py", cwd=project), project)
