@@ -1087,8 +1087,8 @@ need a pcbkit that lives somewhere else (<a href="../concepts/#the-two-tiers">co
 Install it once as a command:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv tool install --from ~/src/pcbkit pcbkit
 </code></pre></div>
-<p>That is for a checkout, which is what you have until the repository is public. After that,
-<code>uv tool install git+https://github.com/bruk-io/pcbkit</code> does the same from GitHub. If your
+<p>That is for a checkout. <code>uv tool install git+https://github.com/bruk-io/pcbkit</code> does the same
+from GitHub. If your
 shell then says <code>pcbkit: command not found</code>, run <code>uv tool update-shell</code> and open a new
 terminal.</p>
 <p>Prefer not to install anything? Write <code>uv run --project ~/src/pcbkit pcbkit</code> (a checkout)
@@ -1133,8 +1133,7 @@ Anything else that is missing comes with a fix: apply it, then run <code>pcbkit 
 <p><code>new</code> copies the blinky example into <code>my-board/</code> and names the board after the folder: the
 KiCad file stem is <code>my_board</code>, the title is <code>My Board</code>, and the fab files start with
 <code>My_Board_revA</code>. <code>--pcbkit-source</code> makes the project install pcbkit from your checkout;
-once the repository is public you can leave it off and the project installs pcbkit from
-GitHub.</p>
+leave it off and the project installs pcbkit from GitHub.</p>
 <p>What you now have is a small, working project, 30 x 20 mm: a two-pin connector, a 330 ohm
 resistor and a green LED. <a href="../concepts/#a-board-is-a-project">Concepts</a> says what each file
 is for. <code>golden/</code> already holds a route for it, so the board builds as it is.</p>

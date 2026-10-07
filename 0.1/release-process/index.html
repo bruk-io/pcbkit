@@ -787,13 +787,13 @@ version picker lists them, and <code>latest</code> points at the newest stable o
    <strong>Deploy from a branch</strong>, branch <code>gh-pages</code>, folder <code>/ (root)</code>. The branch appears
    after the first docs deploy; if it does not exist yet, publish the first release
    (below), let the docs workflow create it, then set Pages.</li>
-<li>List the Claude plugin in the <code>bruk-io/knowhere</code> marketplace: in this repository,
-   run the <code>knowhere-publisher</code> plugin's <code>publish-setup</code> skill and pick URL mode (the
-   plugin stays in this repository; knowhere stores its address). It adds
-   <code>.github/workflows/publish-to-knowhere.yml</code>. Then add a repository secret
-   <code>KNOWHERE_PAT</code>: a fine-grained token with Contents read and write on
-   <code>bruk-io/knowhere</code>. From then on, a push to <code>main</code> that changes <code>.claude-plugin/</code>
-   updates the listing.</li>
+<li>List the Claude plugin in the <code>bruk-io/knowhere</code> marketplace. This repository has
+   <code>.github/workflows/publish-to-knowhere.yml</code>, made by the <code>knowhere-publisher</code>
+   plugin's <code>publish-setup</code> skill in URL mode: the plugin stays in this repository and
+   knowhere stores its address. The workflow needs a repository secret <code>KNOWHERE_PAT</code>, a
+   fine-grained token with Contents read and write on <code>bruk-io/knowhere</code>. With it, a push
+   to <code>main</code> that changes <code>.claude-plugin/</code> updates the listing; run the workflow by hand
+   to publish without a change.</li>
 </ol>
 <p>From then on, CI writes to the <code>gh-pages</code> branch on every release: never edit that
 branch by hand.</p>
