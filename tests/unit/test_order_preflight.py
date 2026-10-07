@@ -17,6 +17,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -744,10 +745,10 @@ def test_a_check_module_that_cannot_be_opened_is_reported(
     project = make_project(tmp_path / "board")
     read_text = Path.read_text
 
-    def refuse(self: Path, *args: object, **kwargs: object) -> str:
+    def refuse(self: Path, *args: Any, **kwargs: Any) -> str:
         if self.name == "test_led.py":
             raise PermissionError(13, "Permission denied")
-        return read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+        return read_text(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_text", refuse)
     ids, lines = load_script().project_checks(project)
