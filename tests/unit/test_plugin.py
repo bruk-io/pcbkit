@@ -197,6 +197,17 @@ def plugin_texts() -> dict[Path, str]:
     return {path: read(path) for path in files if "results" not in path.parts}
 
 
+def plugin_sources() -> dict[Path, str]:
+    """Return the scripts and settings a person or Claude reads, besides the Markdown.
+
+    What a hook says when it blocks is read by Claude and shown to the user.
+    """
+    files = sorted((ROOT / "hooks").glob("*.py")) + [ROOT / "hooks" / "hooks.json"]
+    files += sorted(SKILLS.glob("*/scripts/*.py"))
+    files.append(ROOT / ".claude-plugin" / "plugin.json")
+    return {path: read(path) for path in files}
+
+
 # --- what the skills say about the command line ---------------------------------------
 
 
@@ -380,6 +391,9 @@ def test_the_hook_runs_the_guard_before_edit_and_write() -> None:
     for handler in group["hooks"]:
         assert handler["type"] == "command"
         assert handler["command"] == "python3"
+        # The default timeout is 600 seconds: a hook on every Edit and Write must not
+        # be able to hold a session that long.
+        assert 0 < handler["timeout"] <= 30, handler
         (script,) = handler["args"]
         assert (ROOT / script.replace("${CLAUDE_PLUGIN_ROOT}/", "")).is_file()
         scripts.append(script)
@@ -410,6 +424,36 @@ def test_the_order_skill_is_manual_only() -> None:
     front = parse_frontmatter(read(skill_files()["order-pcbway"]))
     assert front["disable-model-invocation"] == "true"
     assert "user-invocable" not in front
+
+
+def test_the_order_skill_stops_at_sign_in_uploads_and_payment() -> None:
+    """The three stops are what keeps Claude from signing in, choosing files or paying.
+
+    A reworded stop is a decision: change the words here when you change them there.
+    """
+    path = SKILLS / "order-pcbway" / "SKILL.md"
+    section = read(path).split("## Three places you always stop", 1)[1]
+    section = section.split("\n## ", 1)[0]
+    assert re.findall(r"^\d\. \*\*([^*]+)\*\*", section, re.M) == [
+        "Credentials.",
+        "Uploads.",
+        "Payment.",
+    ]
+    words = " ".join(section.split())
+    assert "Never type, read, store or ask for a password or code" in words
+    assert "let the user pick it in the dialog" in words
+    assert "Stop before any button that pays or places the order" in words
+    assert "The user presses the button" in words
+    assert "payment" in read(path).split("---", 2)[1]  # the description says so too
+
+
+def test_board_workflow_says_the_guard_does_not_see_bash() -> None:
+    """The hook covers Edit and Write only: the skill must say Bash is not covered."""
+    text = read(SKILLS / "board-workflow" / "SKILL.md")
+    bullets = text.split("## Boundaries", 1)[1].split("\n- ")
+    (bullet,) = [b for b in bullets if "kicad/" in b]
+    assert "hook" in bullet
+    assert "Bash" in bullet
 
 
 def test_the_review_skill_runs_in_a_fork_the_user_waits_for() -> None:
@@ -570,9 +614,25 @@ def test_the_order_skill_runs_its_preflight_script() -> None:
 
 
 def test_the_plugin_texts_use_plain_hyphens() -> None:
-    """Prose is read by people, who get no em dashes (the house style)."""
-    dashed = [str(p.relative_to(ROOT)) for p, t in plugin_texts().items() if "—" in t]
+    """Prose is read by people, who get no em dashes (the house style).
+
+    That includes what the hooks tell Claude when they block, and the scripts' own text.
+    """
+    texts = {**plugin_texts(), **plugin_sources()}
+    dashed = [str(p.relative_to(ROOT)) for p, t in texts.items() if "—" in t]
     assert not dashed, dashed
+
+
+def test_the_scan_for_em_dashes_reads_the_hooks_and_the_scripts() -> None:
+    """Guard the scan above: it must reach each script, not only the Markdown."""
+    names = {path.name for path in plugin_sources()}
+    assert {
+        "guard_generated.py",
+        "confine_check_writer.py",
+        "hooks.json",
+        "preflight.py",
+        "plugin.json",
+    } <= names
 
 
 # --- eval cases -----------------------------------------------------------------------
