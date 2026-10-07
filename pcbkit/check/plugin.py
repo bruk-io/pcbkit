@@ -316,10 +316,14 @@ def record(request: pytest.FixtureRequest) -> Callable[[str, Any], None]:
     return _record
 
 
-@pytest.fixture(autouse=True)
-def _missing_spec_guard(request: pytest.FixtureRequest) -> None:
-    """Fail a check that was parametrised from data the project does not have."""
-    callspec = getattr(request.node, "callspec", None)
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_call(item: pytest.Item) -> None:
+    """Fail a check that was parametrised from data the project does not have.
+
+    It is a failure of the check itself (not an error in setting it up), so it reads
+    in the report like any other failed check, naming the missing spec.
+    """
+    callspec = getattr(item, "callspec", None)
     if callspec is None:
         return
     for value in callspec.params.values():
