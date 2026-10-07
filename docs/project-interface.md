@@ -281,15 +281,80 @@ The routing engine imports `routing.py` and calls the hooks below that it define
 | `NETCLASSES` | `dict[str, tuple]` | when rules are applied | Net classes: name to `(track, clearance, via_d, via_drill, patterns)`, all in millimetres. `patterns` is a list of net names with KiCad's leading `/`, such as `"/VIN"`. |
 | `design_rules` | `design_rules(ds) -> None` | after pcbkit's generic rules | Board-specific design rules. `ds` is `board.GetDesignSettings()`; set minimums on it, for example `ds.m_TrackMinWidth = api.mm(0.2)`. |
 | `prerouted` | `prerouted(board, api) -> None` | before Freerouting | Hand-route what the autorouter should not decide, such as power paths. Tracks and vias made with `api.track` and `api.via` are locked, so Freerouting routes around them. |
-| `keepouts` | `keepouts(board, api) -> None` | before Freerouting | Add rule areas (`api.keepout`): a keep-out under an antenna, a clear strip along the board edge, a region reserved for a heat sink. |
+| `keepouts` | `keepouts(board, api) -> None` | before Freerouting | Add rule areas (`api.keepout`): a keep-out under an antenna, a strip kept clear of signals beside a high-current pour, a region reserved for a heat sink. |
 | `gnd_links` | `gnd_links(board, api) -> None` | after Freerouting, before the pours are filled | Give fine-pitch ground pads their own copper where the pour's minimum width would cut their thin necks. |
 | `zones` | `zones(board, api) -> None` | after `gnd_links`, before the pours are filled | Add the ground and power pours (`api.zone`) and any pour keep-out. |
 | `solid_pad_refs` | `set[str]` | while the pours are filled | References whose ground pads connect to the pour solid, with no thermal spokes: high-current connectors, a regulator's ground. |
 
 The order within each stage follows the table: before Freerouting, rules (`NETCLASSES`
-then `design_rules`), `prerouted`, `keepouts`; after it, the rules are applied again (a
-copied board does not carry them), the router's result is imported, then `gnd_links`,
-`zones` and `solid_pad_refs` run, and the pours are filled and stitched.
+then `design_rules`), `prerouted`, `keepouts`, then pcbkit's own keep-out strips along
+the four board edges; after it, the rules are applied again (a copied board does not
+carry them), the router's result is imported, then `gnd_links`, `zones` and
+`solid_pad_refs` run, and the pours are filled and stitched.
+
+An error raised inside one of your hooks reaches you as an ordinary traceback through
+`routing.py`. A hook that is missing or has the wrong shape (`prerouted` absent, a
+`NETCLASSES` entry that is not five values, `solid_pad_refs` given as a bare string) is
+reported before anything runs, with the file and the hook.
+
+### What the engine assumes
+
+- **The board's size** is `W` and `H` in `layout.py`, in millimetres. They give the
+  keep-out strips along the edges and the area stitching covers.
+- **The ground net is called `GND`.** Stitching vias, the gap-filling vias and
+  `solid_pad_refs` find ground by that name. Stitching also needs a `GND` pour on each
+  layer, so `zones` must make both; with no pour on a layer nothing is stitched, and
+  that is not an error.
+- **Stitching and clean-up are the same for every board.** Their settings are in
+  `pcbkit.toml` (`[stitch]`): the grid pitch, the dense boxes and the gap limit. After
+  the pours are filled, vias that carry copper on one layer only, and tracks that end
+  nowhere, are taken out.
+
+### The commands that run these hooks
+
+`pcbkit route [--eco PATH] [--tries N] [--passes N]` starts from
+`kicad/placed.kicad_pcb`, which `pcbkit build` writes, and stops with a hint if that is
+missing. It applies the rules, runs `prerouted` and `keepouts`, adds the edge strips and
+exports the DSN, `kicad/<stem>.dsn`. Then it runs Freerouting, up to `route.tries`
+times: after each run it imports `kicad/<stem>.ses`, runs the post-route stage (the
+hooks, the pours, the stitching and the clean-up) and runs DRC. It stops at the first
+try with no copper problem, meaning no unconnected pad, clearance, short, crossing,
+hole-clearance or edge-clearance entry; it prints each try's problems by category. If no
+try is clean it gives up, leaves the try with the fewest problems in `kicad/`, and exits
+1. A Freerouting run that has not started routing within `route.stall_timeout_s` is
+killed with everything it started, and counts as a failed try. Last it adds the
+silkscreen and shows DRC with schematic parity.
+
+With `--eco PATH`, the route in `PATH` (a folder like `golden/`) is kept: its copper is
+copied onto the new board and locked, except copper that clashes with what changed
+(dropped) and copper on the changed parts' nets or within `route.eco_unlock_reach_mm`
+of them (left free). Copied ground copper is never kept, because ground comes from the
+pours. Freerouting then completes what is missing. If it stalls on such a board, `route`
+routes the whole board instead.
+
+`pcbkit promote` copies `kicad/prerouted.kicad_pcb`, `<stem>.ses` and `<stem>.dsn` into
+`golden/`. It first runs DRC with schematic parity on the finished board and refuses
+unless there is nothing to report: `golden/` holds only a route that passed. It keeps no
+project file: the rules come from `routing.py` each time and `finalize` writes the file
+again.
+
+`pcbkit finalize [--no-render]` rebuilds the board from `golden/`: it copies the files
+there into `kicad/`, runs the post-route stage on them, adds the silkscreen, runs DRC
+with schematic parity and exports the fab files. If DRC finds anything it stops, exports
+nothing and exits 1. It needs `kicad/<stem>.kicad_sch` (from `pcbkit build`).
+
+The stages hand each other these files, all in `kicad/`:
+
+| File | Written by | What it is |
+|---|---|---|
+| `placed.kicad_pcb` | `pcbkit build` | The placed board, before routing. |
+| `prerouted.kicad_pcb` | `route` | The placed board with your pre-routes and keep-outs, and no autorouted copper. `golden/` keeps it. |
+| `<stem>.dsn` | `route` | Its Specctra export, which Freerouting reads. |
+| `<stem>.ses` | Freerouting | The route it found. `golden/` keeps it. |
+| `routed_nozones.kicad_pcb` | `route`, `finalize` | The board with the route imported, before the pours and the clean-up. |
+| `<stem>.kicad_pcb` | `route`, `finalize` | The finished board. |
+| `drc.rpt` | `route`, `promote`, `finalize` | The latest DRC report. |
+| `freerouting.log` | `route` | The router's console output from its latest run. |
 
 ### The `api` argument
 
