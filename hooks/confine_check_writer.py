@@ -91,13 +91,15 @@ def blocked_path(file_path: str, cwd: str, session: str) -> bool:
 
     A relative path is taken from ``cwd`` and ``..`` is resolved. Symbolic links are
     followed as well as the path as written: a link inside checks/ that leads to
-    design.py is a write to design.py.
+    design.py is a write to design.py. The followed path is always judged against the
+    session folder with its links followed too, even when the path has no link of its
+    own: the session folder may be the one reached through a link (on a Mac, /tmp and
+    /var are links), and the path may name the project by its real location.
     """
     written = os.path.normpath(os.path.join(cwd, os.path.expanduser(file_path)))
     if confined(written, os.path.normpath(session)):
         return True
-    resolved = os.path.realpath(written)
-    return resolved != written and confined(resolved, os.path.realpath(session))
+    return confined(os.path.realpath(written), os.path.realpath(session))
 
 
 def session_folder(event: dict, fallback_cwd: str) -> str:
