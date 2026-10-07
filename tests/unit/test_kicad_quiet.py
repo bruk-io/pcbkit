@@ -13,6 +13,7 @@ words reach the terminal only if something outside the crashing process writes t
 
 from __future__ import annotations
 
+import errno
 import os
 import subprocess
 import sys
@@ -21,7 +22,7 @@ import time
 import types
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import pytest
 
@@ -75,6 +76,11 @@ def run_child(code: str) -> subprocess.CompletedProcess[str]:
         text=True,
         timeout=120,
     )
+
+
+def open_descriptors() -> int:
+    """Count the descriptors this process has open."""
+    return len(os.listdir("/dev/fd"))
 
 
 # --- which lines are noise ------------------------------------------------------------
@@ -212,6 +218,12 @@ def test_strip_noise_keeps_every_other_line_as_it_is() -> None:
     )
 
 
+def test_strip_noise_copes_with_text_that_utf8_cannot_encode() -> None:
+    """Keep going on a lone surrogate, which is what undecodable bytes can leave."""
+    text = "caf\udce9 is latin-1\n" + MAC.decode() + "\nlast line"
+    assert quiet.strip_noise(text) == "caf\udce9 is latin-1\nlast line"
+
+
 # --- hiding it at the file descriptor ------------------------------------------------
 
 
@@ -346,10 +358,6 @@ def test_a_block_inside_a_block_starts_no_second_filter(
 
 def test_no_descriptor_and_no_child_is_left_behind(recorder: Recorder) -> None:
     """Open and close many blocks, with and without an error, and count what is open."""
-
-    def open_descriptors() -> int:
-        return len(os.listdir("/dev/fd"))
-
     before = open_descriptors()
     for round_ in range(12):
         try:
@@ -380,17 +388,31 @@ def test_a_block_after_a_failed_one_still_works(
 # --- when it cannot hide anything: show everything, break nothing ---------------------
 
 
-@pytest.mark.parametrize("executable", [None, "", "/nonexistent/python"])
+@pytest.mark.parametrize(
+    "executable",
+    [
+        None,
+        "",
+        "/nonexistent/python",
+        pytest.param("/nonexistent/py\0thon", id="a null byte in the path"),
+    ],
+)
 def test_without_a_usable_interpreter_the_noise_shows(
     capfd: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
     executable: str | None,
 ) -> None:
-    """Python leaves sys.executable empty or None when it cannot find itself."""
+    """Python leaves sys.executable empty or None when it cannot find itself.
+
+    One that cannot be started is an OSError (not there) or a ValueError (a null byte in
+    its path). Neither may leave open the copy of descriptor 2 that was made for it.
+    """
     monkeypatch.setattr(sys, "executable", executable)
+    before = open_descriptors()
     with quiet.quiet_stderr():
         write(MAC, b"real line")
     assert capfd.readouterr().err == MAC.decode() + "\nreal line\n"
+    assert open_descriptors() == before
 
 
 def test_a_closed_standard_error_is_left_alone() -> None:
@@ -406,6 +428,48 @@ def test_a_closed_standard_error_is_left_alone() -> None:
         """
     )
     assert (done.returncode, done.stdout, done.stderr) == (0, "ran\n", "")
+
+
+class FlushFails:
+    """A standard error whose flush fails, as one with a broken pipe behind it does."""
+
+    def flush(self) -> None:
+        """Fail like a write to a pipe that nobody reads."""
+        raise OSError(errno.EPIPE, "planted")
+
+
+def closed_stream() -> IO[str]:
+    """Return a text file that has been closed, so flushing it raises ValueError.
+
+    (A closed io.StringIO would not do: its flush does nothing, and never complains.)
+    """
+    stream = open(os.devnull, "w")
+    stream.close()
+    return stream
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        pytest.param(lambda: None, id="no standard error object"),
+        pytest.param(closed_stream, id="a closed one"),
+        pytest.param(FlushFails, id="one whose flush fails"),
+    ],
+)
+def test_a_standard_error_that_will_not_flush_does_not_break_the_block(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    make: Callable[[], Any],
+) -> None:
+    """Flush Python's standard error, whatever state the program left it in.
+
+    A host can leave sys.stderr as None, closed, or broken. The filtering still has to
+    work, and the flush must not be what raises.
+    """
+    monkeypatch.setattr(sys, "stderr", make())
+    with quiet.quiet_stderr():
+        write(MAC, b"real line")
+    assert capfd.readouterr().err == "real line\n"
 
 
 # --- when something outside goes wrong: the reader leaves, a child holds the pipe ----
@@ -491,6 +555,89 @@ def test_a_child_that_keeps_the_pipe_open_cannot_hold_the_block_up(
             lingering.wait()
 
 
+# The next two tests inject a failure that real descriptors and pipes do not produce on
+# demand. Everything else in them is real: the filter, the pipes, the descriptors.
+
+
+class FailingOs:
+    """Stand in for quiet's ``os`` module: the calls named in ``fail`` raise."""
+
+    def __init__(self, **fail: OSError) -> None:
+        """Remember which calls fail, and with what."""
+        self.fail = fail
+
+    def __getattr__(self, name: str) -> Any:
+        """Return the real attribute of ``os``, or a call that raises the error."""
+        if name not in self.fail:
+            return getattr(os, name)
+        error = self.fail[name]
+
+        def broken(*args: Any, **kwargs: Any) -> Any:
+            raise error
+
+        return broken
+
+
+def test_a_redirect_that_fails_runs_the_call_unfiltered_and_leaves_nothing(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    recorder: Recorder,
+) -> None:
+    """Undo what was started when descriptor 2 cannot be pointed at the filter.
+
+    The filter is already running by then: end it (close its input and wait for it) and
+    close the saved copy of descriptor 2, then let the call run with the noise showing.
+    """
+    monkeypatch.setattr(quiet, "os", FailingOs(dup2=OSError(errno.EBADF, "planted")))
+    before = open_descriptors()
+    with quiet.quiet_stderr():
+        write(MAC, b"real line")
+    assert capfd.readouterr().err == MAC.decode() + "\nreal line\n"
+    (child,) = recorder.children
+    assert child.returncode == 0  # it was sent nothing, and has been waited for
+    assert open_descriptors() == before
+
+
+class ClosesBadly:
+    """The filter's input: it closes for real, then raises as close(2) may (EIO)."""
+
+    def __init__(self, pipe: Any) -> None:
+        """Wrap the real pipe."""
+        self.pipe = pipe
+
+    def __getattr__(self, name: str) -> Any:
+        """Pass everything but ``close`` to the real pipe."""
+        return getattr(self.pipe, name)
+
+    def close(self) -> None:
+        """Close the real pipe, then raise."""
+        self.pipe.close()
+        raise OSError(errno.EIO, "planted")
+
+
+class ClosesBadlyRecorder(Recorder):
+    """A Recorder whose filters have an input that raises when it is closed."""
+
+    def Popen(self, *args: Any, **kwargs: Any) -> Any:  # noqa: N802
+        """Start the real filter, and wrap its input."""
+        child = super().Popen(*args, **kwargs)
+        child.stdin = ClosesBadly(child.stdin)
+        return child
+
+
+def test_a_pipe_that_fails_to_close_does_not_break_the_block(
+    capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Go on to wait for the filter when closing its input raises."""
+    rec = ClosesBadlyRecorder()
+    monkeypatch.setattr(quiet, "subprocess", rec)
+    with quiet.quiet_stderr():
+        write(MAC, b"real line")
+    (child,) = rec.children
+    assert child.returncode == 0  # it was still waited for, and it finished
+    assert capfd.readouterr().err == "real line\n"
+
+
 # --- the reason it is a process: a crash's own messages ------------------------------
 
 CRASH = """
@@ -531,6 +678,30 @@ def test_python_level_writes_inside_the_block_are_filtered_in_order() -> None:
     )
     assert done.returncode == 0
     assert done.stderr == "before\na python error\nafter\n"
+
+
+def test_text_python_is_holding_keeps_its_place_around_the_block() -> None:
+    """Flush Python's standard error on the way in and on the way out.
+
+    A write with no newline stays in Python's buffer. Still there when descriptor 2 is
+    switched, it would come out on the wrong side of what the block writes.
+    """
+    done = run_child(
+        """
+        import os, sys
+        from pcbkit.kicad import quiet
+
+        # Hold partial lines, whatever PYTHONUNBUFFERED says.
+        sys.stderr.reconfigure(line_buffering=True, write_through=False)
+        sys.stderr.write("held before, ")
+        with quiet.quiet_stderr():
+            os.write(2, b"from C++\\n")
+            sys.stderr.write("held inside, ")
+        os.write(2, b"after\\n")
+        """
+    )
+    assert done.returncode == 0
+    assert done.stderr == "held before, from C++\nheld inside, after\n"
 
 
 # --- wrapping calls ------------------------------------------------------------------
