@@ -11,3 +11,4 @@ dist/
 htmlcov/
 .DS_Store
 .claude/settings.local.json
+evals/results/
