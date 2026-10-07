@@ -32,9 +32,11 @@ pcbkit builds two-layer boards only. Say so if the user expects four.
 Check the machine first with `pcbkit doctor`, and fix what it reports before going on. Then
 `pcbkit new my-board` (before pcbkit is installed:
 `uvx --from git+https://github.com/bruk-io/pcbkit pcbkit new my-board`), `cd my-board`,
-`pcbkit setup`. The new project is a small working example, one LED on a connector, with
-two checks and a planted mistake. If either command says "not implemented yet", the pcbkit
-in use is older than this skill: tell the user, and do not build the folder by hand.
+`pcbkit setup`, which builds the project's `.venv` on KiCad's Python and fetches
+Freerouting. The new project is a small working example (an LED, a resistor and a
+connector, with two checks and a planted mistake) to change piece by piece. If either
+command says "not implemented yet", the pcbkit in use is older than this skill: tell the
+user, and do not build the folder by hand.
 
 ## 3. Fill it in
 

@@ -2,10 +2,9 @@
 description: >-
   Review a routed pcbkit board's layout from pictures and the DRC report, and return only
   the findings: signals running under switching regulators, copper pours sliced into
-  islands or thin necks, slivers, parts and tracks crowding the board edge. Use when the
-  user asks for a layout review, a second look at the board, "does this layout look right",
-  or a check before promote or ordering. Runs in a forked context because the renders,
-  crops and DRC listings it reads are noisy.
+  islands or thin necks, and slivers. Use when the user asks for a layout review, a second
+  look at the board, "does this layout look right", or a check before promote or ordering.
+  Runs in a forked context because the renders, crops and DRC listings it reads are noisy.
 context: fork
 background: false
 allowed-tools: Bash(pcbkit shots *) Bash(.venv/bin/pcbkit shots *) Read Glob Grep
