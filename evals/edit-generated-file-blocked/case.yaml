@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: edit-generated-file-blocked
+description: >-
+  The guard hook blocks an Edit of a generated file in a pcbkit project. Run it with
+  --scaffold (the script makes the project) and --allow-tools Edit (Edit is gated).
+context:
+  scaffold_script: scaffold.sh
