@@ -160,10 +160,16 @@ def test_a_project_with_no_checks_folder_yet_starts_one_under_its_exact_name(
     assert (exact.returncode, capitals.returncode) == (0, 2), stderr(capitals)
 
 
-def test_a_link_to_checks_under_another_name_is_not_checks(project: Path) -> None:
-    """Only a spelling that differs in capitals is compared by what it is."""
-    (project / "chk").symlink_to("checks", target_is_directory=True)
-    done = run_hook(write(project / "chk" / "test_x.py", cwd=project), project)
+@pytest.mark.parametrize("name", ["chk", "checks_old", "checks2"])
+def test_a_link_to_checks_under_another_name_is_not_checks(
+    project: Path, name: str
+) -> None:
+    """Only a spelling that differs in capitals is compared by what it is.
+
+    A name that merely starts with ``checks`` is another name.
+    """
+    (project / name).symlink_to("checks", target_is_directory=True)
+    done = run_hook(write(project / name / "test_x.py", cwd=project), project)
     assert done.returncode == 2, stderr(done)
 
 
