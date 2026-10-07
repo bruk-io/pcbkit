@@ -38,7 +38,8 @@ StrPath = Union[str, Path]
 def thickness_m(copper_mm: float) -> float:
     """Return a copper thickness in metres, rounded to a picometre.
 
-    The rounding makes 0.035 mm come out as exactly 35e-6, not 35.00000000000001e-6.
+    The rounding makes 0.035 mm come out as exactly 35e-6; a plain 0.035 * 1e-3 is
+    3.5000000000000004e-05.
     """
     return round(copper_mm * 1e-3, 12)
 

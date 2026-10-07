@@ -24,7 +24,7 @@ l at centre distance d have (Grover)
     M = (mu0 / 2pi) * l * [asinh(l/d) - sqrt(1 + (d/l)^2) + d/l]
 
 and the induced series noise on the victim is V = M * dI/dt. Worked example: l = 10 mm,
-d = 4.1 mm gives M = 1.9 nH, so V = 9 mV at 5 A/us. A class carries its own dI/dt.
+d = 4.1 mm gives M = 1.9 nH, so V = 9.5 mV at 5 A/us. A class carries its own dI/dt.
 
 Capacitive coupling ("switch" aggressors, the nodes of switching regulators). The
 victim sees the smaller of V = Z * C' * l * dV/dt (edge slower than the node's RC) and
