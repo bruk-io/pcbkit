@@ -342,6 +342,26 @@ def test_a_block_inside_a_block_starts_no_second_filter(
     assert capfd.readouterr().err == "inner real line\nouter real line\n"
 
 
+def test_no_descriptor_and_no_child_is_left_behind(recorder: Recorder) -> None:
+    """Open and close many blocks, with and without an error, and count what is open."""
+
+    def open_descriptors() -> int:
+        return len(os.listdir("/dev/fd"))
+
+    before = open_descriptors()
+    for round_ in range(12):
+        try:
+            with quiet.quiet_stderr():
+                write(MAC)
+                if round_ % 2:
+                    raise RuntimeError("planted")
+        except RuntimeError:
+            pass
+    assert open_descriptors() == before
+    assert len(recorder.children) == 12
+    assert all(child.returncode == 0 for child in recorder.children)
+
+
 def test_a_block_after_a_failed_one_still_works(
     capfd: pytest.CaptureFixture[str], recorder: Recorder
 ) -> None:
@@ -358,12 +378,13 @@ def test_a_block_after_a_failed_one_still_works(
 # --- when it cannot hide anything: show everything, break nothing ---------------------
 
 
-@pytest.mark.parametrize("executable", ["", "/nonexistent/python"])
+@pytest.mark.parametrize("executable", [None, "", "/nonexistent/python"])
 def test_without_a_usable_interpreter_the_noise_shows(
     capfd: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
-    executable: str,
+    executable: str | None,
 ) -> None:
+    """Python leaves sys.executable empty or None when it cannot find itself."""
     monkeypatch.setattr(sys, "executable", executable)
     with quiet.quiet_stderr():
         write(MAC, b"real line")

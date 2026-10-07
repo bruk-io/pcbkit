@@ -67,13 +67,12 @@ def test_control_plain_pcbnew_prints_noise_and_the_patterns_cover_all_of_it(
     lines = done.stderr.splitlines()
     if not lines:
         pytest.skip("this KiCad prints no wx noise here, so there is nothing to hide")
+    # KiCad 10.0.6 prints 25 here (one assertion, twelve lines for each of the two
+    # LoadBoard calls after the first). The counts are not asserted: the fix does not
+    # depend on them, and a later 10.0.x that adds an image format is still fixed. What
+    # it does depend on is that the patterns know every line.
     missed = [line for line in lines if not quiet.is_noise(line.encode())]
     assert not missed, f"pcbnew printed lines that are not known noise: {missed}"
-    # What KiCad 10.0.6 does, and the module docstring of pcbkit.kicad.quiet says: one
-    # assertion for the first board made, twelve lines for each LoadBoard after the
-    # first. If this fails the noise has changed: measure it again.
-    assert sum("stdpbase.cpp" in line for line in lines) == 1, lines
-    assert sum("duplicate image handler" in line for line in lines) == 24, lines
 
 
 def test_the_wrapped_calls_print_nothing_and_still_return_boards(
