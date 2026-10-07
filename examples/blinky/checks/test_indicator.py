@@ -18,8 +18,11 @@ from pcbkit.check.plugin import ProjectModule
 def solve(nl: Netlist, specs: ProjectModule, vin: float, vf: float) -> dc.Solution:
     """Return the DC operating point with VIN at ``vin`` and every LED dropping ``vf``.
 
-    Resistors take their values from the netlist. An LED is a fixed forward voltage
-    plus 1 ohm, which the solver wants to be above zero.
+    Built here from the netlist and specs.py rather than with ``dc.build``, which gives
+    an LED a forward voltage by colour (2.9 V for green) and 20 ohm, where this LED's
+    datasheet says 2.2 V typical and 2.5 V at most. Resistors take their values from
+    the netlist. An LED is a fixed forward voltage plus 1 ohm, which the solver wants
+    above zero.
     """
     circuit = dc.Circuit()
     circuit.fix(specs.SUPPLY_NET, vin).fix(specs.GROUND_NET, 0.0)

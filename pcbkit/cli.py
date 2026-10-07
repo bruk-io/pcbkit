@@ -131,8 +131,8 @@ def setup_cmd() -> None:
     commands to run next, from .venv/bin.
 
     Needs uv and KiCad 10; a failure says what is wrong and how to fix it, and
-    `pcbkit doctor` shows what is missing on the machine. It runs anywhere: it is
-    the one command that does not need pcbnew in the Python that runs it.
+    `pcbkit doctor` shows what is missing on the machine. It does not need pcbnew in
+    the Python that runs it, so it works from `uvx` or any environment with pcbkit.
     """
     from pcbkit import bootstrap
 

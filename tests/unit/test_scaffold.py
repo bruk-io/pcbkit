@@ -22,14 +22,20 @@ from pcbkit import bootstrap, scaffold
 from pcbkit.cli import cli
 from pcbkit.project import NAME_PATTERN, ProjectError, load_config, load_project
 from pcbkit.scaffold import Names, ScaffoldError
+from tests.scaffold_files import (
+    EXAMPLE,
+    REPO,
+    listing,
+    make_checkout,
+    materialise,
+    write_tree,
+)
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
 
-REPO = Path(__file__).resolve().parents[2]
-EXAMPLE = REPO / "examples" / "blinky"
 TEMPLATE = scaffold.TEMPLATE_ROOT / scaffold.TEMPLATES["blinky"]
 DOCS = REPO / "docs" / "project-interface.md"
 SYNC_SCRIPT = REPO / "examples" / "sync_template.py"
@@ -41,46 +47,11 @@ def invoke(*args: str, env: dict[str, str] | None = None) -> Result:
     return CliRunner().invoke(cli, list(args), env=env)
 
 
-def make_checkout(root: Path) -> Path:
-    """Make a folder that looks like a pcbkit checkout, and return it."""
-    (root / "pcbkit").mkdir(parents=True)
-    (root / "pcbkit" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "pyproject.toml").write_text(
-        '[project]\nname = "pcbkit"\nversion = "0.1.0"\n', encoding="utf-8"
-    )
-    return root
-
-
-def write_tree(root: Path, files: dict[str, str]) -> Path:
-    """Write text files (paths relative to ``root``), and return ``root``."""
-    for name, text in files.items():
-        path = root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
-    return root
-
-
-def materialise(files: dict[str, bytes], root: Path) -> Path:
-    """Write ``files`` (as ``template_files`` returns them) under ``root``."""
-    for name, data in files.items():
-        path = root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-    return root
-
-
 def commands_in(text: str) -> set[str]:
     """Return the pcbkit commands a README shows: at a line's start, or in backticks."""
     at_start = re.findall(r"^(?:\.venv/bin/)?pcbkit (\w+)", text, flags=re.MULTILINE)
     inline = re.findall(r"`(?:\.venv/bin/)?pcbkit (\w+)", text)
     return set(at_start) | set(inline)
-
-
-def listing(root: Path) -> list[str]:
-    """Return every file under ``root``, as sorted ``/`` paths."""
-    return sorted(
-        p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
-    )
 
 
 @pytest.fixture
