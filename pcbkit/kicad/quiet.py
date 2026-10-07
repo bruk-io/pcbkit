@@ -68,14 +68,20 @@ NOISY_CALLS = ("LoadBoard", "NewBoard")
 
 # Seconds to wait for the filter to finish after the call. It ends when its input does,
 # so this is a ceiling for something gone wrong, such as a child of the call that
-# inherited the pipe and is still running.
+# inherited the pipe and is still running. At the ceiling the filter is killed: what it
+# had already written stays, and a line it had not yet read is lost.
 FILTER_WAIT_S = 10.0
 
 # What the filter process runs: python -I -S -c <this>. It reads the pipe, drops the
-# noise, and writes the rest to the saved real standard error. A line is written whole
-# and flushed at once, so a message printed just before a crash is not held back. If
-# the real standard error closes it keeps reading and discards, so the process that
-# writes into the pipe never sees a broken pipe.
+# noise, and writes the rest to the saved real standard error. A kept line is written
+# whole and flushed at once, because sys.stdout.buffer holds its output until it is
+# full or the process ends, on a terminal too (-I makes it ignore PYTHONUNBUFFERED).
+# Without the flush a real line would only appear when the call is over, and one still
+# held when _end has to kill the filter at FILTER_WAIT_S would be lost with it. A crash
+# does not need the flush: the crashed process's end of the pipe closes, so the filter
+# reads to the end of its input and exits, and exiting flushes. If the real standard
+# error closes it keeps reading and discards, so the process that writes into the pipe
+# never sees a broken pipe.
 _FILTER_SOURCE = """\
 import re, sys
 noise = [re.compile(p) for p in %r]

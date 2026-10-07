@@ -83,6 +83,16 @@ def open_descriptors() -> int:
     return len(os.listdir("/dev/fd"))
 
 
+def wait_until(condition: Callable[[], bool], seconds: float) -> bool:
+    """Poll ``condition`` for up to ``seconds``; return whether it came true."""
+    deadline = time.monotonic() + seconds
+    while not condition():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.005)
+    return True
+
+
 # --- which lines are noise ------------------------------------------------------------
 
 NOISE = [
@@ -527,15 +537,25 @@ def test_a_child_that_keeps_the_pipe_open_cannot_hold_the_block_up(
 
     A process that the call started inherited descriptor 2 and is still running when the
     call ends. The pipe then still has a writer, so the filter never reaches the end of
-    its input and would wait for ever, and the block with it.
+    its input and would wait for ever, and the block with it. At the ceiling the filter
+    is killed, so a real line it was sent from inside the block has to be out already:
+    the filter flushes each line it keeps, because the kill throws away what it holds.
     """
     ceiling = 0.5
     monkeypatch.setattr(quiet, "FILTER_WAIT_S", ceiling)
     before = os.fstat(2)
+    shown = os.dup(2)  # capfd's file: its size says what has been written to it
     lingering: subprocess.Popen[bytes] | None = None
-    began = time.monotonic()
     try:
         with quiet.quiet_stderr():
+            write(b"a real line inside the block")
+            # Let the filter start and write it, so that the ceiling is counted from
+            # when the filter is up and not from when it was asked for, however busy
+            # the machine is. A filter that holds the line in a buffer never writes
+            # it: this then waits out its three seconds and the kill below loses it.
+            # Whether it came true does not matter here: the last assertion decides.
+            wait_until(lambda: os.fstat(shown).st_size > 0, seconds=3)
+            began = time.monotonic()
             # Its standard error is descriptor 2, which is the filter's pipe.
             lingering = subprocess.Popen(
                 [sys.executable, "-I", "-S", "-c", "import time; time.sleep(20)"],
@@ -551,11 +571,37 @@ def test_a_child_that_keeps_the_pipe_open_cannot_hold_the_block_up(
         after = os.fstat(2)
         assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
         write(b"written after the block")
-        assert capfd.readouterr().err == "written after the block\n"
+        assert capfd.readouterr().err == (
+            "a real line inside the block\nwritten after the block\n"
+        )
     finally:
+        os.close(shown)
         if lingering is not None:
             lingering.kill()
             lingering.wait()
+
+
+def test_a_real_line_is_shown_while_the_call_is_still_running(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Get a kept line out as soon as the filter has read it, not when the call ends.
+
+    The filter writes through a block-buffered stream, so only its flush after each
+    line puts the line where the terminal shows it. A call that goes on for a while
+    (or hangs) after it has printed a real message would otherwise show nothing.
+    """
+    line = b"a real line, from a call that is still going"
+    shown = os.dup(2)  # capfd's file: its size says what has been written to it
+    try:
+        with quiet.quiet_stderr():
+            write(line)
+            arrived = wait_until(
+                lambda: os.fstat(shown).st_size >= len(line) + 1, seconds=10
+            )
+    finally:
+        os.close(shown)
+    assert arrived, "the filter was still holding a real line after ten seconds"
+    assert capfd.readouterr().err == line.decode() + "\n"
 
 
 # The next two tests inject a failure that real descriptors and pipes do not produce on
