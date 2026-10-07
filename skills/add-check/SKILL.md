@@ -29,9 +29,12 @@ check for the same thing.
 ## 2. Pin down the rule and its source
 
 State the hazard in one sentence. Give the limit as a number with a unit, and write its
-source beside it in specs.py: the datasheet, the page or table, the URL. If you cannot find
-a source, ask the user or dispatch the `parts-researcher` agent. A limit you made up is
-worse than no check, because it looks like evidence.
+source beside it (the datasheet, the page or table, the URL): in specs.py if you may edit
+it, otherwise at the top of the check module. If you cannot find a source, ask the user or
+dispatch the `parts-researcher` agent; a worker that can do neither stops and reports the
+missing limit. A limit you made up is worse than no check, because it looks like evidence.
+
+For several hazards, dispatch the `check-writer` agent once per hazard, in parallel.
 
 ## 3. Write it
 
@@ -50,7 +53,9 @@ worse than no check, because it looks like evidence.
 
 - A netlist or circuit check: add an entry to `MUTANTS` in mutants.py (the mistake in words,
   a list of `(text in design.py, replacement)` edits, and the `-k` expression that must
-  then fail), then run `pcbkit mutants`. It must say CAUGHT, and the control run must pass.
+  then fail), then run `pcbkit mutants`. It must say CAUGHT, and the control run must
+  pass. A worker that may not edit mutants.py does this in its scratch copy and returns
+  the entry.
 - A board or copper check: the mutant runner edits design.py only and leaves the layout
   alone. Copy the project to a scratch folder without its `.venv`, plant the mistake there
   (move the part, narrow the track), rebuild what the check reads, and run the check from

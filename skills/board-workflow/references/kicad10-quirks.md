@@ -15,10 +15,11 @@ the other way. (A report's `@(50.0000 mm, 50.0000 mm)` is the corner.)
 
 - On macOS its window opens while it routes, because there is no virtual display to hide
   it in. Leave it alone; pcbkit starts it, watches it and ends it.
-- The same input can give different boards: on macOS one run once left a net unrouted and
-  the next run completed it. That is why `route` makes several tries and stops at the first
-  clean one. If every try ends with copper problems, more tries are rarely the answer:
-  change the placement, or the hand routes and keep-outs in routing.py.
+- Nothing promises the same board for the same input. On one Mac a run once left a net
+  unrouted and the next run completed it; on another, the same input gave the same route
+  every try. That is why `route` makes several tries and stops at the first clean one. If
+  every try ends with copper problems, more tries are rarely the answer: change the
+  placement, or the hand routes and keep-outs in routing.py.
 - A run that has not started routing within `stall_timeout_s` (90 s by default) is killed
   and counts as a failed try. With `--eco` the first stall makes `route` route the whole
   board instead, without using up a try.

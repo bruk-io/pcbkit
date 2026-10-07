@@ -15,9 +15,10 @@ missing, ask. Assembling fewer boards than you make is normal and allowed.
 
 ## Before the browser
 
-1. Check that the fab files are current: `pcbkit finalize` ran after the last change to
-   the board, and `pcbkit check` passes. If not, say so and stop; an order made from stale
-   files is paid for.
+1. Run `python3 "${CLAUDE_SKILL_DIR}/scripts/preflight.py"` in the project folder. It
+   compares the fab files and the check results with every source of the board. Anything
+   but an `OK:` line means they are stale, missing or failing: show the user what it
+   printed and stop. An order made from stale files is paid for.
 2. Ask what the assembler needs to know that the files do not say: parts the user supplies
    themselves, parts to leave unfitted, polarity beyond the assembly drawing, parts that
    must not be substituted. Write the answer, 600 characters at most, to `order-notes.txt`

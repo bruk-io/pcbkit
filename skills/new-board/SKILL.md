@@ -53,6 +53,6 @@ user, and do not build the folder by hand.
 
 ## 4. First build
 
-`pcbkit build` until ERC reports nothing and `missing` is empty. Read what ERC says before
-changing anything: an unconnected pin is a decision, not noise. Then hand over to
+`pcbkit build` until it exits 0 (no ERC errors) and `missing` is empty. Read the ERC
+warnings it lists before changing anything: an unconnected pin is a decision, not noise. Then hand over to
 board-workflow for `route`, and to add-check for the hazards from the interview.

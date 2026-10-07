@@ -541,6 +541,29 @@ def test_every_plugin_root_path_a_skill_or_agent_names_exists() -> None:
     assert not missing, "\n".join(missing)
 
 
+def skill_dir_targets() -> dict[str, list[str]]:
+    """Return each skill's ``${CLAUDE_SKILL_DIR}/...`` paths, by skill name."""
+    return {
+        name: re.findall(r"\$\{CLAUDE_SKILL_DIR\}/([\w./-]+[\w/])", read(path))
+        for name, path in skill_files().items()
+    }
+
+
+def test_every_skill_dir_path_a_skill_names_exists() -> None:
+    missing = [
+        f"{name}: {target}"
+        for name, targets in skill_dir_targets().items()
+        for target in targets
+        if not (SKILLS / name / target).exists()
+    ]
+    assert not missing, "\n".join(missing)
+
+
+def test_the_order_skill_runs_its_preflight_script() -> None:
+    """Guard the guard: the scan above must find the one script a skill runs."""
+    assert skill_dir_targets()["order-pcbway"] == ["scripts/preflight.py"]
+
+
 def test_the_plugin_texts_use_plain_hyphens() -> None:
     """Prose is read by people, who get no em dashes (the house style)."""
     dashed = [str(p.relative_to(ROOT)) for p, t in plugin_texts().items() if "—" in t]

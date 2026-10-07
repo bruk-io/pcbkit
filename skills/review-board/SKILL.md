@@ -8,7 +8,7 @@ description: >-
 context: fork
 # The user reads the findings in the same turn, so the fork is waited for.
 background: false
-# Read-only by construction: it may run pcbkit shots and read, and nothing else.
+# No file-edit tools while it runs; the body limits Bash to pcbkit shots.
 allowed-tools: Bash(pcbkit shots *) Bash(.venv/bin/pcbkit shots *) Read Glob Grep
 disallowed-tools: Edit Write NotebookEdit
 ---
@@ -21,9 +21,13 @@ user named a focus (region names, or a concern), it is here: $ARGUMENTS
    --no-render` if a bare `pcbkit` is not found). It writes an SVG and a PNG of each region
    into `out/shots/`. If it says there is no board, report that and stop.
 2. Read `kicad/drc.rpt` if it exists and note anything other than 0 violations, 0
-   unconnected pads and 0 footprint errors.
+   unconnected pads and 0 footprint errors. Read `out/checks/results.json` if it exists:
+   the entries whose `group` is `copper` measure reserved regions, ground stitching,
+   coupling and current capacity, so report any that failed or were skipped as "measured
+   by a check" and do not redo that work by eye.
 3. Look at every PNG in `out/shots/` with Read: `board_top` and `board_bottom` first, then
-   the regions the project defines. Look for:
+   the regions the project defines. For what no check measures, mark each finding "by
+   eye". Look for:
    - signal tracks under or right beside a switching regulator's inductor, diode or switch
      node, where its edges couple into them;
    - ground or power pours cut into islands or thin necks by tracks, so that part of a pour

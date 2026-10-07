@@ -73,8 +73,8 @@ then `finalize`.
 - Never loosen, skip or delete a check to get a green run. A failing check is the
   information; fix the design, or use add-check if the limit itself is wrong.
 - Ordering from a fab house is started by the user with `/pcbkit:order-pcbway`, never by
-  Claude. If asked to order, say so, and first confirm that `finalize` ran after the last
-  change and `check` passes.
+  Claude. If asked to order, say so and point them to it: it begins by checking that the
+  fab files and the check results are current.
 
 ## References
 
