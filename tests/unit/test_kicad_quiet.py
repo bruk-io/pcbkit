@@ -4,7 +4,8 @@ pcbnew writes two kinds of noise straight to file descriptor 2 (see the module's
 docstring for the measurements). The tests use stand-ins that write the same lines with
 ``os.write(2, ...)``, and read them back with ``capfd``, which captures at the
 descriptor like a terminal would. A test that needs a process of its own (a crash, a
-closed standard error) runs a fresh Python and reads its real standard error.
+closed standard error, a reader that has gone away) runs a fresh Python and reads its
+real standard error.
 
 The filter is a real child process: that is the thing under test, because a crash's last
 words reach the terminal only if something outside the crashing process writes them.
@@ -16,6 +17,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import time
 import types
 from collections.abc import Callable
 from pathlib import Path
@@ -392,6 +394,7 @@ def test_without_a_usable_interpreter_the_noise_shows(
 
 
 def test_a_closed_standard_error_is_left_alone() -> None:
+    """Close descriptor 2 before the block: there is nothing to filter, so no filter."""
     done = run_child(
         """
         import os
@@ -403,6 +406,89 @@ def test_a_closed_standard_error_is_left_alone() -> None:
         """
     )
     assert (done.returncode, done.stdout, done.stderr) == (0, "ran\n", "")
+
+
+# --- when something outside goes wrong: the reader leaves, a child holds the pipe ----
+
+# A reader that has gone away is not a closed descriptor: descriptor 2 is open, the
+# filter starts, and then every write the filter makes to it fails with EPIPE.
+READER_GONE = """
+import os
+from pcbkit.kicad import quiet
+
+# Standard error is a pipe that nobody reads any more, as when the output of
+# `pcbkit finalize 2>&1 | head -1` goes on after head has quit.
+reader, writer = os.pipe()
+os.dup2(writer, 2)
+os.close(writer)
+os.close(reader)
+try:
+    with quiet.quiet_stderr():
+        os.write(2, b"a real line\\n")
+        # More than a pipe holds, so the last write can only return once the filter has
+        # read all of it. A filter that ended at its first failed write (the real line)
+        # would leave the pipe with no reader, and one of these writes would raise. The
+        # bytes decide it, not the timing.
+        for _ in range(6000):
+            os.write(2, {noise!r} + b"\\n")
+except BaseException as error:
+    print("raised", type(error).__name__, error)
+else:
+    print("returned normally")
+"""
+
+
+def test_a_reader_that_has_gone_away_does_not_break_the_call() -> None:
+    """Keep the filter reading when it cannot write, so the call sees no broken pipe.
+
+    The code under quiet_stderr writes to descriptor 2, which is the filter's pipe. The
+    filter writes the real line to the real standard error, which has no reader left,
+    and that fails. It must carry on and discard, because if it ended, the next write by
+    the code it serves would raise BrokenPipeError there: a call that has nothing to do
+    with the closed pipe, failing because of it.
+    """
+    done = run_child(READER_GONE.format(noise=MAC))
+    assert (done.returncode, done.stdout) == (0, "returned normally\n")
+
+
+def test_a_child_that_keeps_the_pipe_open_cannot_hold_the_block_up(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    recorder: Recorder,
+) -> None:
+    """Stop waiting for the filter at the ceiling, then kill it and reap it.
+
+    A process that the call started inherited descriptor 2 and is still running when the
+    call ends. The pipe then still has a writer, so the filter never reaches the end of
+    its input and would wait for ever, and the block with it.
+    """
+    ceiling = 0.5
+    monkeypatch.setattr(quiet, "FILTER_WAIT_S", ceiling)
+    before = os.fstat(2)
+    lingering: subprocess.Popen[bytes] | None = None
+    began = time.monotonic()
+    try:
+        with quiet.quiet_stderr():
+            # Its standard error is descriptor 2, which is the filter's pipe.
+            lingering = subprocess.Popen(
+                [sys.executable, "-I", "-S", "-c", "import time; time.sleep(20)"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+            )
+        took = time.monotonic() - began
+        (filter_process,) = recorder.children
+        assert lingering.poll() is None  # still running: the ceiling ended the wait
+        assert ceiling <= took < 8.0  # it waited the ceiling set here, not the 10 s one
+        assert filter_process.returncode is not None  # reaped ...
+        assert filter_process.returncode < 0  # ... after a signal ended it
+        after = os.fstat(2)
+        assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+        write(b"written after the block")
+        assert capfd.readouterr().err == "written after the block\n"
+    finally:
+        if lingering is not None:
+            lingering.kill()
+            lingering.wait()
 
 
 # --- the reason it is a process: a crash's own messages ------------------------------
