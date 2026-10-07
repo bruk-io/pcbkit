@@ -351,10 +351,11 @@ def spec_params(
     """Parametrise ``argnames`` of a check from the project's data.
 
     ``values(specs)`` returns the parameter values (tuples when ``argnames`` has
-    several names). When the project lacks the data, the check gets one parameter set
-    whose run fails naming what is missing, so it cannot vanish from the report. Call it
-    from a module-level ``pytest_generate_tests``; it does nothing for a test that does
-    not take ``argnames``.
+    several names). ``ids(value)`` names each parameter set; without it pytest's own ids
+    are used. When the project lacks the data, the check gets one parameter set whose
+    run fails naming what is missing, so it cannot vanish from the report. Call it from
+    a module-level ``pytest_generate_tests``; it does nothing for a test that does not
+    take ``argnames``.
     """
     names = [n.strip() for n in argnames.split(",")]
     if not all(n in metafunc.fixturenames for n in names):
@@ -368,7 +369,9 @@ def spec_params(
             argnames, [pytest.param(*([missing] * len(names)), id="missing-spec")]
         )
         return
-    metafunc.parametrize(argnames, found, ids=ids)
+    metafunc.parametrize(
+        argnames, found, ids=[ids(v) for v in found] if ids is not None else None
+    )
 
 
 # --- results ----------------------------------------------------------------------
