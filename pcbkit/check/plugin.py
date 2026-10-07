@@ -290,7 +290,9 @@ def nl(project: Project) -> Any:
 def board(project: Project) -> Any:
     """Return the project's board, loaded with pcbnew."""
     try:
-        import pcbnew
+        from pcbkit.kicad import env
+
+        pcbnew = env.import_pcbnew()
     except ImportError:
         pytest.fail(
             "pcbnew isn't importable here: run the checks in the project's .venv "

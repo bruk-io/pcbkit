@@ -10,10 +10,10 @@ from typing import Any
 
 
 def pcbnew() -> Any:
-    """Return the pcbnew module, imported on first use."""
-    import pcbnew as module
+    """Return the pcbnew module, imported on first use, with its wx noise hidden."""
+    from pcbkit.kicad import env
 
-    return module
+    return env.import_pcbnew()
 
 
 def to_mm(value: Any) -> float:

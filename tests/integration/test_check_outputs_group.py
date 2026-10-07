@@ -337,6 +337,11 @@ def test_a_via_added_after_the_export_fails_the_drill_check(lab: Lab) -> None:
     assert numbers(result, DRILLS)["drills"]["pth"] == {"0.4": 1, "1.0": 2}
     message = result.run.message(DRILLS)
     assert "PTH drill file {0.4: 1, 1.0: 2} vs board {0.4: 2, 1.0: 2}" in message
+    # The first check to load the board failed, so pytest shows what its setup wrote
+    # to stderr: pcbnew's wx noise must not be part of it.
+    output = result.run.done.stdout + result.run.done.stderr
+    assert "stdpbase.cpp" not in output
+    assert "Adding duplicate image handler" not in output
 
 
 def test_a_mounting_hole_added_after_the_export_fails_the_drill_check(
