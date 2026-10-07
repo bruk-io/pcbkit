@@ -153,6 +153,61 @@ def test_a_full_run_with_check_groups_on_is_never_read_as_partial(
     assert not [line for line in lines if line.startswith("INCOMPLETE")], lines
 
 
+def test_a_check_skipped_with_a_reason_inside_it_has_a_result(tmp_path: Path) -> None:
+    """add-check's advice for a check that does not apply: skip it, in the check."""
+    root = make_project(tmp_path / "board")
+    write_file(
+        root / "checks" / "test_optional.py",
+        """\
+        import pytest
+
+
+        def test_part_is_fitted() -> None:
+            pytest.skip("this board has no such part")
+        """,
+    )
+    os.utime(root / "checks" / "test_optional.py", (time.time() - 1000,) * 2)
+    check(root)
+    written = json.loads((root / "out" / "checks" / "results.json").read_text())
+    entry = written["checks"]["checks/test_optional.py::test_part_is_fitted"]
+    assert entry["outcome"] == "skipped"
+    assert preflight(root).returncode == 0
+
+
+def test_a_check_module_skipped_as_a_whole_leaves_no_result_and_is_reported(
+    tmp_path: Path,
+) -> None:
+    """pytest records nothing for a module skipped at its top: its checks did not run.
+
+    The gate calls them missing, which is true. If the plugin ever records such a skip,
+    this test is the place to say so.
+    """
+    root = make_project(tmp_path / "board")
+    write_file(
+        root / "checks" / "test_whole.py",
+        """\
+        import pytest
+
+        pytest.skip("this board has no such part", allow_module_level=True)
+
+
+        def test_part_is_fitted() -> None:
+            pass
+        """,
+    )
+    os.utime(root / "checks" / "test_whole.py", (time.time() - 1000,) * 2)
+    check(root)
+    written = json.loads((root / "out" / "checks" / "results.json").read_text())
+    assert not [key for key in written["checks"] if "test_whole" in key]
+    done = preflight(root)
+    assert done.returncode == 1
+    assert done.stdout.splitlines() == [
+        "INCOMPLETE: out/checks/results.json has no result for "
+        "checks/test_whole.py::test_part_is_fitted (1 of 4 project checks): "
+        "the last run was partial (pcbkit check -k?): run pcbkit check with no -k"
+    ]
+
+
 @pytest.mark.parametrize(
     ("link", "target"),
     [
