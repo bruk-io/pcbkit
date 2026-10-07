@@ -28,7 +28,7 @@ from pcbkit.kicad import cli, env, quiet
 from pcbkit.kicad.env import Run
 from tests.fake_machine import FakeMachine
 
-NNBSP = " "  # the space macOS writes before AM or PM: not an ASCII space
+NNBSP = "\u202f"  # the space macOS writes before AM or PM: not an ASCII space
 FORMATS = [
     "PNG file",
     "JPEG file",

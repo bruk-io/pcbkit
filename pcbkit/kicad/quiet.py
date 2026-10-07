@@ -17,8 +17,8 @@ on KiCad 10.0.6 (macOS), they come from two calls and nowhere else:
 
 ``import pcbnew``, ``SaveBoard``, ``FootprintLoad``, the Specctra import and export, the
 zone filler and every kicad-cli subcommand were measured too, and print nothing. A
-``pcbkit finalize`` loads boards four or five times, which is where its 49 noise lines
-came from.
+``pcbkit finalize`` makes five ``LoadBoard`` calls, which is where its 49 noise lines
+came from (1 + 4 x 12).
 
 The lines are written by C++ straight to file descriptor 2, so ``sys.stderr`` cannot
 catch them. ``quiet_stderr`` points descriptor 2 at a pipe for the length of one call.

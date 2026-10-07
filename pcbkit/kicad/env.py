@@ -3,7 +3,9 @@
 Nothing here runs at import time, and a ``find_*`` function returns None rather than
 raising when it finds nothing, so ``pcbkit doctor`` works on a machine with no KiCad.
 ``share_dir`` (and its three siblings) and ``require_pcbnew`` raise, because their
-callers cannot carry on without the answer.
+callers cannot carry on without the answer. ``import_pcbnew`` is how code gets the
+pcbnew module itself: it hides the wx noise that pcbnew writes to standard error
+(see ``pcbkit.kicad.quiet``).
 
 Everything that touches the machine goes through ``_which``, ``_run``, ``host_os``,
 ``Path.home``, ``os.environ`` or the locations just below, so unit tests can replace
