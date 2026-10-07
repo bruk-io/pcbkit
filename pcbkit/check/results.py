@@ -7,12 +7,15 @@ else that only reads the results can import this without pytest.
 
     {"format": 1, "board": {...}, "copper_mm": 0.035, "groups": [...],
      "exit_status": 1, "counts": {"passed": 3, ...}, "seconds": 12.3,
+     "selection": {"keyword": "", "markexpr": "", "deselected": 0, "complete": true},
      "checks": {"<check id>": {"group": "kicad" or "project", "outcome": "passed",
                                "numbers": {...}, "reason": "...", "message": "..."}}}
 
 A check's id is ``pcbkit.check.builtin.<module>::<name>[param]`` for a built-in check
 and ``<path relative to the project>::<name>[param]`` for the project's own. ``reason``
 is only there for a skipped check and ``message`` for a failed or errored one.
+``selection`` says whether the run was cut short: ``complete`` is false after a ``-k``
+or ``-m`` run, or any run that deselected checks, so a gate can refuse partial results.
 """
 
 from __future__ import annotations

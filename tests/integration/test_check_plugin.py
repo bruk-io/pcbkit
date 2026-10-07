@@ -181,6 +181,45 @@ def test_check_ids_are_the_same_wherever_pytest_starts(
     assert set(here) == set(there) == {"checks/test_one.py::test_a"}
 
 
+# Names no temporary folder of these tests contains: -k matches folder names too.
+TWO_CHECKS = (
+    "def test_alpha():\n    assert True\n\n\ndef test_omega():\n    assert True\n"
+)
+
+
+def test_a_full_run_records_a_complete_selection(project: Path) -> None:
+    """Say in results.json that nothing was left out of a plain run."""
+    checks_file(project, "test_two.py", TWO_CHECKS)
+    done = run(project)
+    assert done.done.returncode == 0, done.done.stdout
+    assert done.results["selection"] == {
+        "keyword": "",
+        "markexpr": "",
+        "deselected": 0,
+        "complete": True,
+    }
+
+
+def test_a_k_run_records_what_it_left_out(project: Path) -> None:
+    """Mark a -k run partial, with its expression and how many checks it dropped."""
+    checks_file(project, "test_two.py", TWO_CHECKS)
+    done = run(project, "alpha")
+    assert done.done.returncode == 0, done.done.stdout
+    assert set(done.checks) == {"checks/test_two.py::test_alpha"}
+    selection = done.results["selection"]
+    assert selection["keyword"] == "alpha"
+    assert selection["deselected"] == 1
+    assert selection["complete"] is False
+
+
+def test_a_k_run_that_keeps_every_check_is_still_partial(project: Path) -> None:
+    """Treat any -k as partial, even one that happens to match every check."""
+    checks_file(project, "test_two.py", TWO_CHECKS)
+    selection = run(project, "alpha or omega").results["selection"]
+    assert selection["deselected"] == 0
+    assert selection["complete"] is False
+
+
 def test_without_the_plugin_no_results_file_is_written(project: Path) -> None:
     """Write nothing in a plain pytest run: the plugin is loaded by name only.
 

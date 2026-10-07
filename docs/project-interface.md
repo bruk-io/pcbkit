@@ -755,6 +755,7 @@ A run leaves `out/checks/results.json` (a run that selects nothing leaves an emp
 {"format": 1, "board": {"stem": "my_board", "title": "My Board", "rev": "A"},
  "copper_mm": 0.035, "groups": ["kicad", "outputs"], "exit_status": 1,
  "counts": {"passed": 40, "failed": 1}, "seconds": 12.3,
+ "selection": {"keyword": "", "markexpr": "", "deselected": 0, "complete": true},
  "checks": {"pcbkit.check.builtin.test_kicad::test_erc_clean":
               {"group": "kicad", "outcome": "passed", "numbers": {"erc": "..."}},
             "checks/test_power.py::test_rail":
@@ -766,7 +767,9 @@ A check's id is `pcbkit.check.builtin.<module>::<name>[param]` for a built-in on
 path from the project root for yours, whatever folder pytest was started in. `outcome` is
 `passed`, `failed`, `skipped` or `error` (a fixture or set-up that raised); a skipped check
 has a `reason` and a failed or errored one a `message`. `numbers` holds what the check
-recorded.
+recorded. `selection` says whether the run was cut short: after `pcbkit check -k ...`
+(or any run that left checks out) `complete` is false, so treat those results as partial
+and run the checks in full before you order boards.
 
 ### Writing a check
 

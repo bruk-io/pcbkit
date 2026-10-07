@@ -160,6 +160,7 @@ class State:
     results: dict[str, dict[str, Any]] = field(default_factory=dict)
     modules: dict[str, ProjectModule] = field(default_factory=dict)
     started: float = field(default_factory=time.time)
+    deselected: int = 0
 
     def module(self, name: str) -> ProjectModule:
         """Return the project's module ``name``, shared by every user of it."""
@@ -432,6 +433,15 @@ def pytest_runtest_makereport(
         entry["message"] = crash.message if crash is not None else str(report.longrepr)
 
 
+def pytest_deselected(items: list[pytest.Item]) -> None:
+    """Count the checks a ``-k``, ``-m`` or ``--deselect`` left out of this run."""
+    if not items:
+        return
+    state = items[0].config.stash.get(STATE, None)
+    if state is not None:
+        state.deselected += len(items)
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Write out/checks/results.json, unless the run only collected."""
     config = session.config
@@ -445,6 +455,14 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     for entry in checks.values():
         counts[entry["outcome"]] = counts.get(entry["outcome"], 0) + 1
     board = state.project.config.board
+    keyword = config.option.keyword or ""
+    markexpr = config.option.markexpr or ""
+    selection = {
+        "keyword": keyword,
+        "markexpr": markexpr,
+        "deselected": state.deselected,
+        "complete": not keyword and not markexpr and state.deselected == 0,
+    }
     data = {
         "format": RESULTS_FORMAT,
         "board": {"stem": board.stem, "title": board.title, "rev": board.rev},
@@ -453,6 +471,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         "exit_status": int(exitstatus),
         "counts": counts,
         "seconds": round(time.time() - state.started, 1),
+        "selection": selection,
         "checks": checks,
     }
     folder = results_dir(state.project)
