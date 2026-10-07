@@ -1,0 +1,11 @@
+{
+  "name": "pcbkit",
+  "version": "0.1.0.dev0",
+  "description": "Design, route, check and order KiCad boards with pcbkit: workflow skills, a guard that keeps edits out of generated files, and helper agents.",
+  "author": {
+    "name": "Bruk Habtu"
+  },
+  "repository": "https://github.com/bruk-io/pcbkit",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["kicad", "pcb", "eda", "freerouting"]
+}
