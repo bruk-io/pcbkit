@@ -430,8 +430,10 @@ check once per row of one of your tables:
 ```python
 from pcbkit.check.plugin import spec_params
 
+
 def pytest_generate_tests(metafunc):
     spec_params(metafunc, "ref", lambda specs: sorted(specs.PINOUT))
+
 
 def test_part_is_in_the_design(nl, ref):
     assert ref in nl.parts
