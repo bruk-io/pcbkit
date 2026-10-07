@@ -145,8 +145,9 @@ def blocked_path(file_path: str, cwd: str, session: str) -> bool:
     followed as well as the path as written: a link inside checks/ that leads to
     design.py is a write to design.py. The followed path is always judged against the
     session folder with its links followed too, even when the path has no link of its
-    own: the session folder may be the one reached through a link (on a Mac, /tmp and
-    /var are links), and the path may name the project by its real location.
+    own: the session may have been started in a link that leads into the middle of the
+    project (a shortcut to checks/), and only the folder it leads to has the project
+    above it. Which folders are one is `inside`'s business, whatever they are called.
     """
     written = os.path.normpath(os.path.join(cwd, os.path.expanduser(file_path)))
     if confined(written, os.path.normpath(session)):
