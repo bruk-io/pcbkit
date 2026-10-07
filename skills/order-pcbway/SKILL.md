@@ -23,10 +23,10 @@ missing, ask. Assembling fewer boards than you make is normal and allowed.
    must not be substituted. Write the answer, 600 characters at most, to `order-notes.txt`
    in the project folder (not in out/ or fab/, which pcbkit rewrites). Do not invent
    requirements.
-3. Run `pcbkit quote --fab-qty N --assembled M --notes order-notes.txt`. Add
-   `--self-solder-tht` when the user will solder the through-hole parts. The command fails
-   and says by how much if the notes are too long. Its output is the only source of the
-   numbers you enter.
+3. Run `pcbkit quote --fab-qty N --notes order-notes.txt`, adding `--assembled M` when any
+   boards are assembled, and `--self-solder-tht` when the user will solder the through-hole
+   parts. The command fails and says by how much if the notes are too long. Its output is
+   the only source of the numbers you enter.
 
 ## In the browser
 
@@ -34,10 +34,10 @@ Use the Claude in Chrome tools. Without them, print the quote and these stops fo
 user to follow by hand, and do nothing else.
 
 Open pcbway.com and its instant quote, read the page, and find each field by its label,
-never by position: the form changes. Enter the values from the quote (layers, size, thickness,
-copper weight, finish, track and spacing, minimum hole, quantity, then the assembly
-numbers). Leave every other field at its default and tell the user the ones that cost
-money or time (shipping, lead time). Decline upgrades, coupons and extra services.
+never by position: the form changes. Enter the values from the quote (layers, size,
+thickness, copper weight, finish, track and spacing, minimum hole, quantity, then the
+assembly numbers). Leave every other field at its default and tell the user the ones that
+cost money or time (shipping, lead time). Decline upgrades, coupons and extra services.
 
 - Assembly quantity is the number to assemble (M), not the number of boards made (N).
 - If the form asks whether alternative or substitute parts may be used, answer No. If
