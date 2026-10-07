@@ -9,7 +9,7 @@ so a change to a board is a code change that you can review, rebuild and check.
 
 Documentation: <https://bruk-io.github.io/pcbkit/>
 
-Version 0.1.0. It is built and tested on macOS with KiCad 10.0.6. It makes two-layer
+It is built and tested on macOS with KiCad 10.0.6. It makes two-layer
 boards, routes them with Freerouting, and knows PCBWay's limits and order forms.
 
 ## Two tiers

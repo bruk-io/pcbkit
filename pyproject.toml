@@ -1,6 +1,6 @@
 [project]
 name = "pcbkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "PCB as Python: generate, route, check and export KiCad boards from code."
 readme = "README.md"
 # 3.9, not Bruk's usual 3.14: KiCad's pcbnew module only imports under the Python

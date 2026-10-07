@@ -1,6 +1,6 @@
 {
   "name": "pcbkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Design, route, check and order KiCad boards with pcbkit: workflow skills, a guard that keeps edits out of generated files, and helper agents.",
   "author": {
     "name": "Bruk Habtu"

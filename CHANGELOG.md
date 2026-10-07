@@ -4,6 +4,20 @@ All notable changes to pcbkit. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and pcbkit uses
 [semantic versioning](https://semver.org/).
 
+## [0.1.1] - 2026-10-07
+
+### Added
+
+- The Claude plugin is in the `bruk-io/knowhere` marketplace:
+  `claude plugin marketplace add bruk-io/knowhere`, then
+  `claude plugin install pcbkit@knowhere`. A workflow republishes the listing when
+  `.claude-plugin/` changes on `main`.
+
+### Fixed
+
+- The README and the docs no longer say that the repository is private or that the
+  plugin is unpublished.
+
 ## [0.1.0] - 2026-10-07
 
 The first release.
