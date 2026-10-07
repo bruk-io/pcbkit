@@ -1,0 +1,14 @@
+[project]
+name = "blinky"
+version = "0.1.0"
+description = "A tiny pcbkit example board: a power connector, a resistor and an LED."
+requires-python = ">=3.9"
+dependencies = ["pcbkit", "pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+# In a project made by `pcbkit new` this points at pcbkit's git repository or at your
+# own checkout. Here it is the checkout that this example lives in.
+pcbkit = { path = "../..", editable = true }
