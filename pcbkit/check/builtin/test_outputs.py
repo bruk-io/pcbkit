@@ -4,8 +4,7 @@ Switched on by ``outputs`` in ``[checks] groups``. The Gerbers, drill files, BOM
 centroid are parsed back and compared with the board and the schematic, so a stale or
 mismatched export fails here. They are read from ``out/fab`` (or ``fab``), named after
 ``[board] fab_name``; the stackup is ``[stackup]`` in pcbkit.toml; the board's size is
-``layout.W`` and ``layout.H`` from the project's ``layout.py``. ``test_bom_complete``
-reads the design itself, so it needs no exported files.
+``layout.W`` and ``layout.H`` from the project's ``layout.py``.
 """
 
 from __future__ import annotations
@@ -268,18 +267,22 @@ def test_centroid_matches_board(
     assert not off, f"the fab house expects part centres; these are off-centre: {off}"
 
 
-def test_bom_complete(project: Project) -> None:
-    """Give every fitted part a part number a buyer can order.
+def test_bom_complete(project: Project, fab_dir: Path) -> None:
+    """Give every line of the exported BOM a part number a buyer can order.
 
-    Judged on what the BOM will say, after the project's bom.py overrides and the
+    The BOM is what the export wrote, after the project's bom.py overrides and the
     default resistor table: an empty part number, the stand-in ``R()`` makes up for a
     resistor, and a part number with a space in it (a description) all fail.
     """
-    from pcbkit.design import load_design
     from pcbkit.fab import bom
 
-    parts = load_design(project.root / "design.py").parts
-    problems = bom.parts_without_mpn(parts, bom.load_overrides(project.root))
-    assert not problems, "parts the BOM cannot order:\n" + "\n".join(
-        f"  {problem}" for problem in problems
+    path = fab_dir / f"{project.config.board.fab_name}_BOM.csv"
+    problems = []
+    for line in bom.read_csv(path):
+        reason = bom.mpn_problem(line.mpn, line.value)
+        if reason is not None:
+            refs = ",".join(line.refs)
+            problems.append(f"  {refs} ({line.value}): {line.mpn!r} {reason}")
+    assert not problems, f"lines of {path.name} a buyer cannot order:\n" + "\n".join(
+        problems
     )

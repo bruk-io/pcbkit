@@ -818,6 +818,8 @@ stackup from pcbkit.toml, and `layout.W` and `layout.H`. `test_gerber_set_comple
 `test_job_file_stackup`, `test_outline_size`, `test_drill_files_match_board`,
 `test_bom_matches_schematic` and `test_centroid_matches_board` parse the Gerbers, drill
 files, BOM and centroid back and compare them with the board and the schematic.
+`test_bom_complete` fails a BOM line a buyer cannot order: no part number, the stand-in
+`R()` makes up for a resistor, or a description with a space in it.
 
 **`fab`**:
 

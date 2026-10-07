@@ -352,19 +352,28 @@ def parts_without_mpn(
     found: list[MpnProblem] = []
     for part in fitted(parts):
         mpn = _resolve(part, over).mpn
-        if not mpn.strip():
-            reason = "has no manufacturer part number"
-        elif mpn == stand_in_mpn(part["value"]):
-            reason = (
-                "is the stand-in part number pcbkit.design.R makes up: give the "
-                "part an mpn, or its value a default resistor"
-            )
-        elif re.search(r"\s", mpn):
-            reason = "has a space in it, so it is a description, not a part number"
-        else:
-            continue
-        found.append(MpnProblem(part["ref"], part["value"], mpn, reason))
+        reason = mpn_problem(mpn, part["value"])
+        if reason is not None:
+            found.append(MpnProblem(part["ref"], part["value"], mpn, reason))
     return sorted(found, key=lambda problem: refkey(problem.ref))
+
+
+def mpn_problem(mpn: str, value: str) -> str | None:
+    """Return why a buyer could not order ``mpn`` (a part of ``value``), or None.
+
+    The rules of ``parts_without_mpn``, for one part number: empty, the stand-in that
+    ``R`` makes up for a resistor of that value, or a description with a space in it.
+    """
+    if not mpn.strip():
+        return "has no manufacturer part number"
+    if mpn == stand_in_mpn(value):
+        return (
+            "is the stand-in part number pcbkit.design.R makes up: give the "
+            "part an mpn, or its value a default resistor"
+        )
+    if re.search(r"\s", mpn):
+        return "has a space in it, so it is a description, not a part number"
+    return None
 
 
 # --- the board ---------------------------------------------------------------------

@@ -35,6 +35,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from pcbkit.fab import bom as fab_bom
 from pcbkit.kicad import board as kb
 from pcbkit.kicad import cli, env
 from pcbkit.kicad.sexp import dump, find, findall, parse, q
@@ -662,7 +663,8 @@ def export_fab(root: Path, stem: str, fab_name: str) -> Path:
 
     The Gerbers and drill files are kicad-cli's own, zipped flat as the fab house takes
     them; the centroid is kicad-cli's position file with the columns the fab house
-    names them; the BOM lists R1 and R2 as one line. Return the folder. The plot files
+    names them; the BOM (pcbkit's own format) lists R1 and R2 as one line. Return
+    the folder. The plot files
     stay in ``out/plot``, so a test can zip them again with one left out.
     """
     pcb = root / "kicad" / f"{stem}.kicad_pcb"
@@ -684,11 +686,18 @@ def export_fab(root: Path, stem: str, fab_name: str) -> Path:
             out.writerow(
                 [row["Ref"], row["PosX"], row["PosY"], row["Side"], row["Rot"]]
             )
-    with open(fab / f"{fab_name}_BOM.csv", "w", encoding="utf-8", newline="") as h:
-        out = csv.writer(h)
-        header = ["Comment", "Designator", "Footprint", "Quantity"]
-        out.writerow([*header, "Manufacturer Part Number"])
-        out.writerow(["10k", "R1,R2", "R_0603_1608Metric", 2, MPN])
+    line = fab_bom.BomLine(
+        item=1,
+        qty=2,
+        refs=("R1", "R2"),
+        mfr="Acme",
+        mpn=MPN,
+        value="10k",
+        desc="Resistor 10k 0603",
+        footprint="R_0603_1608Metric",
+        through_hole=False,
+    )
+    fab_bom.write_csv(fab / f"{fab_name}_BOM.csv", [line])
     return fab
 
 

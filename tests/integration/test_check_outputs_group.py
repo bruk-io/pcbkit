@@ -59,6 +59,7 @@ CONTROL = {
     "test_drill_files_match_board",
     "test_bom_matches_schematic",
     "test_centroid_matches_board",
+    "test_bom_complete",
 }
 GERBER_LAYERS = [
     "F_Cu",
@@ -192,7 +193,7 @@ def move(ref: str, dx: float = 0.0, dy: float = 0.0) -> Callable[[Any], None]:
 
 
 def test_the_control_project_passes_every_outputs_check(control: Result) -> None:
-    """Run the six checks of the group on fresh exports, and pass them all."""
+    """Run the seven checks of the group on fresh exports, and pass them all."""
     assert control.names() == CONTROL
     assert control.failed() == set(), (control.run.outcomes(), control.run.tail())
     assert control.run.done.returncode == 0, control.run.tail()
@@ -375,7 +376,7 @@ def test_a_part_missing_from_the_bom_fails_the_bom_check(lab: Lab) -> None:
 
     def only_r1(rows: list[dict[str, str]]) -> list[dict[str, str]]:
         rows[0]["Designator"] = "R1"
-        rows[0]["Quantity"] = "1"
+        rows[0]["Qty"] = "1"
         return rows
 
     result = lab.result("bom_without_r2", Variant(edit_csv("BOM.csv", only_r1)))
@@ -417,6 +418,25 @@ def test_a_stale_part_number_fails_the_bom_check(lab: Lab) -> None:
     assert "BOM part numbers differ from the schematic" in message
     assert f"('R1', '{gb.MPN}', 'RES-OLD-0603')" in message
     assert f"('R2', '{gb.MPN}', 'RES-OLD-0603')" in message
+
+
+# --- test_bom_complete ----------------------------------------------------------------
+
+
+def test_a_bom_line_with_no_part_number_fails_the_bom_complete_check(lab: Lab) -> None:
+    """Fail a BOM line whose part number was emptied, naming its parts.
+
+    The schematic still has the part number, so the BOM check fails too.
+    """
+
+    def blank(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+        rows[0]["Manufacturer Part Number"] = ""
+        return rows
+
+    result = lab.result("bom_blank_mpn", Variant(edit_csv("BOM.csv", blank)))
+    result.planted("test_bom_complete", BOM)
+    message = result.run.message("test_bom_complete")
+    assert "R1,R2" in message and "has no manufacturer part number" in message
 
 
 # --- test_centroid_matches_board ------------------------------------------------------
