@@ -360,7 +360,189 @@ To be written with `pcbkit finalize`'s exports and `pcbkit quote` (WP6).
 
 ## Checks: specs.py, circuits.py, checks/ and mutants.py
 
-To be written with `pcbkit check`, `pcbkit mutants` and `pcbkit report` (WP7).
+`pcbkit check [-k EXPR]` runs two kinds of check with pytest, in one run: the built-in
+checks of the groups listed in `[checks] groups`, and your own, the `test_*.py` files in
+`checks/`. It needs pcbnew (`pcbkit setup` makes the project's `.venv` that has it) and
+exits with pytest's code: 0 all passed, 1 a check failed, 5 nothing matched. `-k` is
+pytest's own expression. `pcbkit mutants` shows that the checks bite (below), and
+`pcbkit report` turns the last run into a report.
+
+A built-in check reads its numbers from your `specs.py`, and the operating points of the
+circuit from your `circuits.py`. A group that is switched on but is missing a name it
+needs does not skip: the check fails, naming the name and the file ("specs.PINOUT is not
+defined in .../specs.py"). A table a check runs once per row of does not vanish when
+its table is missing either: it fails once, as `missing-spec`. A name documented as
+optional below may be left out.
+
+The checks run in a child pytest that loads `pcbkit.check.plugin` by name (there is no
+entry point, so a plain pytest run never loads it) and ignores any other pytest
+configuration. To run them yourself:
+
+```
+pytest -p pcbkit.check.plugin --pcbkit-project . --pyargs pcbkit.check.builtin checks
+```
+
+### Results
+
+A run leaves `out/checks/results.json` (a run that selects nothing leaves an empty one);
+`pcbkit report` writes `out/checks/VALIDATION.md` from it. Plots made by checks go in
+`out/checks/` too.
+
+```json
+{"format": 1, "board": {"stem": "my_board", "title": "My Board", "rev": "A"},
+ "copper_mm": 0.035, "groups": ["kicad", "outputs"], "exit_status": 1,
+ "counts": {"passed": 40, "failed": 1}, "seconds": 12.3,
+ "checks": {"pcbkit.check.builtin.test_kicad::test_erc_clean":
+              {"group": "kicad", "outcome": "passed", "numbers": {"erc": "..."}},
+            "checks/test_power.py::test_rail":
+              {"group": "project", "outcome": "failed", "numbers": {},
+               "message": "AssertionError: ..."}}}
+```
+
+A check's id is `pcbkit.check.builtin.<module>::<name>[param]` for a built-in one and its
+path from the project root for yours, whatever folder pytest was started in. `outcome` is
+`passed`, `failed`, `skipped` or `error` (a fixture or set-up that raised); a skipped check
+has a `reason` and a failed or errored one a `message`. `numbers` holds what the check
+recorded.
+
+### Writing a check
+
+Put `test_*.py` files in `checks/`. They are ordinary pytest tests, and these fixtures are
+available (session-wide unless noted):
+
+| Fixture | What it is |
+|---|---|
+| `project` | The `pcbkit.project.Project`: `root`, `config`, `kicad_dir`, `out_dir`. |
+| `specs`, `circuits`, `layout` | Your `specs.py`, `circuits.py` and `layout.py`. `specs.NAME` returns the value, or fails the check with a message naming the missing name; `specs.get("NAME", default)` and `"NAME" in specs` ask without failing. Your folder is on `sys.path`, so `import specs` works too. |
+| `nl` | The `pcbkit.check.netlist.Netlist` of a fresh kicad-cli export of the schematic (`parts`, `nets`, `net(ref, pin)`, `refs_on(net)`, `kind(ref)`, `by_kind(*kinds)`). Net names have no leading "/". |
+| `board` | The routed board, loaded with pcbnew from `kicad/<stem>.kicad_pcb`. |
+| `record` (per check) | `record(key, value)` keeps a number for `results.json` and the report. |
+| `out_dir` | `out/checks/`, made if it is not there. |
+
+The engines the built-in checks are made of are yours to call: `pcbkit.check.dc` (a DC
+operating-point solver over the netlist: `build`, `Circuit`, `Solution`),
+`pcbkit.check.spice` (`run` and bench netlists for ngspice), `pcbkit.check.copper`
+(`NetCopper`, a current-flow solve over a net's real copper, and `ipc2221_rise`),
+`pcbkit.check.coupling`, `pcbkit.check.stitching` and `pcbkit.check.reserved` (copper
+in a region). `pcbkit.check.plugin.spec_params(metafunc, argnames, values, ids)` runs a
+check once per row of one of your tables:
+
+```python
+from pcbkit.check.plugin import spec_params
+
+def pytest_generate_tests(metafunc):
+    spec_params(metafunc, "ref", lambda specs: sorted(specs.PINOUT))
+
+def test_part_is_in_the_design(nl, ref):
+    assert ref in nl.parts
+```
+
+Never loosen a check to make it pass, and show that it can fail: plant the mistake it is
+for (see `mutants.py`, or a test that builds a bad fixture and asserts it is caught).
+
+### Built-in groups and what they read
+
+Names are `specs.NAME` unless a `circuits.` prefix says otherwise. Tables say what a name
+holds; "optional" means a check does without it (or skips, naming why).
+
+**`kicad`** reads nothing: `test_erc_clean` and `test_drc_clean_with_schematic_parity` run
+kicad-cli on `kicad/<stem>.kicad_sch` and `.kicad_pcb`.
+
+**`outputs`** reads the files in `out/fab` (or `fab`) named after `[board] fab_name`, the
+stackup from pcbkit.toml, and `layout.W` and `layout.H`. `test_gerber_set_complete`,
+`test_job_file_stackup`, `test_outline_size`, `test_drill_files_match_board`,
+`test_bom_matches_schematic` and `test_centroid_matches_board` parse the Gerbers, drill
+files, BOM and centroid back and compare them with the board and the schematic.
+
+**`fab`**:
+
+| Name | Holds |
+|---|---|
+| `PCBWAY` | The fab house's limits in mm: `min_annular`, `min_drill`, `min_plated_slot`, `silk_min_height`, `silk_min_stroke`, `min_track_2oz`, `min_space_2oz`. |
+| `WIRE_PADS` | `{ref: (positive pad, negative pad)}` for bare pads that take a wire; each needs a "+" and a "-" on the silkscreen nearer its own pad. `{}` for none. |
+| `DECOUPLING` | Rows `(ic, pin, (capacitor refs), limit mm)`: a listed capacitor must have a pad that close to the pin. |
+| `POWER_FOOTPRINTS` | One dict per part whose pads must match its datasheet: a `ref`, and any of `tab_pad` (the largest pad is this one) with `tab_net`, `smaller` (pairs `(small pad, large pad)`) and `drill_mm` (`{pad: drill}`). |
+| `I2C_BUSES` | `{bus: (sda net, scl net, speed Hz, off-board devices)}`, devices as `(name, 7-bit address, pin capacitance pF)`. |
+| `I2C_TR_MAX`, `I2C_PIN_C`, `TRACE_C_PER_MM`, `I2C_CABLE_LEN`, `I2C_CABLE_C_PER_M` | The I2C rise-time model: limit per speed (s), capacitance per device pin and per mm of trace (F), cable length (m) and its capacitance per metre (F). |
+| `I2C_PULLUP_NET`, `I2C_DEVICE_PREFIXES` | Optional: the pull-up rail (default `"+3V3"`) and the reference prefixes that count as devices on a bus (default `"UA"`). |
+| `ASSEMBLY_TEXT_EXEMPT` | Optional: references whose pin labels may sit over their own through-hole pins on the assembly drawing. |
+
+**`copper`** (the copper thickness is `[stackup] copper_mm`, the board thickness
+`[stackup] thickness_mm`, the stitching pitch `[stitch] pitch_mm`):
+
+| Name | Holds |
+|---|---|
+| `RESERVED_COPPER` | Rows `(name, layer, x0, y0, x1, y1, allowed nets)`: a region (layout mm, layer "top" or "bottom") only the nets named, spelled as KiCad does ("/GND"), may put copper in. Add the keep-out to `routing.py` too: the router only keeps clear of a region it is told about. |
+| `COUPLING` | Sensitive signals beside high-current or switching copper (the basis is in `pcbkit/check/coupling.py`): `classes` (class to (noise budget V, victim source ohm, dI/dt A/s)), `sensitive` (class to nets), `aggressors` (name to `{"nets": [...], "kind": "bar"/"current"/"switch", "region": (x0, y0, x1, y1)}`), any physical constant to change (`c_per_mm`, `dv_dt`, `dv_sw`, `cn_default`, `cn_net`, `bar_min_w`, `bar_w_cap`, `res`), and optional `filters`: `{net: {"t_edge": s, "pin_ref": ref, "max_mm": mm}}` for a node with an RC filter whose capacitor must sit near its pin. |
+| `SENSE_LOOPS` | Optional: measurement pairs judged by the area they enclose: dicts with `name`, `nets` (the pair), `from_ref`, `to_ref`, `to_pads` and `max_mm2`. |
+| `COPPER_SEGMENTS`, `COPPER_BUDGETS` | The high-current copper: each segment has a `name`, a `net`, `terminals` as `(ref, pad, share[, role])` (the share of the test current that enters at that pad, negative for leaving; the last terminal is the 0 V reference) and `heating` (False for a segment judged on its voltage drop alone). `COPPER_BUDGETS`: `i_cont` (A, judged on the IPC-2221 rise), `i_peak` (A, judged on the drop), `segment_drop_max_v`, `max_rise_c`. |
+| `SUPPLY_REGULATION` | Optional: what the farthest load loses to supply sag and ground lift: `supply` and `ground` (segment names), `label`, `nominal_v` and `max_fraction`; terminals with the role `"source"` and `"load"` say where. |
+| `GROUND_NET`, `STITCH_BASIS` | Optional: the ground net (default `"GND"`), and `{"f_hz": ..., "er_fr4": ...}` for the stitching limit (default the top of the 2.4 GHz Wi-Fi band in FR4). |
+
+**`circuit`** (runs on the netlist and on `circuits.scenario`):
+
+| Name | Holds |
+|---|---|
+| `PINOUT` | `{ref: {pad: datasheet function}}`. Optional `PIN_ALIASES` maps the symbol's spelling to the datasheet's (`None`: an unnamed pin), and `ABSENT_REFS` `{ref: reason}` skips a part this revision does not carry. A part that is neither in the design nor listed compares nothing, with a warning. |
+| `STRESS_SCENARIOS` | Keyword arguments of `circuits.scenario` for the operating points that stress parts hardest. |
+| `RESISTOR_POWER_W` | `{"default": watts, ref: watts}`: resistors must stay under half. |
+| `CAP_VRATED` | Capacitor MPN to rated volts: capacitors must stay under 80 %. |
+| `LED_REFS`, `LED_SCENARIO`, `LED_I_MIN`, `LED_I_MAX` | The LEDs (a name the scenario adds stands for an off-board one), the conditions, and the current window in amps. |
+| `SUPPLY_SCENARIO`, `SUPPLY_PINS`, `SUPPLY_LIMITS` | Rows `(ref, pin, (min V, max V))` for supply pins, and rows `(what, value, "<=" or "<", limit)` (or a function of the netlist that returns one) for the limits a design range must fit inside. |
+| `I2C_BUSES`, `I2C_IOL` | As in `fab`, and the sink current per speed (A). Optional `I2C_PULLUP_NET` and `I2C_VDD` (default 3.3). |
+
+**`esp32s3`** (a board that carries an ESP32-S3-DevKitC-1 in sockets; the chip's own
+facts, `RESERVED`, `UART0`, `ADC1`, `INPUT_ONLY`, `STRAPS`, `ESP32_VDD`, `ESP32_VIH`,
+`ESP32_VIL`, `ESP32_VOH_MIN`, `ESP32_PIN_ABS_MAX`, `ESP32_GPIO_SOURCE_MAX` and
+`ESP32_INTERNAL_PULL`, are defaults in `pcbkit/check/packs/esp32s3.py` that you may
+override):
+
+| Name | Holds |
+|---|---|
+| `DEVKIT_REF`, `DEVKIT_GPIO` | The DevKit's reference, and `{header pin as your symbol numbers it: GPIO}`. |
+| `ANALOG_NETS` | The nets that carry analogue inputs: they must be on ADC1. |
+| `STRAP_SCENARIO`, `GPIO_SOURCE_SCENARIO` | Keyword arguments of `circuits.scenario` for judging the strapping pins at reset and the current each GPIO sources. |
+| `GPIO_SCENARIOS` | `{id: keyword arguments}`: no GPIO may exceed its absolute maximum in any of them. |
+| `OPEN_DRAIN_NETS`, `RAIL_3V3` | Optional: nets exempt from the source-current check (default: the I2C lines of `I2C_BUSES`), and the 3.3 V rail the strapping pulls go to (default `"+3V3"`). |
+
+### circuits.py
+
+Functions the `circuit` and `esp32s3` checks call, and that your own checks may too:
+
+| Function | Returns |
+|---|---|
+| `scenario(nl, **kw)` | An unsolved `pcbkit.check.dc.Circuit` for one operating condition: start from `pcbkit.check.dc.build(nl)` (every resistor, LED, diode and FET of the netlist), hold the supplies with `fix`, add what the netlist cannot know (off-board loads, a driven pin) and return it. The checks call `.solve()`. |
+| `i2c_devices(nl)` | `(sda net, name, 7-bit address)` for each on-board I2C device, address pins read from the netlist. |
+
+It also holds whatever SPICE decks your own checks build, with `pcbkit.check.spice.run`.
+
+### mutants.py
+
+A check that has never been seen to fail is not trusted. `mutants.py` lists planted
+mistakes the checks must catch:
+
+```python
+MUTANTS = [
+    (
+        "pull-up resistor missing",  # what the mistake is
+        [  # edits to design.py: (text to find, text to put there)
+            ('R("R7", "10k", "EN", "+3V3", B)', 'R("R7", "10k", "EN", "NC_X", B)'),
+        ],
+        "test_boot_state_is_safe",  # the pytest -k expression that must then fail
+    ),
+]
+```
+
+`pcbkit mutants` first runs the control: the checks every entry names, on an unedited
+scratch copy of the project, must all pass. Then each mistake is planted in `design.py` in
+a fresh scratch copy, the schematic is made again there, and the checks run (the same
+command as `pcbkit check`, so built-in and project checks are both in play). A mistake is
+caught when a check fails; it is missed when every check still passes or when the text to
+find is not in `design.py` (a stale entry is a miss, not a pass). The board layout is not
+regenerated, so a mutant tests the schematic, netlist and circuit checks; checks on the
+copper are shown to fail by planting the mistake in a test board. Exit codes: 0 all
+caught, 1 one missed, 2 the control did not pass. Other lists whose name ends in
+`_MUTANTS` are parked: counted, named, not run.
 
 ## Comparing boards and taking shots
 
