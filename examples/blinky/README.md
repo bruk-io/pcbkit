@@ -29,11 +29,12 @@ board that `pcbkit new` copies when you start your own.
 ## Try it
 
 You need KiCad 10, Java 17 or newer, and [uv](https://docs.astral.sh/uv/);
-`pcbkit doctor` says what is missing. From a pcbkit checkout:
+`pcbkit doctor` says what is missing. From a pcbkit checkout, once `uv sync` has made
+its own `.venv`:
 
 ```
 cd examples/blinky
-pcbkit setup                    # the project's .venv on KiCad's Python, and Freerouting
+uv run --project ../.. pcbkit setup     # .venv on KiCad's Python, and Freerouting
 .venv/bin/pcbkit build          # schematic, ERC, netlist and placement
 .venv/bin/pcbkit route          # Freerouting, the pours and DRC
 .venv/bin/pcbkit promote        # keep the route that passed as golden/

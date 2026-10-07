@@ -49,7 +49,8 @@ def invoke(*args: str, env: dict[str, str] | None = None) -> Result:
 
 def commands_in(text: str) -> set[str]:
     """Return the pcbkit commands a README shows: at a line's start, or in backticks."""
-    at_start = re.findall(r"^(?:\.venv/bin/)?pcbkit (\w+)", text, flags=re.MULTILINE)
+    start = r"^(?:\.venv/bin/|uv run --project \S+ )?pcbkit (\w+)"
+    at_start = re.findall(start, text, flags=re.MULTILINE)
     inline = re.findall(r"`(?:\.venv/bin/)?pcbkit (\w+)", text)
     return set(at_start) | set(inline)
 
