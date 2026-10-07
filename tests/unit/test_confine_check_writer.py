@@ -10,12 +10,14 @@ under ``checks/``.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import os
 import pty
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -80,6 +82,30 @@ def stderr(done: subprocess.CompletedProcess[bytes]) -> str:
     return done.stderr.decode("utf-8")
 
 
+def one_folder(first: Path, second: Path) -> bool:
+    """Return True if the file system says ``first`` and ``second`` are one folder.
+
+    The tests below that spell a folder with other capitals take what the hook must do
+    from this, so they are right on whichever file system they run on. On a
+    case-insensitive one (the macOS default) ``REAL/`` is ``real/`` and the hook has to
+    treat it so. On a case-sensitive one ``REAL/`` is no folder at all, so this is False
+    and a path under it belongs to no project.
+    """
+    try:
+        return os.path.samefile(first, second)
+    except OSError:
+        return False
+
+
+def load_hook() -> ModuleType:
+    """Return the hook script as a module, to call one of its functions directly."""
+    spec = importlib.util.spec_from_file_location("confine_check_writer", HOOK)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     """Return a board project: pcbkit.toml, checks/, and the usual source files."""
@@ -107,10 +133,38 @@ def test_the_agent_may_write_under_checks(
     assert done.stderr == b""
 
 
-def test_letter_case_of_checks_does_not_matter(project: Path) -> None:
-    """The default macOS file system treats Checks/ and checks/ as one folder."""
-    done = run_hook(write(project / "Checks" / "test_x.py", cwd=project), project)
-    assert done.returncode == 0, stderr(done)
+@pytest.mark.parametrize("spelled", ["Checks", "CHECKS", "cHeCkS"])
+def test_checks_with_other_capitals_is_checks_only_where_the_file_system_says_so(
+    project: Path, spelled: str
+) -> None:
+    """The default macOS file system treats Checks/ and checks/ as one folder.
+
+    A case-sensitive one does not: there Checks/ is another folder (here one that does
+    not even exist), so a write to it is a write outside checks/. The file system is
+    asked, not assumed, so the test is honest on both.
+    """
+    same = one_folder(project / spelled, project / "checks")
+    done = run_hook(write(project / spelled / "test_x.py", cwd=project), project.parent)
+    assert done.returncode == (0 if same else 2), (same, stderr(done))
+
+
+def test_a_project_with_no_checks_folder_yet_starts_one_under_its_exact_name(
+    tmp_path: Path,
+) -> None:
+    """With no checks/ for the file system to compare it with, Checks/ is not it."""
+    root = tmp_path / "my-board"
+    root.mkdir()
+    (root / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    exact = run_hook(write(root / "checks" / "test_x.py", cwd=root), tmp_path)
+    capitals = run_hook(write(root / "Checks" / "test_x.py", cwd=root), tmp_path)
+    assert (exact.returncode, capitals.returncode) == (0, 2), stderr(capitals)
+
+
+def test_a_link_to_checks_under_another_name_is_not_checks(project: Path) -> None:
+    """Only a spelling that differs in capitals is compared by what it is."""
+    (project / "chk").symlink_to("checks", target_is_directory=True)
+    done = run_hook(write(project / "chk" / "test_x.py", cwd=project), project)
+    assert done.returncode == 2, stderr(done)
 
 
 # --- outside checks/, in the project --------------------------------------------------
@@ -333,18 +387,26 @@ def test_the_session_folder_and_the_file_may_each_be_named_through_a_link(
 @pytest.mark.parametrize(
     "session_by_link", [False, True], ids=["session-real", "session-link"]
 )
+@pytest.mark.parametrize("file_by_link", [False, True], ids=["file-real", "file-link"])
 def test_a_folder_of_the_project_that_is_a_link_elsewhere_is_still_the_projects(
-    linked: tuple[Path, Path], tmp_path: Path, session_by_link: bool
+    linked: tuple[Path, Path],
+    tmp_path: Path,
+    session_by_link: bool,
+    file_by_link: bool,
 ) -> None:
-    """docs/ may be a link to a shared folder: the path as written still counts."""
+    """docs/ may be a link to a shared folder: the path as written still counts.
+
+    That holds when the session and the file name the project differently, one of them
+    through a link. Followed to the end the path lands in the shared folder, which is in
+    no project, so it is the project's own folder, found by its identity, that stops it.
+    """
     real, link = linked
     shared = tmp_path / "shared"
     shared.mkdir()
     (real / "docs").symlink_to(shared, target_is_directory=True)
     session = link if session_by_link else real
-    done = run_hook(
-        write(session / "docs" / "notes.md", cwd=session), session, session=session
-    )
+    target = (link if file_by_link else real) / "docs" / "notes.md"
+    done = run_hook(write(target, cwd=session), session, session=session)
     assert done.returncode == 2, stderr(done)
 
 
@@ -358,6 +420,199 @@ def test_a_checks_folder_that_is_a_link_elsewhere_is_still_checks(
     (project / "checks").symlink_to(shared, target_is_directory=True)
     done = run_hook(write(project / "checks" / "test_x.py", cwd=project), project)
     assert done.returncode == 0, stderr(done)
+
+
+# --- one folder under two names: capitals, a link into the project --------------------
+
+
+@pytest.fixture
+def cased(tmp_path: Path) -> Path:
+    """Return a folder that holds the project ``real/my-board``.
+
+    The tests spell its folders with other capitals. Whether ``REAL/my-board`` is then
+    the project or no folder at all depends on the file system, so each expectation is
+    taken from ``one_folder``, never assumed.
+    """
+    root = tmp_path / "real" / "my-board"
+    (root / "checks").mkdir(parents=True)
+    (root / "kicad").mkdir()
+    for name in ("pcbkit.toml", "design.py"):
+        (root / name).write_text("x = 1\n", encoding="utf-8")
+    (root / "checks" / "link.py").symlink_to("../design.py")
+    return tmp_path
+
+
+# (session, the project the file is in), both below the test folder. Every row spells
+# exactly one of them with other capitals, at or below the session folder, so no part of
+# the file's path starts with the session's own spelling and only the file system can
+# tie the two together. The session starts at the project, inside it and above it, and
+# so does the spelling that differs. A row with the capitals above the session folder
+# would test nothing: the names already match.
+CAPITALS = [
+    pytest.param("real/my-board", "REAL/my-board", id="file-ancestor"),
+    pytest.param("real/my-board", "real/MY-BOARD", id="file-project"),
+    pytest.param("real/my-board", "REAL/MY-BOARD", id="file-both"),
+    pytest.param("REAL/my-board", "real/my-board", id="session-ancestor"),
+    pytest.param("real/MY-BOARD", "real/my-board", id="session-project"),
+    pytest.param("real/my-board/checks", "REAL/my-board", id="inside-file"),
+    pytest.param("REAL/my-board/checks", "real/my-board", id="inside-session"),
+    pytest.param("real", "REAL/my-board", id="above-file"),
+    pytest.param("REAL", "real/my-board", id="above-session"),
+]
+
+
+@pytest.mark.parametrize(("session", "project"), CAPITALS)
+def test_a_project_spelled_with_other_capitals_is_the_sessions_where_it_is_one_folder(
+    cased: Path, session: str, project: str
+) -> None:
+    """Block a write to design.py exactly when the file system calls the two one folder.
+
+    A string comparison sees ``REAL/my-board`` and ``real/my-board`` as two projects and
+    lets the write through. On a case-sensitive file system the capitals name a folder
+    that does not exist, which is no project, so the write is the hook's to ignore.
+    """
+    same = all(one_folder(cased / s, cased / s.lower()) for s in (session, project))
+    real = cased / "real" / "my-board"
+    done = run_hook(
+        write(cased / project / "design.py", cwd=real), real, session=cased / session
+    )
+    assert done.returncode == (2 if same else 0), (same, stderr(done))
+
+
+@pytest.mark.parametrize(("session", "project"), CAPITALS)
+def test_the_checks_folder_is_writable_however_the_project_is_spelled(
+    cased: Path, session: str, project: str
+) -> None:
+    real = cased / "real" / "my-board"
+    done = run_hook(
+        write(cased / project / "checks" / "test_x.py", cwd=real),
+        real,
+        session=cased / session,
+    )
+    assert done.returncode == 0, stderr(done)
+
+
+@pytest.mark.parametrize(
+    ("relative", "outside"),
+    [
+        ("new_folder/deeper/x.py", True),
+        ("kicad/x.kicad_pcb", True),
+        ("checks/link.py", True),
+        ("checks/new/deeper/test_x.py", False),
+    ],
+    ids=["new-folders", "generated-folder", "link-out-of-checks", "new-check"],
+)
+def test_everything_else_is_judged_the_same_under_the_other_spelling(
+    cased: Path, relative: str, outside: bool
+) -> None:
+    """Folders that do not exist yet, and a link that leads out of checks/, included."""
+    real = cased / "real" / "my-board"
+    variant = cased / "REAL" / "my-board"
+    same = one_folder(variant, real)
+    done = run_hook(write(variant / relative, cwd=real), real, session=real)
+    assert done.returncode == (2 if same and outside else 0), (same, stderr(done))
+
+
+def test_an_event_cwd_spelled_with_other_capitals_is_the_same_folder(
+    cased: Path,
+) -> None:
+    """A relative path is taken from the event's cwd, which may be spelled otherwise."""
+    real = cased / "real" / "my-board"
+    variant = cased / "REAL" / "my-board"
+    same = one_folder(variant, real)
+    blocked = run_hook(write("design.py", cwd=variant), real, session=real)
+    allowed = run_hook(write("checks/test_x.py", cwd=variant), real, session=real)
+    assert (blocked.returncode, allowed.returncode) == (2 if same else 0, 0), (
+        same,
+        stderr(blocked),
+    )
+
+
+def test_a_scratch_copy_spelled_with_other_capitals_is_still_another_project(
+    cased: Path,
+) -> None:
+    """What the file system calls one folder is the same project, not a lookalike."""
+    scratch = cased / "scratch" / "my-board"
+    scratch.mkdir(parents=True)
+    (scratch / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    real = cased / "real" / "my-board"
+    done = run_hook(
+        write(cased / "SCRATCH" / "my-board" / "design.py", cwd=real),
+        real,
+        session=real,
+    )
+    assert done.returncode == 0, stderr(done)
+
+
+def test_a_project_whose_name_starts_like_the_sessions_is_another_project(
+    project: Path, tmp_path: Path
+) -> None:
+    sibling = tmp_path / "my-board-2"
+    sibling.mkdir()
+    (sibling / "pcbkit.toml").write_text("x = 1\n", encoding="utf-8")
+    done = run_hook(write(sibling / "design.py", cwd=project), project, session=project)
+    assert done.returncode == 0, stderr(done)
+
+
+def test_a_session_reached_through_a_link_into_the_project_is_inside_it(
+    project: Path, tmp_path: Path
+) -> None:
+    """The link jumps into the middle of the project: only the followed path shows it.
+
+    The file is named by its real location, with no link in it, and the session folder
+    is the link, so neither name starts with the other. Folders above the link are
+    nowhere near the project.
+    """
+    shortcut = tmp_path / "shortcut"
+    shortcut.symlink_to(project / "checks", target_is_directory=True)
+    blocked = run_hook(
+        write(project / "design.py", cwd=shortcut), shortcut, session=shortcut
+    )
+    allowed = run_hook(
+        write(project / "checks" / "test_x.py", cwd=shortcut),
+        shortcut,
+        session=shortcut,
+    )
+    assert (blocked.returncode, allowed.returncode) == (2, 0), stderr(blocked)
+
+
+def test_a_session_folder_that_does_not_exist_is_judged_by_its_name(
+    project: Path,
+) -> None:
+    """A folder that is gone cannot be compared with anything but its spelling.
+
+    Below the project, it still puts the project in the session. Elsewhere it puts
+    nothing in it: a missing folder is not every folder.
+    """
+    inside = project / "checks" / "not-yet"
+    elsewhere = project.parent / "missing"
+    target = write(project / "design.py", cwd=project)
+    assert run_hook(target, project, session=inside).returncode == 2
+    assert run_hook(target, project, session=elsewhere).returncode == 0
+
+
+def test_a_session_folder_with_a_null_character_in_it_does_not_stop_the_comparison(
+    project: Path,
+) -> None:
+    """A path the file system cannot take is no folder: judged by name, not a crash.
+
+    A crash is exit 1, which lets the write through. JSON can carry the character, and
+    this is the event's cwd, the session folder when there is no session variable.
+    """
+    event = write(project / "design.py")
+    event["cwd"] = f"{project}/checks/not\x00yet"
+    done = run_hook(event, project)
+    assert done.returncode == 2, stderr(done)
+
+
+def test_a_folder_that_does_not_exist_is_judged_by_its_name(tmp_path: Path) -> None:
+    """``inside`` falls back on the spelling when the file system has nothing to say."""
+    hook = load_hook()
+    gone = str(tmp_path / "gone")
+    assert hook.inside(gone, gone)
+    assert hook.inside(f"{gone}/a/b", gone)
+    assert not hook.inside(gone, f"{gone}/a")
+    assert not hook.inside(f"{gone}-2/a", gone)
 
 
 # --- what is not the agent's business -------------------------------------------------

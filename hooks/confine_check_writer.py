@@ -16,6 +16,14 @@ inside, ``$CLAUDE_PROJECT_DIR``, the folder the session was started for (the eve
 another project and may be edited freely, and so may any other agent, the main session
 and files that belong to no project.
 
+Folders are compared by what they are, not by what they are called. The names are tried
+first; when they differ, the file system is asked (device and inode, links followed), so
+``REAL/my-board`` is ``real/my-board`` on a case-insensitive file system, which is the
+macOS default, and a link is the folder it leads to. A folder that does not exist, or
+cannot be asked about, counts by its name alone. The same goes for ``checks/``: a
+spelling that only differs in capitals is that folder where the file system says so, and
+a project with no ``checks/`` yet starts one under that exact name.
+
 It only sees the Edit and Write tools: a change made through Bash never reaches it.
 
 Exit codes: 0 allow, 2 block, 1 the event could not be read (a non-blocking error that
@@ -60,20 +68,64 @@ def project_root(folder: str) -> str | None:
         folder = parent
 
 
-def inside(path: str, base: str) -> bool:
-    """Return True if ``path`` is ``base`` itself or lies below it."""
+def same_folder(first: str, second: str) -> bool:
+    """Return True if the file system says ``first`` and ``second`` are one folder.
+
+    On a case-insensitive file system ``REAL/`` and ``real/`` are one folder, and a link
+    is the folder it leads to. A folder that does not exist, or that the file system
+    will not answer for, is the same as no folder.
+    """
+    try:
+        return os.path.samefile(first, second)
+    except (OSError, ValueError):
+        return False
+
+
+def inside_by_name(path: str, base: str) -> bool:
+    """Return True if ``path`` is ``base`` itself or lies below it, by their names."""
     relative = os.path.relpath(path, base)
     return relative != os.pardir and not relative.startswith(os.pardir + os.sep)
+
+
+def inside(path: str, base: str) -> bool:
+    """Return True if ``path`` is ``base`` itself or lies below it.
+
+    The names are compared first. When they do not say so, ``path`` and each folder
+    above it are compared with ``base`` by what they are (see ``same_folder``): another
+    spelling of ``base``, such as other capitals on a case-insensitive file system, or
+    a link to it, is still ``base``. Where the file system has nothing to say, the
+    names have had the last word already.
+    """
+    if inside_by_name(path, base):
+        return True
+    folder = path
+    while True:
+        if same_folder(folder, base):
+            return True
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return False
+        folder = parent
 
 
 def strays(path: str, root: str) -> bool:
     """Return True if ``path``, inside project ``root``, is not under its checks/.
 
-    Names are compared without regard to case, because the default macOS file system
-    does not tell ``Checks/`` from ``checks/``.
+    The folder is called ``checks``. A name that only differs from it in capitals is
+    that folder where the file system says so, as the default macOS one does for
+    ``Checks/``; a case-sensitive one does not, and there ``Checks/`` is another folder.
+    With no checks/ in the project to compare with, only the exact name starts one. Any
+    other name, a link to checks/ included, is outside it.
     """
     parts = os.path.relpath(path, root).split(os.sep)
-    return len(parts) == 1 or parts[0].casefold() != FOLDER
+    if len(parts) == 1:
+        return True
+    first = parts[0]
+    if first == FOLDER:
+        return False
+    if first.casefold() != FOLDER:
+        return True
+    return not same_folder(os.path.join(root, first), os.path.join(root, FOLDER))
 
 
 def confined(path: str, session: str) -> bool:
