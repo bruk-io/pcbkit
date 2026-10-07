@@ -1,6 +1,6 @@
 [project]
 name = "pcbkit"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "PCB as Python: generate, route, check and export KiCad boards from code."
 readme = "README.md"
 # 3.9, not Bruk's usual 3.14: KiCad's pcbnew module only imports under the Python
@@ -38,9 +38,20 @@ dependencies = [
 pcbkit = "pcbkit.cli:cli"
 
 [dependency-groups]
+# PyYAML is for the tests that read the workflow files and mkdocs.yml.
 dev = [
     "pytest>=8",
+    "pyyaml>=6",
     "ruff>=0.9",
+]
+# The docs site (`uv run --group docs mkdocs build --strict`). Not a dependency of
+# pcbkit and not needed to test it. mkdocs stays below 2: Material and mike are built
+# for 1.x. mkdocs-click reads the click group, so the CLI page cannot drift.
+docs = [
+    "mike>=2.2",
+    "mkdocs>=1.6,<2",
+    "mkdocs-click>=0.9",
+    "mkdocs-material>=9.7",
 ]
 
 [build-system]
