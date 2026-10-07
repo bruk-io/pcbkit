@@ -1,0 +1,145 @@
+"""The order skill's preflight script, run on results the check plugin really wrote.
+
+The unit tests of the script (tests/unit/test_order_preflight.py) build their
+results.json by hand, so they only prove the script reads what its author thinks the
+plugin writes. These run the checks the way ``pcbkit check`` runs them, in a child
+pytest with ``pcbkit.check.plugin``, and then run the script on the file that comes out.
+If the plugin ever renames ``groups``, ``checks`` or ``group``, or keys a check
+differently, this is where the order gate notices.
+
+No KiCad is needed: with no check group switched on the run is the project's own checks,
+and a group that is switched on is only ever deselected by ``-k``.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+from pcbkit.check import runner
+from tests.board_files import TOML, write_file
+
+SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "skills"
+    / "order-pcbway"
+    / "scripts"
+    / "preflight.py"
+)
+
+CHECKS = """\
+import pytest
+
+
+def test_led() -> None:
+    pass
+
+
+@pytest.mark.parametrize("ref", ["R1", "R2"])
+def test_resistor(ref: str) -> None:
+    pass
+
+
+class TestRails:
+    def test_input(self) -> None:
+        pass
+"""
+
+
+def make_project(root: Path, groups: str = "[]") -> Path:
+    """Write a board project with three checks of its own, older than its fab files."""
+    write_file(root / "pcbkit.toml", TOML + f"\n[checks]\ngroups = {groups}\n")
+    write_file(root / "design.py", "x = 1\n")
+    write_file(root / "checks" / "test_limits.py", CHECKS)
+    now = time.time()
+    for name in ("pcbkit.toml", "design.py", "checks/test_limits.py"):
+        os.utime(root / name, (now - 1000, now - 1000))
+    for name in ("my_board_gerbers.zip", "my_board_BOM.csv", "my_board_centroid.csv"):
+        path = write_file(root / "out" / "fab" / name, "x\n")
+        os.utime(path, (now - 500, now - 500))
+    return root
+
+
+def check(root: Path, expression: str | None = None) -> None:
+    """Run the checks as ``pcbkit check`` does, and require that they all passed."""
+    argv = runner.command(root, expression, ["-q", "--no-header"])
+    done = subprocess.run(argv, cwd=root, capture_output=True, text=True, timeout=300)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def preflight(root: Path) -> subprocess.CompletedProcess[str]:
+    """Run the order skill's preflight script in the project."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+def test_a_full_run_of_the_checks_passes_the_gate(tmp_path: Path) -> None:
+    root = make_project(tmp_path / "board")
+    check(root)
+    done = preflight(root)
+    assert done.returncode == 0, done.stdout
+    assert done.stdout.startswith("OK: ")
+
+
+def test_a_run_of_one_check_after_a_full_run_no_longer_passes_the_gate(
+    tmp_path: Path,
+) -> None:
+    """The path that made the gate say OK: iterate on one check with -k, then order."""
+    root = make_project(tmp_path / "board")
+    check(root)
+    assert preflight(root).returncode == 0
+    check(root, "test_led")
+    done = preflight(root)
+    assert done.returncode == 1
+    assert done.stdout.splitlines() == [
+        "INCOMPLETE: out/checks/results.json has no result for "
+        "checks/test_limits.py::test_resistor, "
+        "checks/test_limits.py::TestRails::test_input "
+        "(2 of 3 project checks): the last run was partial (pcbkit check -k?): "
+        "run pcbkit check with no -k"
+    ]
+
+
+def test_a_run_that_deselected_every_check_group_no_longer_passes_the_gate(
+    tmp_path: Path,
+) -> None:
+    """Every check of the project ran, none of the switched-on groups did."""
+    root = make_project(tmp_path / "board", groups='["kicad", "outputs"]')
+    check(root, "test_limits")
+    done = preflight(root)
+    assert done.returncode == 1
+    assert done.stdout.splitlines() == [
+        "INCOMPLETE: out/checks/results.json has no result for check groups kicad, "
+        "outputs: the last run was partial (pcbkit check -k?): "
+        "run pcbkit check with no -k"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("link", "target"),
+    [
+        pytest.param("test_in.py", "../lib/test_a.py", id="into-the-project"),
+        pytest.param("test_out.py", "../../shared/test_b.py", id="out-of-the-project"),
+    ],
+)
+def test_a_check_module_that_is_a_link_is_keyed_the_way_the_gate_expects(
+    tmp_path: Path, link: str, target: str
+) -> None:
+    root = make_project(tmp_path / "board")
+    for path in (root / "lib" / "test_a.py", tmp_path / "shared" / "test_b.py"):
+        write_file(path, "def test_c() -> None:\n    pass\n")
+        os.utime(path, (time.time() - 1000, time.time() - 1000))
+    (root / "checks" / link).symlink_to(target)
+    check(root)
+    done = preflight(root)
+    assert done.returncode == 0, done.stdout

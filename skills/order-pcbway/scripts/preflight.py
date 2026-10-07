@@ -13,17 +13,30 @@ It reports a problem when
   ``golden/``;
 * ``out/checks/results.json`` is missing, older than any of those sources or than the
   checks' own inputs (``specs.py``, ``circuits.py``, ``checks/``), or records a failed
-  check or a non-zero exit. A ``pcbkit check -k ...`` run replaces the results with its
-  subset, so run the checks in full before an order.
+  check or a non-zero exit;
+* the results are incomplete. ``pcbkit check -k EXPR`` writes a results file with only
+  the checks it ran, and an exit status of 0 when those passed, so the file is read for
+  what it lacks: a check group the project switched on that has no result at all, and a
+  check of the project's own (``checks/test_*.py``, read as Python and never run) that
+  has none.
 
-Exit codes: 0 every file is current and the checks passed, 1 at least one problem
-(each is printed, with what to run), 2 no board project was found.
+What it cannot see: a ``-k`` run that leaves a result in every group and for every
+project check (``-k "not drc"``, say) looks complete, because the results file does not
+say what was deselected. Recording the expression, or the count of deselected checks, is
+pcbkit's to do (pcbkit/check/plugin.py), and this script should then refuse such a run.
+Nor does it look for a check the module does not spell out as ``def test...`` (a
+``unittest.TestCase`` class, a function made while the module loads).
 
-Standard library only; it runs under whichever ``python3`` is on PATH.
+Exit codes: 0 every file is current, the checks passed and none of the above is
+missing, 1 at least one problem (each is printed, with what to run), 2 no board
+project was found.
+
+Standard library only; it runs under whichever ``python3`` is on PATH, 3.9 included.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import sys
@@ -38,6 +51,9 @@ CHECK_INPUTS = ("specs.py", "circuits.py")
 SKIP_DIRS = ("checks", "archive", "kicad", "out", "fab", "__pycache__")
 # The three files an order needs, by the suffix finalize gives them.
 FAB_FILES = ("_gerbers.zip", "_BOM.csv", "_centroid.csv")
+# What a line about missing results says to do, and how many checks it names.
+PARTIAL = "the last run was partial (pcbkit check -k?): run pcbkit check with no -k"
+SHOWN = 3
 
 
 def find_project(start: Path) -> Path | None:
@@ -82,6 +98,158 @@ def fab_folder(root: Path) -> Path:
     return root / "out" / "fab" if (root / "out" / "fab").is_dir() else root / "fab"
 
 
+def check_modules(root: Path) -> list[Path]:
+    """Return the project's check modules: ``test_*.py`` below ``checks/``, in order.
+
+    That is all ``pcbkit check`` collects there (its pytest.ini says ``python_files =
+    test_*.py``): pytest does not look inside hidden folders, and it passes over a link
+    that leads nowhere. A folder that is a link is not entered.
+    """
+    found = []
+    for folder, names, files in os.walk(root / "checks"):
+        names[:] = sorted(
+            n for n in names if not n.startswith(".") and n != "__pycache__"
+        )
+        found += [
+            Path(folder) / name
+            for name in sorted(files)
+            if name.startswith("test_")
+            and name.endswith(".py")
+            and (Path(folder) / name).is_file()
+        ]
+    return found
+
+
+def is_fixture(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return True if ``func`` is a fixture: ``@fixture`` or ``@pytest.fixture``."""
+    for decorator in func.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        name = (
+            target.attr
+            if isinstance(target, ast.Attribute)
+            else getattr(target, "id", "")
+        )
+        if name == "fixture":
+            return True
+    return False
+
+
+def collected(node: ast.AST, prefix: str = "") -> list[str]:
+    """Return what pytest collects below ``node``, as ``name`` or ``Class::name``.
+
+    A function named ``test...`` at the top of a module or inside a class named
+    ``Test...``, in an ``if`` or ``try`` too. A function inside a function is not one,
+    and neither is a fixture that happens to be called ``test_...``.
+    """
+    found: list[str] = []
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if child.name.startswith("test") and not is_fixture(child):
+                found.append(prefix + child.name)
+        elif isinstance(child, ast.ClassDef):
+            if child.name.startswith("Test"):
+                found += collected(child, f"{prefix}{child.name}::")
+        else:
+            found += collected(child, prefix)
+    return found
+
+
+def result_prefix(path: Path, root: Path) -> str:
+    """Return the file part of the results key of a check in ``path``.
+
+    The check plugin follows links, then writes the path of the module below the
+    project, or only the name of the file for a module that really lives outside it.
+    """
+    real = path.resolve()
+    try:
+        return real.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return real.name
+
+
+def project_checks(root: Path) -> tuple[list[str], list[str]]:
+    """Return the id of each check of the project's own, and a line per bad module.
+
+    An id is the key of the results file without the ``[param]`` pytest adds to a
+    parametrised check: ``checks/test_x.py::test_y``, or
+    ``checks/test_x.py::TestZ::test_y`` for a method. The modules are parsed and never
+    run.
+    """
+    ids: list[str] = []
+    unreadable: list[str] = []
+    for path in check_modules(root):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, SyntaxError) as err:
+            unreadable.append(
+                f"UNREADABLE: {path.relative_to(root).as_posix()}: cannot be read as "
+                f"Python ({type(err).__name__}): fix it, then run pcbkit check"
+            )
+            continue
+        prefix = result_prefix(path, root)
+        ids += [f"{prefix}::{name}" for name in collected(tree)]
+    return list(dict.fromkeys(ids)), unreadable
+
+
+def has_result(check: str, keys: list[str]) -> bool:
+    """Return True if a results key is ``check``, or ``check[...]`` for a parameter."""
+    return any(key == check or key.startswith(check + "[") for key in keys)
+
+
+def listed(names: list[str]) -> str:
+    """Return ``names`` as one phrase: the first few, then how many more."""
+    if len(names) <= SHOWN:
+        return ", ".join(names)
+    return f"{', '.join(names[:SHOWN])} and {len(names) - SHOWN} more"
+
+
+def parse_results(text: str) -> tuple[int, int, list[str], list[str], set[str]]:
+    """Return what the gate reads from a results file.
+
+    That is the number of failed and errored checks, the exit status, the check groups
+    the project switched on, the id of each check that has a result, and the groups
+    those checks belong to. Raise ValueError, KeyError, TypeError or AttributeError for
+    text that is not a results file as the check plugin writes it, which has always the
+    ``groups`` and a ``checks`` table with a ``group`` for every entry.
+    """
+    data = json.loads(text)
+    counts = data["counts"]
+    bad = counts.get("failed", 0) + counts.get("error", 0)
+    groups = data["groups"]
+    if not isinstance(groups, list) or not all(isinstance(g, str) for g in groups):
+        raise TypeError("groups is not a list of names")
+    entries = data["checks"]
+    ran = {entry["group"] for entry in entries.values()}
+    return bad, data["exit_status"], groups, list(entries), ran
+
+
+def incomplete(
+    root: Path, groups: list[str], keys: list[str], ran: set[str]
+) -> list[str]:
+    """Return the lines for check groups and for project checks that have no result.
+
+    ``keys`` are the ids of the checks that have a result and ``ran`` the groups of
+    those; ``groups`` are the check groups the project switched on.
+    """
+    found = []
+    missing = [group for group in groups if group not in ran]
+    if missing:
+        noun = "group" if len(missing) == 1 else "groups"
+        found.append(
+            f"INCOMPLETE: out/checks/results.json has no result for check {noun} "
+            f"{', '.join(missing)}: {PARTIAL}"
+        )
+    expected, unreadable = project_checks(root)
+    found += unreadable
+    absent = [check for check in expected if not has_result(check, keys)]
+    if absent:
+        found.append(
+            f"INCOMPLETE: out/checks/results.json has no result for {listed(absent)} "
+            f"({len(absent)} of {len(expected)} project checks): {PARTIAL}"
+        )
+    return found
+
+
 def problems(root: Path) -> list[str]:
     """Return one line per reason the order files or the checks are not current."""
     found = []
@@ -114,9 +282,9 @@ def problems(root: Path) -> list[str]:
             "run pcbkit check"
         )
     try:
-        data = json.loads(results.read_text(encoding="utf-8"))
-        bad = data["counts"].get("failed", 0) + data["counts"].get("error", 0)
-        exit_status = data["exit_status"]
+        bad, exit_status, groups, keys, ran = parse_results(
+            results.read_text(encoding="utf-8")
+        )
     except (ValueError, KeyError, TypeError, AttributeError):
         found.append("UNREADABLE: out/checks/results.json: run pcbkit check again")
         return found
@@ -126,7 +294,7 @@ def problems(root: Path) -> list[str]:
             f"errored checks, exit status {exit_status}): read "
             "out/checks/results.json and fix the board"
         )
-    return found
+    return found + incomplete(root, groups, keys, ran)
 
 
 def main() -> int:
