@@ -95,7 +95,7 @@ groups listed in `[checks] groups`, and your own, the `test_*.py` files in `chec
 | Group | What it judges | Reads |
 |---|---|---|
 | `kicad` (on by default) | ERC on the schematic, and DRC with schematic parity. | nothing |
-| `outputs` (on by default) | The Gerbers, drill files, BOM and pick-and-place file, read back and compared with the board and the schematic; and that every fitted part has a part number a buyer can order. | the fab files, `pcbkit.toml`, `layout.py` |
+| `outputs` (on by default) | The Gerbers, drill files, BOM and pick-and-place file, read back and compared with the board and the schematic; and that every fitted part has a part number a buyer can order. | the fab files, `pcbkit.toml`, `layout.py`; `design.py` and `bom.py` for the part numbers |
 | `fab` | The fab house's limits, polarity marks on wire pads, decoupling capacitors close to their pins, the rise time of an I2C bus. | `specs.py` |
 | `copper` | Regions reserved for some nets, ground stitching, coupling into sensitive traces, the current and voltage drop of the heavy copper. | `specs.py` |
 | `circuit` | Operating points solved from the netlist: pins against the datasheet, LED currents, resistor power, capacitor voltage, supply pins. | `specs.py`, `circuits.py` |

@@ -146,8 +146,8 @@ A `-k` run replaces the results with the few checks it ran, and says so in the f
 "selection": {"keyword": "test_led_current_window", "markexpr": "", "deselected": 10, "complete": false}
 ```
 
-Treat those results as partial. The report written from them reads like any other (it does
-not say it is partial), and the order preflight refuses results with `complete: false`
+Treat those results as partial. `pcbkit report` says so under the counts of the report it
+writes from them, and the order preflight refuses results with `complete: false`
 ([ordering](ordering.md)). Run `pcbkit check` with no `-k` before you order.
 
 ### When a check fails

@@ -227,9 +227,10 @@ test_outputs.py::test_drill_files_match_board
 Results: out/checks/results.json (pcbkit report)
 ```
 
-Eleven checks passed: KiCad's ERC and DRC; seven that read the Gerbers, drill files, BOM
-and pick-and-place file back and compare them with the board and the schematic; and the
-two in `checks/test_indicator.py`, which are this board's own: the LED's current stays
+Eleven checks passed: KiCad's ERC and DRC; seven on the fab outputs, which read the
+Gerbers, drill files, BOM and pick-and-place file back, compare them with the board and the
+schematic, and make sure every part has a part number you can order; and the two in
+`checks/test_indicator.py`, which are this board's own: the LED's current stays
 between 1 and 20 mA across the 3 V to 5.5 V supply, and R1 stays under half its power
 rating. The warning is KiCad's own: the Python interface that pcbkit uses is deprecated
 and will be removed in a future KiCad. It does not affect the run.

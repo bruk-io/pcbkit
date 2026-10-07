@@ -769,7 +769,8 @@ path from the project root for yours, whatever folder pytest was started in. `ou
 has a `reason` and a failed or errored one a `message`. `numbers` holds what the check
 recorded. `selection` says whether the run was cut short: after `pcbkit check -k ...`
 (or any run that left checks out) `complete` is false, so treat those results as partial
-and run the checks in full before you order boards.
+and run the checks in full before you order boards. `pcbkit report` marks such a report as
+partial, under its counts.
 
 ### Writing a check
 
