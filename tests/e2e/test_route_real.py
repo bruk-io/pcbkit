@@ -142,7 +142,7 @@ def test_route_promote_finalize_and_eco_on_a_small_board(
         "prerouted.kicad_pro",
         "prerouted.kicad_prl",
     ):
-        (project.kicad_dir / stale).unlink()
+        (project.kicad_dir / stale).unlink(missing_ok=True)
     recorder.silk.clear()
     flow.finalize(project, render=False, say=said.append)
     assert recorder.exports == [False]
