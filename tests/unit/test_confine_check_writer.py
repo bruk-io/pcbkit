@@ -410,6 +410,52 @@ def test_a_folder_of_the_project_that_is_a_link_elsewhere_is_still_the_projects(
     assert done.returncode == 2, stderr(done)
 
 
+@pytest.mark.parametrize(
+    "session_by_link", [False, True], ids=["file-by-link", "session-by-link"]
+)
+def test_a_link_that_is_the_project_itself_is_the_project(
+    project: Path, tmp_path: Path, session_by_link: bool
+) -> None:
+    """A link to the project folder is a second name for it, whichever side uses it.
+
+    notes/ leads out of the project, so followed to the end the file is in no project:
+    only the project folder, found through the link, stops it. The link is the last
+    part of the name here, which a link above the project would not test: the file
+    system looks through that one whichever way it is asked.
+    """
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (project / "notes").symlink_to(shared, target_is_directory=True)
+    mirror = tmp_path / "mirror"
+    mirror.symlink_to(project, target_is_directory=True)
+    session, folder = (mirror, project) if session_by_link else (project, mirror)
+    done = run_hook(
+        write(folder / "notes" / "todo.md", cwd=session), session, session=session
+    )
+    assert done.returncode == 2, stderr(done)
+
+
+def test_a_session_started_in_a_folder_of_the_project_that_is_a_link_elsewhere(
+    project: Path, tmp_path: Path
+) -> None:
+    """Started in notes/, which leads out of the project, the session is in it still.
+
+    The followed folder is the shared one, in no project, so only the name the session
+    was started under ties it to the project.
+    """
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (project / "notes").symlink_to(shared, target_is_directory=True)
+    session = project / "notes"
+    blocked = run_hook(
+        write(project / "design.py", cwd=session), session, session=session
+    )
+    allowed = run_hook(
+        write(project / "checks" / "test_x.py", cwd=session), session, session=session
+    )
+    assert (blocked.returncode, allowed.returncode) == (2, 0), stderr(blocked)
+
+
 def test_a_checks_folder_that_is_a_link_elsewhere_is_still_checks(
     project: Path, tmp_path: Path
 ) -> None:
