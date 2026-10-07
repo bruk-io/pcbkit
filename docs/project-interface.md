@@ -512,7 +512,147 @@ on top of (a logo, a note) are fine.
 
 ## Fab outputs
 
-To be written with `pcbkit finalize`'s exports and `pcbkit quote` (WP6).
+`pcbkit finalize` ends by exporting what you send to a fab house and an assembler, and the
+documents that go with it. `pcbkit quote` reads those files back and prints each number
+the PCBWay order form asks for, so you never count parts by hand.
+
+### What is written
+
+An export reads the saved board `kicad/<stem>.kicad_pcb`, its schematic, `design.py` and
+the board height `H` in `layout.py`, and writes two folders. `<fab_name>` is the
+`[board] fab_name` of `pcbkit.toml`.
+
+| File | What it is |
+|---|---|
+| `out/fab/<fab_name>_gerbers.zip` | The Gerber and drill files in one zip: the file to upload. |
+| `out/fab/gerbers/` | The same files, loose: the nine plotted layers, the Excellon drill files with their maps, and KiCad's job file. |
+| `out/fab/<fab_name>_BOM.csv` and `_BOM.xlsx` | The bill of materials, as CSV and as a workbook. |
+| `out/fab/<fab_name>_centroid.csv` | Where each BOM part sits, for the pick-and-place machine. |
+| `out/docs/<fab_name>_schematic.pdf` | The schematic. |
+| `out/docs/<fab_name>_assembly_top.pdf` and `.png` | The assembly drawing: board edge and each part's outline. |
+| `out/docs/<fab_name>_top_copper.pdf` and `_bottom_copper.pdf` | The copper of each side. |
+| `out/docs/<fab_name>_render_iso.png`, `_render_top.png` and `_render_bottom.png` | 3D renders. `pcbkit finalize --no-render` leaves them out. |
+
+- Only `out/fab/` and `out/docs/` are emptied before an export, so a file left by an
+  earlier run cannot end up in the zip. Anything else you keep under `out/` stays.
+- The Gerbers and the centroid are measured from the bottom-left corner of the board:
+  the export saves the board with its aux origin there. The centroid has x to the right
+  and y up, and lists the top side only. For a surface-mount part whose anchor is more
+  than 0.1 mm from the middle of its `F.Fab` outline, it gives the middle of the outline,
+  which is what an assembler places by.
+- The workbook has one sheet, `BOM`, with the same rows as the CSV.
+
+### What the BOM lists
+
+Every part that is in the bill of materials: not a power flag (a reference starting with
+`#`), not `dnp=True`, not `bom=False`. Parts with the same manufacturer part number and
+footprint share a line, and a part with no part number is grouped by its value. A line
+takes its manufacturer, description and value from the first of its parts that
+`design.py` declares, and its quantity is the sum of theirs.
+
+Lines are sorted surface-mount first, then through-hole, each by the letters and number
+of the line's first reference (`C2` before `C10`). A line is through-hole (Type `THT`)
+when its footprint has a plated through-hole pad on the board. A footprint with only SMD
+pads, or only unplated holes such as locating pegs, is surface-mount.
+
+A resistor made with `R()` and no `mpn` has a stand-in part number, `0603 <value> 1%`,
+which cannot be ordered. For these values, in an `R_0603` footprint, the BOM uses a
+Yageo RC0603FR-07 part number instead:
+
+| Values |
+|---|
+| `10`, `100`, `220`, `300`, `330`, `560`, `1k`, `1.5k`, `2.2k`, `3.3k`, `4.7k`, `5.23k`, `10k`, `18k`, `22k`, `30.1k`, `100k` |
+
+A part number you wrote yourself is never replaced. Any other value keeps the stand-in
+until you give the part an `mpn`.
+
+A fitted part whose part number is empty, is still a stand-in, or has a space in it
+(a real part number is one word; one with a space is a description) cannot be ordered.
+`pcbkit.fab.bom.parts_without_mpn(parts, overrides)` lists such parts, judged on what the
+BOM will show after the `bom.py` below, and `export_fab` returns them in
+`FabResult.without_mpn` without failing.
+
+### bom.py
+
+Optional. Write the part number a buyer needs in `design.py`, and you need no `bom.py`.
+It is for when the schematic should say one thing and the BOM another, for example a
+generic part number in the schematic that is bought as one real part. It may define
+these names, all optional:
+
+| Name | Type | Meaning |
+|---|---|---|
+| `MPN_OVERRIDE` | dict of an MPN to fields | Keys are part numbers as written in `design.py`; every part with that part number gets the fields. A key no part uses is ignored. |
+| `REF_OVERRIDE` | dict of a reference to fields | The same for one reference, and it wins over `MPN_OVERRIDE`. A reference that is not in the design is an error. |
+| `line` | function taking a `Group` | Called for each finished BOM line. Returns `None`, or a dict that sets the line's `value` and `desc`. |
+| `NOT_IN_BOM` | list of strings | Text for the workbook, one row each, under a bold "Not assembled / not in BOM:" heading. With none, the workbook has no such rows. |
+
+The fields of an override are `mfr`, `mpn`, `desc` (strings) and `qty` (a whole number
+of 1 or more, how many physical parts the reference stands for; default 1). A field you
+leave out keeps the part's own. A `Group` has `parts` (the `design.py` parts, in the
+order declared), `refs`, `footprint` (without its library), `mfr`, `mpn`, `value`,
+`desc`, `qty` and `through_hole`.
+
+```python
+from __future__ import annotations
+
+MPN_OVERRIDE = {
+    "HDR 1x3 male": {  # what design.py calls the part: the BOM says what to buy
+        "mfr": "Acme",
+        "mpn": "AC-HDR-1X3",
+        "desc": "Pin header 1x3 2.54mm vertical",
+    },
+}
+
+REF_OVERRIDE = {
+    "BT1": {  # one reference that is two parts: a battery holder bought as two clips
+        "mfr": "Acme",
+        "mpn": "AC-CLIP-18650",
+        "desc": "18650 cell clip",
+        "qty": 2,
+    },
+}
+
+NOT_IN_BOM = ["W1 is a wire pad. H1 is a mounting hole."]
+
+
+def line(group):
+    """Show the three-pin headers as one kind of part, whatever each was named."""
+    if group.footprint.startswith("PinHeader_1x03"):
+        return {"value": "Header 3-pin"}
+```
+
+pcbkit reports a mistake in `bom.py` with what to fix: a field it does not know, a value
+of the wrong type, and an upper-case name that looks like a misspelling of one above.
+
+### pcbkit quote
+
+```
+pcbkit quote [--assembled N] [--fab-qty N] [--self-solder-tht] [--notes FILE]
+```
+
+Reads the files an export wrote, from `out/fab/` (else `fab/`), and prints each value of
+the PCBWay order form. If they are not there it says to run `pcbkit finalize`.
+
+| Value | Where it comes from |
+|---|---|
+| Layers, thickness, finish, copper weight | The Gerber job file in the zip. The finish is shown as the form words it (KiCad's "HAL lead-free" is "HASL lead-free"). |
+| Board size | The job file's size less one outline line width, which KiCad adds. |
+| Min track and spacing | The smallest track width and the smallest spacing in the job file's design rules, in mm and mil. |
+| Min hole size | The smallest tool in the Excellon files, plated or not. |
+| Unique parts | With `--assembled`: the BOM lines the assembler places. All of them, or with `--self-solder-tht` the surface-mount ones only. |
+| SMD placements | The sum of the surface-mount lines' quantities, per board. |
+| BGA/QFP/QFN parts | Parts whose footprint name has `BGA`, `QFP` or `QFN` in it (so `LQFP`, `VQFN` and `LFBGA` count), with their references. Pitch is not looked at. |
+| Through-hole parts | The sum of the through-hole lines' quantities and the number of references, then the references with each run of three or more numbers written as a range (`J3-J9`). With `--self-solder-tht`, 0 for the assembler and these as the ones you solder. |
+
+`--assembled N` adds the assembly numbers (they are per board; N is how many boards).
+`--self-solder-tht` needs `--assembled`. `--fab-qty N` is the number of bare boards and
+must be at least `--assembled`. `--notes FILE` checks the order notes against the form's
+limit of 600 characters, counting a line break as one and ignoring trailing whitespace; if
+they are over it, the command fails and says how many characters there are.
+
+It also warns, after the numbers, when the copper in the Gerbers is not `[stackup]
+copper_mm`, and when the Gerber zip is older than the saved board: the numbers then
+describe an earlier export.
 
 ## Checks: specs.py, circuits.py, checks/ and mutants.py
 

@@ -32,9 +32,9 @@ WORKFLOW = [
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
 # is the independent record of who fills in what: `new` and `setup` are WP11, route,
-# promote and finalize are WP5, quote is WP6, check, mutants and report are WP7, compare
-# and shots are WP8. `sch` (WP3) and `build` (WP4) are built (tests/unit/test_sch.py and
-# test_build.py), so they have no row.
+# promote and finalize are WP5, check, mutants and report are WP7, compare and shots
+# are WP8. The commands in BUILT have their own tests and no row here.
+BUILT = {"doctor", "sch", "build", "quote"}
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
@@ -44,7 +44,6 @@ STUBS = {
     "check": ("WP7", ["check"]),
     "mutants": ("WP7", ["mutants"]),
     "report": ("WP7", ["report"]),
-    "quote": ("WP6", ["quote"]),
     "compare": ("WP8", ["compare", "old.kicad_pcb", "new.kicad_pcb"]),
     "shots": ("WP8", ["shots"]),
 }
@@ -56,19 +55,6 @@ WITH_OPTIONS = [
     ("WP5", ["route", "--eco", "golden", "--tries", "6", "--passes", "40"]),
     ("WP5", ["finalize", "--no-render"]),
     ("WP7", ["check", "-k", "copper and not stitching"]),
-    (
-        "WP6",
-        [
-            "quote",
-            "--assembled",
-            "2",
-            "--fab-qty",
-            "5",
-            "--self-solder-tht",
-            "--notes",
-            "notes.txt",
-        ],
-    ),
 ]
 
 
@@ -126,7 +112,7 @@ def test_every_command_has_help_that_names_what_it_does() -> None:
 
 def test_every_command_that_is_not_built_has_a_stub_test() -> None:
     """Fail when a command is added without a row in STUBS."""
-    assert set(cli.commands) - {"doctor", "sch", "build"} == set(STUBS)
+    assert set(cli.commands) - BUILT == set(STUBS)
 
 
 @pytest.mark.parametrize("name", sorted(STUBS))

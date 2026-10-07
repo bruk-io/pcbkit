@@ -3,12 +3,13 @@
 Two halves, kept apart so the second needs no KiCad at all:
 
 * Wrappers: ``erc``, ``export_netlist``, ``drc``, ``export_gerbers``, ``export_drill``,
-  ``export_positions``, ``export_svg`` and ``render_3d``. Each builds the command line
-  the board scripts have always used, runs it through ``env._run`` (so unit tests can
-  fake the machine) and returns a small frozen result. A wrapper raises
-  ``KicadCliError`` when kicad-cli cannot be found, exits non-zero, or does not write
-  what it was asked to. A design that has violations is not a failure: kicad-cli exits 0
-  for those, and the wrappers do not add ``--exit-code-violations``.
+  ``export_positions``, ``export_svg``, ``render_3d``, ``export_sch_pdf`` and
+  ``export_pcb_pdf``. Each builds the command line the board scripts have always used,
+  runs it through ``env._run`` (so unit tests can fake the machine) and returns a small
+  frozen result. A wrapper raises ``KicadCliError`` when kicad-cli cannot be found,
+  exits non-zero, or does not write what it was asked to. A design that has violations
+  is not a failure: kicad-cli exits 0 for those, and the wrappers do not add
+  ``--exit-code-violations``.
 * Parsers: ``parse_erc`` and ``parse_drc`` turn report text into ``ErcReport`` and
   ``DrcReport``. They are pure functions and use the report as its own oracle: the
   entries found under each "Found N" heading must number N, so a report in a format
@@ -434,6 +435,27 @@ def render_3d(
         args += ["--zoom", f"{zoom:g}"]
     args += ["-o", str(out), str(pcb)]
     return run_cli(args, timeout=TIMEOUT_RENDER, expect=[out])
+
+
+def export_sch_pdf(sch: StrPath, out: StrPath) -> CliRun:
+    """Export the schematic as a PDF, one page per sheet."""
+    args = ["sch", "export", "pdf", "-o", str(out), str(sch)]
+    return run_cli(args, timeout=TIMEOUT_EXPORT, expect=[out])
+
+
+def export_pcb_pdf(
+    pcb: StrPath,
+    out: StrPath,
+    layers: Sequence[str],
+    *,
+    mode_single: bool = True,
+) -> CliRun:
+    """Export ``layers`` of the board as a PDF, all on one page when ``mode_single``."""
+    args = ["pcb", "export", "pdf", "--layers", ",".join(layers)]
+    if mode_single:
+        args.append("--mode-single")
+    args += ["-o", str(out), str(pcb)]
+    return run_cli(args, timeout=TIMEOUT_EXPORT, expect=[out])
 
 
 def _read(path: StrPath) -> str:
