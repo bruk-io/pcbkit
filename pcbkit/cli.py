@@ -224,18 +224,35 @@ def finalize_cmd(no_render: bool) -> None:
 def check_cmd(expression: str | None) -> None:
     """Run the design checks against the board.
 
-    Not implemented yet (WP7).
+    Runs the built-in checks of the groups listed in [checks] groups, then the
+    project's own checks/ folder, with pytest. Writes out/checks/results.json and exits
+    1 if any check fails. Needs pcbnew.
     """
-    _not_implemented("WP7")
+    env.require_pcbnew()
+    proj = load_project()
+    from pcbkit.check import plugin, runner
+
+    code = runner.run(proj, expression)
+    results = plugin.results_dir(proj) / plugin.RESULTS_FILE
+    if results.is_file():
+        click.echo(f"Results: {results.relative_to(proj.root)} (pcbkit report)")
+    click.get_current_context().exit(code)
 
 
 @cli.command("mutants")
 def mutants_cmd() -> None:
     """Plant known mistakes and confirm the checks catch every one.
 
-    Not implemented yet (WP7).
+    Reads MUTANTS from the project's mutants.py. Each is planted in design.py in a
+    scratch copy of the project and the checks it names must then fail; a control run on
+    an unedited copy must pass first. Exits 1 if a mistake is missed, 2 if the control
+    fails. Needs pcbnew.
     """
-    _not_implemented("WP7")
+    env.require_pcbnew()
+    proj = load_project()
+    from pcbkit import mutants
+
+    click.get_current_context().exit(mutants.run_all(proj))
 
 
 @cli.command("report")

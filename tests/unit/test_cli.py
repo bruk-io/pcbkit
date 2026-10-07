@@ -31,9 +31,8 @@ WORKFLOW = [
 ]
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
-# is the independent record of who fills in what: `new` and `setup` are WP11, check,
-# mutants and report are WP7. The commands in BUILT have their own tests and no row
-# here.
+# is the independent record of who fills in what: `new` and `setup` are WP11, report
+# is WP7. The commands in BUILT have their own tests and no row here.
 BUILT = {
     "doctor",
     "sch",
@@ -44,12 +43,12 @@ BUILT = {
     "finalize",
     "compare",
     "shots",
+    "check",
+    "mutants",
 }
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
-    "check": ("WP7", ["check"]),
-    "mutants": ("WP7", ["mutants"]),
     "report": ("WP7", ["report"]),
 }
 
@@ -57,7 +56,6 @@ STUBS = {
 # still reach the stub (a usage error would exit 2, and the message would differ).
 WITH_OPTIONS = [
     ("WP11", ["new", "my-board", "--from", "blinky"]),
-    ("WP7", ["check", "-k", "copper and not stitching"]),
 ]
 
 
