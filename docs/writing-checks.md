@@ -318,14 +318,17 @@ plants a mistake against it. At 1 kohm the LED gets under 1 mA at 3 V. Add this 
 R1_AT_1K = 'R("R1", "1k", "VIN", "LED_A", B, "RC0603FR-071KL"'
 ```
 
-and this entry inside it, then run `pcbkit mutants` again:
+and this entry at the end of the `MUTANTS` list, then run `pcbkit mutants` again:
 
 ```python
+MUTANTS = [
+    ...,  # the three entries that are already there
     (
         "R1 is 1 kohm: the LED is too dim at 3 V",
         [(R1, R1_AT_1K)],
         "test_led_current_window",
     ),
+]
 ```
 
 ```

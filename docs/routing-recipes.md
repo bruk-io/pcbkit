@@ -36,7 +36,7 @@ made with `api.track` and `api.via` are locked, so Freerouting routes around the
 ```python
 def prerouted(board, api):
     """Keep the gate loop short: driver U1 -> gate resistor R5 -> MOSFET Q1's gate."""
-    drive = api.ppos(board, "U1", 5)       # pad centres, in layout mm
+    drive = api.ppos(board, "U1", 5)  # pad centres, in layout mm
     r_in = api.ppos(board, "R5", 1)
     r_out = api.ppos(board, "R5", 2)
     gate = api.ppos(board, "Q1", 1)
@@ -58,8 +58,8 @@ pour and stitching vias in, keeps signals from cutting it:
 ```python
 def keepouts(board, api):
     """No signal tracks on the bottom under the regulator (U3, L1 and their capacitors)."""
-    api.keepout(board, 40.0, 18.0, 52.0, 30.0,
-                tracks=True, vias=False, pours=False, layers=("B.Cu",))
+    box = (40.0, 18.0, 52.0, 30.0)  # x0, y0, x1, y1 in layout mm
+    api.keepout(board, *box, tracks=True, vias=False, pours=False, layers=("B.Cu",))
 ```
 
 `tracks`, `vias` and `pours` say what the area bans. The same call with the defaults
@@ -90,11 +90,12 @@ def zones(board, api):
     outline = api.rect(0.3, 0.3, layout.W - 0.3, layout.H - 0.3)
     api.zone(board, "GND", pcbnew.B_Cu, outline)
     api.zone(board, "GND", pcbnew.F_Cu, outline)
-    api.zone(board, "VIN", pcbnew.F_Cu, api.rect(2.0, 2.0, 14.0, 9.0),
-             priority=3, full=True)
+    api.zone(
+        board, "VIN", pcbnew.F_Cu, api.rect(2.0, 2.0, 14.0, 9.0), priority=3, full=True
+    )
 
 
-solid_pad_refs = {"J1"}   # J1's ground pads join the ground pour solid
+solid_pad_refs = {"J1"}  # J1's ground pads join the ground pour solid
 ```
 
 A pour has to reach at least one pad of its own net; one that does not is an island of
