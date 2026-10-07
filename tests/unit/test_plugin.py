@@ -315,6 +315,23 @@ def test_the_front_matter_reader_refuses_a_repeated_key_and_a_missing_block() ->
         parse_frontmatter("# no front matter\n")
 
 
+def lone_option_problems(text: str) -> list[str]:
+    """Return the ``--option`` code spans of ``text`` that no pcbkit command takes.
+
+    A span that starts with an option and names no command (``--tries``, ``--assembled
+    M``) is a reminder of one, so it must be an option of some command of the CLI.
+    """
+    every = set()
+    for command in cli.commands.values():
+        every |= options_of(command)
+    problems = []
+    for span in code_spans(text):
+        first = span.split()[0] if span.split() else ""
+        if first.startswith("--") and first.split("=", 1)[0] not in every:
+            problems.append(f"`{span}`: no pcbkit command takes {first}")
+    return problems
+
+
 # --- the manifest and the hook --------------------------------------------------------
 
 
@@ -428,7 +445,8 @@ def test_the_check_writer_preloads_a_skill_that_exists_and_may_be_preloaded() ->
 def test_every_pcbkit_command_and_option_the_plugin_mentions_exists() -> None:
     problems = []
     for path, text in plugin_texts().items():
-        problems += [f"{path.relative_to(ROOT)}: {p}" for p in command_problems(text)]
+        found = command_problems(text) + lone_option_problems(text)
+        problems += [f"{path.relative_to(ROOT)}: {p}" for p in found]
     assert not problems, "\n".join(problems)
 
 
@@ -457,6 +475,14 @@ def test_the_command_scan_catches_a_renamed_command_and_a_dropped_option() -> No
         "`pcbkit route --retries 3`: `pcbkit route` has no option --retries",
         "`.venv/bin/pcbkit shots --no-render --tries 2`: `pcbkit shots` has no "
         "option --tries",
+    ]
+
+
+def test_the_option_scan_catches_a_lone_option_no_command_takes() -> None:
+    text = "More `--tries`, or `--assembled M`, or `--retries 3`, or `-k` and `--nope`."
+    assert lone_option_problems(text) == [
+        "`--retries 3`: no pcbkit command takes --retries",
+        "`--nope`: no pcbkit command takes --nope",
     ]
 
 

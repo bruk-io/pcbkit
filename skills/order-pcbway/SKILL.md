@@ -23,10 +23,10 @@ missing, ask. Assembling fewer boards than you make is normal and allowed.
    must not be substituted. Write the answer, 600 characters at most, to `order-notes.txt`
    in the project folder (not in out/ or fab/, which pcbkit rewrites). Do not invent
    requirements.
-3. Run `pcbkit quote --fab-qty N --notes order-notes.txt`, adding `--assembled M` when any
-   boards are assembled, and `--self-solder-tht` when the user will solder the through-hole
-   parts. The command fails and says by how much if the notes are too long. Its output is
-   the only source of the numbers you enter.
+3. Run `pcbkit quote --fab-qty N --assembled M --self-solder-tht --notes order-notes.txt`,
+   leaving out `--assembled M` for a bare-board order, and `--self-solder-tht` unless the
+   user will solder the through-hole parts. The command fails and says by how much if the
+   notes are too long. Its output is the only source of the numbers you enter.
 
 ## In the browser
 
