@@ -30,7 +30,7 @@ from typing import Union
 
 import click
 
-from pcbkit.kicad import env
+from pcbkit.kicad import env, quiet
 
 StrPath = Union[str, "os.PathLike[str]"]
 
@@ -212,8 +212,12 @@ def kicad_cli_path() -> str:
 
 
 def _tail(text: str, lines: int = 6) -> str:
-    """Return the last few non-empty lines of a tool's output."""
-    kept = [line for line in text.splitlines() if line.strip()]
+    """Return the last few non-empty lines of a tool's output, without wx noise.
+
+    A wx assertion or debug line (see ``pcbkit.kicad.quiet``) is dropped before the
+    count, so it cannot push a real error line out of the tail.
+    """
+    kept = [line for line in quiet.strip_noise(text).splitlines() if line.strip()]
     return "\n".join(kept[-lines:])
 
 
