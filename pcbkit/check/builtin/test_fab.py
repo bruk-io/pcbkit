@@ -53,9 +53,22 @@ def fps(board: Any) -> dict[str, Any]:
     return {f.GetReference(): f for f in board.GetFootprints()}
 
 
+def part(board: Any, ref: str) -> Any:
+    """Return the footprint ``ref``; fail naming it if it is not on the board."""
+    found = fps(board).get(ref)
+    if found is None:
+        pytest.fail(
+            f"{ref} is named in specs.py but is not on the board", pytrace=False
+        )
+    return found
+
+
 def pad(board: Any, ref: str, num: Any) -> Any:
-    """Return pad ``num`` of footprint ``ref``."""
-    return next(p for p in fps(board)[ref].Pads() if p.GetNumber() == str(num))
+    """Return pad ``num`` of footprint ``ref``; fail naming it if it is missing."""
+    for p in part(board, ref).Pads():
+        if p.GetNumber() == str(num):
+            return p
+    pytest.fail(f"{ref} has no pad {num} (named in specs.py)", pytrace=False)
 
 
 def xy(item: Any) -> tuple[float, float]:
@@ -255,9 +268,10 @@ def test_decoupling_caps_are_close(
 ) -> None:
     """Place a decoupling capacitor within its limit of the pin it serves."""
     px, py = xy(pad(board, ic, pin))
-    parts = fps(board)
     d = min(
-        math.hypot(px - xy(p)[0], py - xy(p)[1]) for c in caps for p in parts[c].Pads()
+        math.hypot(px - xy(p)[0], py - xy(p)[1])
+        for c in caps
+        for p in part(board, c).Pads()
     )
     record(f"{ic}.{pin} nearest cap mm", round(d, 2))
     assert d <= limit
@@ -265,11 +279,10 @@ def test_decoupling_caps_are_close(
 
 def test_power_footprints_match_datasheet(board: Any, specs: ProjectModule) -> None:
     """Match the pads of power parts to their datasheets: tab, sense pads, drills."""
-    parts = fps(board)
     problems = []
     for rule in specs.POWER_FOOTPRINTS:
         ref = rule["ref"]
-        footprint = parts[ref]
+        footprint = part(board, ref)
         if "tab_pad" in rule:
             pads = sorted(
                 footprint.Pads(), key=lambda p: -mm(p.GetSizeX()) * mm(p.GetSizeY())
@@ -321,11 +334,13 @@ def test_i2c_rise_time(
             + length * specs.TRACE_C_PER_MM
             + len(offboard) * specs.I2C_CABLE_LEN * specs.I2C_CABLE_C_PER_M
         )
-        rp = next(
+        pulls = [
             parse_value(nl.parts[r]["value"])
             for r in nl.by_kind("Device:R")
             if {nl.net(r, 1), nl.net(r, 2)} == {line, rail}
-        )
+        ]
+        assert pulls, f"{line} has no pull-up resistor to {rail}"
+        rp = pulls[0]
         tr = 0.8473 * rp * c
         record(
             line,

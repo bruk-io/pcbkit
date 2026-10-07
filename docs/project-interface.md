@@ -464,7 +464,7 @@ files, BOM and centroid back and compare them with the board and the schematic.
 | `WIRE_PADS` | `{ref: (positive pad, negative pad)}` for bare pads that take a wire; each needs a "+" and a "-" on the silkscreen nearer its own pad. `{}` for none. |
 | `DECOUPLING` | Rows `(ic, pin, (capacitor refs), limit mm)`: a listed capacitor must have a pad that close to the pin. |
 | `POWER_FOOTPRINTS` | One dict per part whose pads must match its datasheet: a `ref`, and any of `tab_pad` (the largest pad is this one) with `tab_net`, `smaller` (pairs `(small pad, large pad)`) and `drill_mm` (`{pad: drill}`). |
-| `I2C_BUSES` | `{bus: (sda net, scl net, speed Hz, off-board devices)}`, devices as `(name, 7-bit address, pin capacitance pF)`. |
+| `I2C_BUSES` | `{bus: (sda net, scl net, speed Hz, off-board devices)}`, devices as `(name, 7-bit address, pin capacitance pF)` (the rise-time model counts every device at `I2C_PIN_C`; the third value is kept for your own reference). |
 | `I2C_TR_MAX`, `I2C_PIN_C`, `TRACE_C_PER_MM`, `I2C_CABLE_LEN`, `I2C_CABLE_C_PER_M` | The I2C rise-time model: limit per speed (s), capacitance per device pin and per mm of trace (F), cable length (m) and its capacitance per metre (F). |
 | `I2C_PULLUP_NET`, `I2C_DEVICE_PREFIXES` | Optional: the pull-up rail (default `"+3V3"`) and the reference prefixes that count as devices on a bus (default `"UA"`). |
 | `ASSEMBLY_TEXT_EXEMPT` | Optional: references whose pin labels may sit over their own through-hole pins on the assembly drawing. |

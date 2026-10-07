@@ -249,21 +249,25 @@ def test_filter_caps_sit_by_the_adc_pin(
         if {nl.net(c, 1), nl.net(c, 2)} == {name, ground}
     ]
     assert caps, f"no filter capacitor on {name}"
-    pin = next(
+    pins = [
         p
         for f in board.GetFootprints()
         if f.GetReference() == spec["pin_ref"]
         for p in f.Pads()
         if p.GetNetname() == filtered
-    )
+    ]
+    assert pins, f"{spec['pin_ref']} has no pad on {name} (COUPLING filters pin_ref)"
+    pin = pins[0]
     ax, ay = mm(pin.GetX()), mm(pin.GetY())
-    d = min(
+    distances = [
         math.hypot(mm(p.GetX()) - ax, mm(p.GetY()) - ay)
         for f in board.GetFootprints()
         if f.GetReference() in caps
         for p in f.Pads()
         if p.GetNetname() == filtered
-    )
+    ]
+    assert distances, f"the filter capacitor {caps} has no pad on {name} on the board"
+    d = min(distances)
     record("filter cap to ADC pin mm", round(d, 2))
     limit = spec["max_mm"]
     assert d <= limit, f"filter cap {d:.1f} mm from the ADC pin (limit {limit:.0f})"
@@ -384,10 +388,21 @@ def test_load_supply_regulation(
         ]
 
     vs, vg = rs["v_terminals"], rg["v_terminals"]
-    (source,) = role(supply, "source")
-    (sink,) = role(ground, "source")
+    sources, sinks, loads = (
+        role(supply, "source"),
+        role(ground, "source"),
+        role(ground, "load"),
+    )
+    assert len(sources) == 1, (
+        f"{supply['name']} needs one terminal with the role 'source'"
+    )
+    assert len(sinks) == 1, (
+        f"{ground['name']} needs one terminal with the role 'source'"
+    )
+    assert loads, f"{ground['name']} needs terminals with the role 'load'"
+    source, sink = sources[0], sinks[0]
     sag_supply = vs[source] - min(vs[i] for i in range(len(vs)) if i != source)
-    lift_ground = max(vg[i] for i in role(ground, "load")) - vg[sink]
+    lift_ground = max(vg[i] for i in loads) - vg[sink]
     total = sag_supply + lift_ground
     nominal = reg["nominal_v"]
     record(
