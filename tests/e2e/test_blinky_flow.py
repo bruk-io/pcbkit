@@ -173,11 +173,11 @@ def test_new_setup_build_route_promote_finalize_check_and_mutants(
     assert (project / "out" / "docs" / "My_Board_revA_render_iso.png").is_file()
 
     checked = run_step(steps, "check", [*venv_pcbkit, "check"], project, timeout=600)
-    assert "17 passed, 2 skipped" in checked.output
+    assert "11 passed" in checked.output and "skipped" not in checked.output
     results = json.loads(
         (project / "out" / "checks" / "results.json").read_text("utf-8")
     )
-    assert results["counts"] == {"passed": 17, "skipped": 2}
+    assert results["counts"] == {"passed": 11}
 
     planted = run_step(
         steps, "mutants", [*venv_pcbkit, "mutants"], project, timeout=900

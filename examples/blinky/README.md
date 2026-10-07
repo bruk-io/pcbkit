@@ -39,12 +39,15 @@ uv run --project ../.. pcbkit setup     # .venv on KiCad's Python, and Freerouti
 .venv/bin/pcbkit route          # Freerouting, the pours and DRC
 .venv/bin/pcbkit promote        # keep the route that passed as golden/
 .venv/bin/pcbkit finalize       # the board from golden/, DRC, Gerbers, BOM, renders
-.venv/bin/pcbkit check          # 17 pass, 2 skip
+.venv/bin/pcbkit check          # 11 pass
 .venv/bin/pcbkit mutants        # plant each mistake: all must be caught
 ```
 
 `finalize` works straight after `build`, because `golden/` is already here; run `route` and
 `promote` again after you change `design.py` or `layout.py`.
 
-Two of the `fab` checks are skipped: blinky has no IC to decouple and no I2C bus, so the
-tables they read in `specs.py` are empty. Add rows when you add those parts.
+`pcbkit check` runs the `kicad` and `outputs` groups and the two checks of its own. The
+`fab` group is not switched on, and `specs.py` already holds what it reads (PCBWay's
+limits, J1's polarity pads and drill). Add `"fab"` to `[checks] groups` in `pcbkit.toml`
+before you order: 17 pass and 2 skip, because blinky has no IC to decouple and no I2C
+bus, so the tables those two checks read are empty. Add rows when you add those parts.

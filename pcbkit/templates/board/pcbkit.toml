@@ -25,7 +25,7 @@ gap_limit_mm = 3.4
 profile = "pcbway"
 
 [checks]
-# kicad: ERC and DRC. outputs: the fab files describe the board. fab: PCBWay's limits,
-# read from specs.py. Two fab checks have nothing to look at on this board and are
-# skipped: the decoupling check (no IC to decouple) and the I2C check (no bus).
-groups = ["kicad", "outputs", "fab"]
+# kicad: ERC and DRC. outputs: the fab files describe the board. Add "fab" before you
+# order: it checks PCBWay's limits and the polarity marks, with the numbers already in
+# specs.py. Two of its checks skip until the board has an IC to decouple or an I2C bus.
+groups = ["kicad", "outputs"]

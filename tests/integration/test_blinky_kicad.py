@@ -3,7 +3,8 @@
 No router runs: both start from the route that `golden/` keeps. `build` makes the
 schematic, ERC, the netlist and the placement; `finalize` rebuilds the board from
 `golden/`, adds the silkscreen, runs DRC with schematic parity and exports the fab
-files; `check` runs the built-in checks of the groups blinky switches on and its own.
+files; `check` runs the built-in checks of the groups blinky switches on and its own,
+and, with the `fab` group added to pcbkit.toml, the PCBWay checks its specs.py feeds.
 That the example and `pcbkit new` give the same board is what lets the template stand
 in for the example. It needs KiCad's own Python (``import pcbnew``) and kicad-cli: see
 the head of tests/integration/test_kicad_core.py for how to make .venv-kicad, then run
@@ -42,8 +43,9 @@ from tests.scaffold_files import EXAMPLE, materialise  # noqa: E402
 pytestmark = pytest.mark.kicad
 
 CLEAN_DRC = "DRC: 0 violations, 0 unconnected pads, 0 footprint errors"
+GROUPS = '["kicad", "outputs"]'
 # The two built-in `fab` checks that read tables blinky leaves empty: no IC to
-# decouple, no I2C bus.
+# decouple, no I2C bus. They skip when the `fab` group is on.
 SKIPPED = {
     "pcbkit.check.builtin.test_fab::test_decoupling_caps_are_close[NOTSET]",
     "pcbkit.check.builtin.test_fab::test_i2c_rise_time[NOTSET]",
@@ -119,20 +121,49 @@ def test_it_builds_finalizes_from_golden_and_exports_the_fab_files(
     assert (project / "out" / "docs").is_dir()
 
 
-def test_check_passes_every_check_and_skips_the_two_with_nothing_to_read(
+def read_results(root: Path) -> dict[str, Any]:
+    """Return what the last `pcbkit check` wrote to out/checks/results.json."""
+    path = root / "out" / "checks" / "results.json"
+    return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+def test_check_passes_all_eleven_checks_of_the_groups_that_are_on(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pass 17 checks of the three groups and the two of blinky's own; skip two."""
+    """Pass the 2 kicad and 7 outputs checks and the two of blinky's own: no skip."""
     finalized(project, monkeypatch)
     result = run(project, monkeypatch, "check")
     assert result.exit_code == 0, result.output
-    data = json.loads((project / "out" / "checks" / "results.json").read_text("utf-8"))
+    data = read_results(project)
+    assert data["groups"] == ["kicad", "outputs"]
+    assert data["counts"] == {"passed": 11}
+    checks: dict[str, Any] = data["checks"]
+    own = sorted(k.split("::")[1] for k, v in checks.items() if v["group"] == "project")
+    assert own == ["test_led_current_window", "test_resistor_power_margin"]
+    assert {v["group"] for v in checks.values()} == {"kicad", "outputs", "project"}
+
+
+def test_switching_the_fab_group_on_runs_its_checks_and_skips_the_two_with_no_rows(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pass the six PCBWay checks that specs.py feeds, skip decoupling and I2C."""
+    finalized(project, monkeypatch)
+    toml = project / "pcbkit.toml"
+    text = toml.read_text(encoding="utf-8")
+    assert f"groups = {GROUPS}" in text
+    toml.write_text(
+        text.replace(f"groups = {GROUPS}", 'groups = ["kicad", "outputs", "fab"]'),
+        encoding="utf-8",
+    )
+    result = run(project, monkeypatch, "check")
+    assert result.exit_code == 0, result.output
+    data = read_results(project)
     assert data["groups"] == ["kicad", "outputs", "fab"]
     assert data["counts"] == {"passed": 17, "skipped": 2}
     checks: dict[str, Any] = data["checks"]
     assert {k for k, v in checks.items() if v["outcome"] == "skipped"} == SKIPPED
-    own = sorted(k.split("::")[1] for k, v in checks.items() if v["group"] == "project")
-    assert own == ["test_led_current_window", "test_resistor_power_margin"]
+    fab = {k.split("::")[1] for k, v in checks.items() if v["group"] == "fab"}
+    assert "test_wire_pads_have_polarity_marks" in fab
     assert all(v["outcome"] == "passed" for k, v in checks.items() if k not in SKIPPED)
 
 
@@ -145,8 +176,7 @@ def test_the_led_runs_between_1_and_11_ma_across_the_supply_range(
         run(project, monkeypatch, "check", "-k", "test_led_current_window").exit_code
         == 0
     )
-    data = json.loads((project / "out" / "checks" / "results.json").read_text("utf-8"))
-    (entry,) = data["checks"].values()
+    (entry,) = read_results(project)["checks"].values()
     assert entry["numbers"]["LED mA"] == {"D1 dimmest": 1.51, "D1 brightest": 10.88}
 
 

@@ -1,8 +1,9 @@
 """Datasheet numbers and design limits that Blinky's checks read.
 
 Two readers: the project's own checks in checks/test_indicator.py (the first block), and
-the built-in checks of the groups that pcbkit.toml switches on (the `fab` block). Each
-number says where it comes from; change a part and change its number with it.
+the built-in checks of the `fab` group (the second), which pcbkit.toml leaves off: add
+"fab" to `[checks] groups` to run them. Each number says where it comes from; change a
+part and change its number with it.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ LED_I_MIN = 0.001
 # Yageo RC0603FR-07330RL: 0.1 W at 70 C. A resistor runs at no more than half of it.
 RESISTOR_POWER_W = {"default": 0.1}
 
-# --- fab: read by the built-in checks of the `fab` group ---------------------------
+# --- fab: read by the built-in checks of the `fab` group, once it is switched on ---
 
 # PCBWay's capabilities page (https://www.pcbway.com/capabilities.html, read
 # 2026-10-06). Track and spacing are the "Normal process" column of its outer layer
@@ -59,7 +60,7 @@ WIRE_PADS = {"J1": ("1", "2")}
 POWER_FOOTPRINTS = [{"ref": "J1", "drill_mm": {"1": 1.0, "2": 1.0}}]
 
 # Rows of (ic, pin, (capacitor references), limit in mm) for the decoupling check, and
-# the buses of the I2C check. Blinky has neither an IC nor a bus, so both are empty and
-# the two checks that read them are skipped.
+# the buses of the I2C check. Blinky has neither an IC nor a bus, so both are empty, and
+# with the `fab` group on, the two checks that read them skip. Add rows with the parts.
 DECOUPLING: list = []
 I2C_BUSES: dict = {}

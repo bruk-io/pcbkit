@@ -1025,9 +1025,11 @@ with.
 has every file a project needs, a `golden/` route made by `pcbkit route` and
 `pcbkit promote`, and two checks of its own (the LED's current across the supply range, and
 the resistor's power) with three planted mistakes in `mutants.py` that they must catch.
-`pcbkit check` runs 19 checks on it: 17 pass, and the two `fab` checks that read tables
-blinky leaves empty (decoupling capacitors, I2C buses) are skipped, because the board has
-no IC and no bus.
+`pcbkit check` runs 11 checks on it and all pass: ERC and DRC (`kicad`), the seven checks of
+`outputs`, and the two of its own. The `fab` group is not switched on, but `specs.py` holds
+what it reads; with `"fab"` added to `[checks] groups` there are 19 checks, 17 pass and two
+are skipped, the ones that read the tables blinky leaves empty (decoupling capacitors, I2C
+buses), because the board has no IC and no bus.
 
 The folder `pcbkit/templates/board`, which ships inside the package, is a copy of it:
 the example's files without what commands generate (`kicad/`, `out/`, `fab/`, `.venv/`)

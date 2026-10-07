@@ -7,8 +7,8 @@ import layout
 from pcbkit.kicad import board as kb
 
 # Copper keeps this far apart (mm). PCBWay's 2 oz spacing is 8 mil, 0.2032 mm, a hair
-# over the 0.2 mm that pcbkit starts from, so the rules are raised to cover it (the
-# `fab` checks read the same limit from specs.py).
+# over the 0.2 mm that pcbkit starts from, so the rules are raised to cover it (specs.py
+# holds the same limit, for the `fab` group).
 CLEARANCE_MM = 0.21
 
 # VIN gets a wider track than the default; the LED's 8 mA does not need it, but it shows
