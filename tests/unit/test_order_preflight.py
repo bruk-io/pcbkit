@@ -105,7 +105,15 @@ def test_the_older_fab_folder_is_read_when_there_is_no_out_fab(tmp_path: Path) -
         "silk.py",
         "bom.py",
         "blocks/power.py",
+        # Only the project's own specs.py, circuits.py and mutants.py are read by the
+        # checks alone. A module of a sub-folder with one of those names can be
+        # imported by design.py, so it is a source of the board.
+        "blocks/specs.py",
+        "blocks/circuits.py",
+        "blocks/mutants.py",
         "footprints/part.kicad_mod",
+        # KiCad footprint libraries are folders named *.pretty
+        "footprints/mylib.pretty/part.kicad_mod",
         "golden/board.ses",
     ],
 )
@@ -128,6 +136,12 @@ def test_a_source_changed_after_the_fab_files_makes_them_stale(
         ".venv/lib/site.py",
         "kicad/board.kicad_pcb",
         "out/docs/schematic.pdf",
+        # a .py file in a folder pcbkit writes, or in a cache, is not a source either
+        "kicad/helper.py",
+        "out/helper.py",
+        "fab/helper.py",
+        "__pycache__/design.py",
+        "blocks/__pycache__/power.py",
         "mutants.py",
         "notes.md",
         "pyproject.toml",
@@ -151,6 +165,48 @@ def test_a_check_input_changed_after_the_checks_ran_makes_only_them_stale(
     assert done.stdout.splitlines() == [
         f"STALE: the checks were run before {name} changed: run pcbkit check"
     ]
+
+
+def test_a_file_made_at_the_same_second_as_the_last_change_is_current(
+    project: Path,
+) -> None:
+    """A fab file and a source with the same time are not told apart: no false alarm."""
+    touch(project / "design.py", FABRICATED)
+    touch(project / "out" / "checks" / "results.json", FABRICATED)
+    done = run(project)
+    assert done.returncode == 0, done.stdout
+
+
+@pytest.mark.parametrize("name", ["specs.py", "circuits.py", "checks/test_led.py"])
+def test_checks_run_in_the_same_second_as_their_input_are_current(
+    project: Path, name: str
+) -> None:
+    touch(project / name, CHECKED)
+    done = run(project)
+    assert done.returncode == 0, done.stdout
+
+
+@pytest.mark.parametrize(
+    "keep_folder", [True, False], ids=["empty-checks", "no-checks"]
+)
+def test_a_project_without_specs_or_circuits_or_checks_is_fine(
+    project: Path, keep_folder: bool
+) -> None:
+    """Those files are optional: a board with none of them must not crash the script."""
+    for name in ("specs.py", "circuits.py", "checks/test_led.py"):
+        (project / name).unlink()
+    if not keep_folder:
+        (project / "checks").rmdir()
+    done = run(project)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_a_link_that_leads_nowhere_is_not_a_source(project: Path) -> None:
+    """An editor's lock file (.#design.py) is a link to a name that does not exist."""
+    (project / ".#design.py").symlink_to("nobody@host.123:456")
+    (project / "blocks" / ".#power.py").symlink_to("nobody@host.123:456")
+    done = run(project)
+    assert done.returncode == 0, done.stdout + done.stderr
 
 
 # --- files that are missing or ambiguous ----------------------------------------------
@@ -198,9 +254,10 @@ def test_a_project_that_was_never_checked_is_reported(tmp_path: Path) -> None:
         {"exit_status": 1, "counts": {"passed": 10, "failed": 2}},
         {"exit_status": 0, "counts": {"passed": 10, "failed": 1}},
         {"exit_status": 0, "counts": {"passed": 10, "error": 1}},
+        {"exit_status": 0, "counts": {"passed": 10, "failed": 1, "error": 1}},
         {"exit_status": 2, "counts": {"passed": 10}},
     ],
-    ids=["failed-and-exit-1", "one-failed", "one-error", "interrupted"],
+    ids=["failed-and-exit-1", "one-failed", "one-error", "both", "interrupted"],
 )
 def test_a_failed_check_run_is_reported(tmp_path: Path, results: object) -> None:
     done = run(make_project(tmp_path / "board", results=results))
