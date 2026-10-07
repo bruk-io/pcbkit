@@ -62,12 +62,39 @@ def cli() -> None:
     show_default=True,
     help="The example board to start from.",
 )
-def new_cmd(name: str, template: str) -> None:
+@click.option(
+    "--pcbkit-source",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    envvar="PCBKIT_SOURCE",
+    metavar="PATH",
+    help="A pcbkit checkout for the project to install pcbkit from, instead of its "
+    "git repository (default: the git repository). Also read from PCBKIT_SOURCE.",
+)
+def new_cmd(name: str, template: str, pcbkit_source: Path | None) -> None:
     """Create a board project called NAME from a template.
 
-    Not implemented yet (WP11).
+    Copies the template into a new folder NAME (it may be a path; the folder must not
+    exist, or must be empty) and names the board after it: `my-board` becomes the file
+    stem my_board, the title My Board and the fab files My_Board_revA. The template is
+    the blinky example: a power connector, a resistor and an LED on a 30 x 20 mm
+    two-layer board, with its checks and a route that passed DRC, so it builds as it is.
+    Also written: the project's pyproject.toml, which depends on pcbkit and pytest, and
+    a README.md with the commands. Then cd into the folder and run `pcbkit setup`.
+
+    The project installs pcbkit from its git repository. To install it from your own
+    copy instead, give the folder you cloned it into with --pcbkit-source (or set
+    PCBKIT_SOURCE): the project's pyproject.toml then names it as an editable path
+    source.
     """
-    _not_implemented("WP11")
+    from pcbkit import scaffold
+
+    if template not in scaffold.TEMPLATES:
+        known = ", ".join(sorted(scaffold.TEMPLATES))
+        raise click.BadParameter(
+            f"{template!r} is not a template: choose from {known}", param_hint="--from"
+        )
+    created = scaffold.create_project(name, template, pcbkit_source)
+    click.echo(scaffold.format_result(created))
 
 
 @cli.command("doctor")
@@ -93,11 +120,26 @@ def doctor_cmd() -> None:
 def setup_cmd() -> None:
     """Set up the project .venv and fetch Freerouting.
 
-    The .venv is built on KiCad's own Python, so that pcbnew imports in it.
+    Run it in a board project (a folder with a pcbkit.toml and a pyproject.toml): once
+    after `pcbkit new`, and again whenever the dependencies change. It builds .venv on
+    KiCad's own Python, so that pcbnew imports in it (`uv venv --system-site-packages`),
+    installs the project's dependencies into it (`uv sync`) and checks that
+    `import pcbnew` works there. A .venv that already does is kept. It then makes sure
+    the Freerouting 1.9.0 jar is there: it uses one it finds (FREEROUTING_JAR,
+    ~/.local/share/pcbkit or ~/.local/share/freerouting), and otherwise downloads it
+    from Freerouting's GitHub release into ~/.local/share/pcbkit. Last it prints the
+    commands to run next, from .venv/bin.
 
-    Not implemented yet (WP11).
+    Needs uv and KiCad 10; a failure says what is wrong and how to fix it, and
+    `pcbkit doctor` shows what is missing on the machine. It runs anywhere: it is
+    the one command that does not need pcbnew in the Python that runs it.
     """
-    _not_implemented("WP11")
+    from pcbkit import bootstrap
+
+    proj = load_project()
+    click.echo(f"pcbkit setup: {proj.config.board.title} in {proj.root}")
+    result = bootstrap.setup_project(proj.root)
+    click.echo(bootstrap.format_next(result))
 
 
 @cli.command("sch")

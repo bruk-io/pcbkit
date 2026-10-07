@@ -31,9 +31,11 @@ WORKFLOW = [
 ]
 
 # Command -> (work package that implements it, argv that reaches the stub). This table
-# is the independent record of who fills in what: `new` and `setup` are WP11, report
-# is WP7. The commands in BUILT have their own tests and no row here.
+# is the independent record of who fills in what: report is WP7. The commands in BUILT
+# have their own tests and no row here.
 BUILT = {
+    "new",
+    "setup",
     "doctor",
     "sch",
     "build",
@@ -47,16 +49,8 @@ BUILT = {
     "mutants",
 }
 STUBS = {
-    "new": ("WP11", ["new", "my-board"]),
-    "setup": ("WP11", ["setup"]),
     "report": ("WP7", ["report"]),
 }
-
-# The same commands with every option they are meant to take: each must be accepted and
-# still reach the stub (a usage error would exit 2, and the message would differ).
-WITH_OPTIONS = [
-    ("WP11", ["new", "my-board", "--from", "blinky"]),
-]
 
 
 def invoke(*args: str) -> Result:
@@ -126,21 +120,9 @@ def test_a_stub_fails_with_exit_code_1_and_names_its_work_package(name: str) -> 
 
 
 @pytest.mark.parametrize(
-    ("wp", "argv"), WITH_OPTIONS, ids=[" ".join(argv) for _, argv in WITH_OPTIONS]
-)
-def test_a_stub_accepts_every_option_its_command_will_take(
-    wp: str, argv: list[str]
-) -> None:
-    """Take each option the command will have and still reach the stub."""
-    result = invoke(*argv)
-    assert result.exit_code == 1
-    assert result.output.strip() == f"Error: not implemented yet ({wp})"
-
-
-@pytest.mark.parametrize(
     ("name", "options"),
     [
-        ("new", ["--from", "[default: blinky]"]),
+        ("new", ["--from", "[default: blinky]", "--pcbkit-source", "PCBKIT_SOURCE"]),
         ("route", ["--eco", "--tries", "--passes"]),
         ("finalize", ["--no-render"]),
         ("check", ["-k"]),
