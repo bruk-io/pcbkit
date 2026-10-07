@@ -168,6 +168,29 @@ def test_a_current_project_is_fine(project: Path) -> None:
     assert done.stdout.startswith("OK: ")
 
 
+def test_a_run_cut_short_by_k_is_refused(tmp_path: Path) -> None:
+    """Refuse results whose own selection block says the run was partial."""
+    selection = {"keyword": "led", "markexpr": "", "deselected": 7, "complete": False}
+    project = make_project(
+        tmp_path / "my-board", results=results_file(selection=selection)
+    )
+    done = run(project)
+    assert done.returncode == 1, done.stdout
+    assert "PARTIAL: the last pcbkit check run was cut short by -k 'led'" in done.stdout
+    assert "(7 checks left out)" in done.stdout
+
+
+def test_a_complete_selection_is_fine(tmp_path: Path) -> None:
+    """Pass results whose selection block says nothing was left out."""
+    selection = {"keyword": "", "markexpr": "", "deselected": 0, "complete": True}
+    project = make_project(
+        tmp_path / "my-board", results=results_file(selection=selection)
+    )
+    done = run(project)
+    assert done.returncode == 0, done.stdout
+    assert "PARTIAL" not in done.stdout
+
+
 def test_it_works_from_a_folder_inside_the_project(project: Path) -> None:
     assert run(project / "checks").returncode == 0
 

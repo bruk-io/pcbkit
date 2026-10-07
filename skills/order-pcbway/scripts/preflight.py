@@ -294,7 +294,26 @@ def problems(root: Path) -> list[str]:
             f"errored checks, exit status {exit_status}): read "
             "out/checks/results.json and fix the board"
         )
+    found += partial(results.read_text(encoding="utf-8"))
     return found + incomplete(root, groups, keys, ran)
+
+
+def partial(text: str) -> list[str]:
+    """Return a line if the results say their run was cut short by -k, -m or a deselect.
+
+    pcbkit writes a ``selection`` block whose ``complete`` is false after such a run.
+    Results from a pcbkit too old to write it are judged by ``incomplete`` alone.
+    """
+    selection = json.loads(text).get("selection")
+    if not isinstance(selection, dict) or selection.get("complete") is not False:
+        return []
+    keyword = selection.get("keyword") or ""
+    how = f" by -k {keyword!r}" if keyword else ""
+    left = selection.get("deselected", 0)
+    return [
+        f"PARTIAL: the last pcbkit check run was cut short{how} ({left} checks left "
+        "out): run pcbkit check with no -k before ordering"
+    ]
 
 
 def main() -> int:
