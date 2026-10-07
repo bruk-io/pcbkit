@@ -34,8 +34,8 @@ WORKFLOW = [
 # is the independent record of who fills in what: `new` and `setup` are WP11, `build` is
 # WP4 (it chains sch and placement), route, promote and finalize are WP5, quote is WP6,
 # check, mutants and report are WP7, compare and shots are WP8. `sch` was WP3 and is
-# built (tests/unit/test_sch.py), and `check` is built (tests/unit/test_check_cli.py),
-# so they have no row.
+# built (tests/unit/test_sch.py), and `check` and `mutants` are built
+# (tests/unit/test_check_cli.py), so they have no row.
 STUBS = {
     "new": ("WP11", ["new", "my-board"]),
     "setup": ("WP11", ["setup"]),
@@ -43,7 +43,6 @@ STUBS = {
     "route": ("WP5", ["route"]),
     "promote": ("WP5", ["promote"]),
     "finalize": ("WP5", ["finalize"]),
-    "mutants": ("WP7", ["mutants"]),
     "report": ("WP7", ["report"]),
     "quote": ("WP6", ["quote"]),
     "compare": ("WP8", ["compare", "old.kicad_pcb", "new.kicad_pcb"]),
@@ -126,7 +125,7 @@ def test_every_command_has_help_that_names_what_it_does() -> None:
 
 def test_every_command_that_is_not_built_has_a_stub_test() -> None:
     """Fail when a command is added without a row in STUBS."""
-    assert set(cli.commands) - {"doctor", "sch", "check"} == set(STUBS)
+    assert set(cli.commands) - {"doctor", "sch", "check", "mutants"} == set(STUBS)
 
 
 @pytest.mark.parametrize("name", sorted(STUBS))

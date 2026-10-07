@@ -201,9 +201,16 @@ def check_cmd(expression: str | None) -> None:
 def mutants_cmd() -> None:
     """Plant known mistakes and confirm the checks catch every one.
 
-    Not implemented yet (WP7).
+    Reads MUTANTS from the project's mutants.py. Each is planted in design.py in a
+    scratch copy of the project and the checks it names must then fail; a control run on
+    an unedited copy must pass first. Exits 1 if a mistake is missed, 2 if the control
+    fails. Needs pcbnew.
     """
-    _not_implemented("WP7")
+    env.require_pcbnew()
+    proj = load_project()
+    from pcbkit import mutants
+
+    click.get_current_context().exit(mutants.run_all(proj))
 
 
 @cli.command("report")
