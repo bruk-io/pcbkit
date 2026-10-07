@@ -729,26 +729,50 @@ def test_python_level_writes_inside_the_block_are_filtered_in_order() -> None:
     assert done.stderr == "before\na python error\nafter\n"
 
 
-def test_text_python_is_holding_keeps_its_place_around_the_block() -> None:
+# The child holds partial lines (text with no newline yet) in one text stream, writes to
+# descriptor 2 behind its back, and the order on the real standard error says whether
+# the stream was flushed before the redirect and again before it was put back.
+# "__CASE__" becomes the name of one of the cases below.
+HELD = """
+import io, os, sys
+from pcbkit.kicad import quiet
+
+case = "__CASE__"
+# Hold partial lines, whatever PYTHONUNBUFFERED says.
+sys.__stderr__.reconfigure(line_buffering=True, write_through=False)
+if case != "original":
+    # A second buffered text stream on descriptor 2, which is what a host or a logging
+    # set-up leaves in sys.stderr while code that took the first one still has it.
+    raw = io.FileIO(2, "w", closefd=False)
+    sys.stderr = io.TextIOWrapper(io.BufferedWriter(raw), line_buffering=True)
+held = sys.__stderr__ if case == "behind" else sys.stderr
+held.write("held before, ")
+with quiet.quiet_stderr():
+    os.write(2, b"from C++\\n")
+    held.write("held inside, ")
+os.write(2, b"after\\n")
+held.flush()
+"""
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param("original", id="sys.stderr is the original stream"),
+        pytest.param("replaced", id="sys.stderr replaced, text held in the new one"),
+        pytest.param("behind", id="sys.stderr replaced, text held in sys.__stderr__"),
+    ],
+)
+def test_text_python_is_holding_keeps_its_place_around_the_block(case: str) -> None:
     """Flush Python's standard error on the way in and on the way out.
 
     A write with no newline stays in Python's buffer. Still there when descriptor 2 is
-    switched, it would come out on the wrong side of what the block writes.
+    switched, it would come out on the wrong side of what the block writes. Which
+    stream holds it matters: ``sys.stderr`` may have been replaced by another buffered
+    stream on descriptor 2, and code that took the original (a logging handler made
+    earlier) still writes to ``sys.__stderr__``. Both have to be flushed.
     """
-    done = run_child(
-        """
-        import os, sys
-        from pcbkit.kicad import quiet
-
-        # Hold partial lines, whatever PYTHONUNBUFFERED says.
-        sys.stderr.reconfigure(line_buffering=True, write_through=False)
-        sys.stderr.write("held before, ")
-        with quiet.quiet_stderr():
-            os.write(2, b"from C++\\n")
-            sys.stderr.write("held inside, ")
-        os.write(2, b"after\\n")
-        """
-    )
+    done = run_child(HELD.replace("__CASE__", case))
     assert done.returncode == 0
     assert done.stderr == "held before, from C++\nheld inside, after\n"
 
