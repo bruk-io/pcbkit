@@ -61,7 +61,7 @@ part and rebuilds.
 
 ## Running pcbkit
 
-**From GitHub**, once the repository is public:
+**From GitHub**:
 
 ```
 uvx --from git+https://github.com/bruk-io/pcbkit pcbkit new my-board
@@ -69,8 +69,8 @@ cd my-board
 uvx --from git+https://github.com/bruk-io/pcbkit pcbkit setup
 ```
 
-**From a local checkout**, before the repository is public or when you are working on
-pcbkit itself (adjust `~/src/pcbkit` to where it is):
+**From a local checkout**, when you are working on pcbkit itself (adjust `~/src/pcbkit` to
+where it is):
 
 ```
 uv run --project ~/src/pcbkit pcbkit new my-board --pcbkit-source ~/src/pcbkit
@@ -79,8 +79,7 @@ uv run --project ~/src/pcbkit pcbkit setup
 ```
 
 `--pcbkit-source` (or the `PCBKIT_SOURCE` variable) makes the new project install pcbkit
-from that folder. Without it the project's `pyproject.toml` names the git repository, which
-`setup` cannot fetch until it is public.
+from that folder. Without it the project's `pyproject.toml` names the git repository.
 
 To type less, `uv tool install --from ~/src/pcbkit pcbkit` (or
 `uv tool install git+https://github.com/bruk-io/pcbkit`) puts a `pcbkit` command on your
@@ -90,15 +89,15 @@ To type less, `uv tool install --from ~/src/pcbkit pcbkit` (or
 
 This repository is also a Claude Code plugin. It has skills for starting a board, running
 the build loop, adding a check, reviewing a layout and ordering from PCBWay; two helper
-agents; and hooks that stop edits to the generated folders. Once it is published to the
-knowhere marketplace:
+agents; and hooks that stop edits to the generated folders. Install it from the knowhere
+marketplace:
 
 ```
 claude plugin marketplace add bruk-io/knowhere
 claude plugin install pcbkit@knowhere
 ```
 
-Until then, `claude --plugin-dir ~/src/pcbkit` loads it from a checkout for one session.
+To try a checkout instead, `claude --plugin-dir ~/src/pcbkit` loads it for one session.
 [docs/claude-plugin.md](docs/claude-plugin.md) says what each piece does and what the hooks
 cannot see.
 

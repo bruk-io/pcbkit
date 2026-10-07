@@ -13,10 +13,9 @@ claude plugin marketplace add bruk-io/knowhere
 claude plugin install pcbkit@knowhere
 ```
 
-`knowhere` is the marketplace pcbkit is published to. At the time of writing it has no pcbkit
-entry yet, so those two commands will not find the plugin until pcbkit is published. To try
-the plugin before then, load it from a checkout of this repository. The flag lasts for that
-one session:
+`knowhere` is the marketplace pcbkit is published to. To try a checkout of this repository
+instead, while you work on the plugin for example, load it with this flag, which lasts for
+that one session:
 
 ```
 claude --plugin-dir ~/src/pcbkit

@@ -1,0 +1,56 @@
+name: Publish to knowhere
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude-plugin/**"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read plugin.json
+        id: plugin
+        run: |
+          echo "json=$(jq -c . .claude-plugin/plugin.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Read mcp.json
+        id: mcp
+        run: |
+          if [ -f .claude-plugin/mcp.json ]; then
+            echo "json=$(jq -c . .claude-plugin/mcp.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "json=null" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.KNOWHERE_PAT }}
+          PLUGIN_JSON: ${{ steps.plugin.outputs.json }}
+          MCP_JSON: ${{ steps.mcp.outputs.json }}
+        run: |
+          jq -n \
+            --arg event_type "publish-url-plugin" \
+            --argjson plugin_json "$PLUGIN_JSON" \
+            --argjson mcp_json "${MCP_JSON:-null}" \
+            '{
+              event_type: $event_type,
+              client_payload: {
+                plugin: {
+                  name: "pcbkit",
+                  description: "Design, route, check and order KiCad boards with pcbkit: workflow skills, a guard that keeps edits out of generated files, and helper agents.",
+                  author: {name: "bruk-io"},
+                  category: "design",
+                  homepage: "https://github.com/bruk-io/pcbkit",
+                  url: "https://github.com/bruk-io/pcbkit.git"
+                },
+                shim: {
+                  plugin_json: ($plugin_json | tostring),
+                  mcp_json: ($mcp_json | tostring)
+                }
+              }
+            }' | gh api repos/bruk-io/knowhere/dispatches --input -

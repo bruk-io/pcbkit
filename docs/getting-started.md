@@ -34,8 +34,8 @@ Install it once as a command:
 uv tool install --from ~/src/pcbkit pcbkit
 ```
 
-That is for a checkout, which is what you have until the repository is public. After that,
-`uv tool install git+https://github.com/bruk-io/pcbkit` does the same from GitHub. If your
+That is for a checkout. `uv tool install git+https://github.com/bruk-io/pcbkit` does the same
+from GitHub. If your
 shell then says `pcbkit: command not found`, run `uv tool update-shell` and open a new
 terminal.
 
@@ -96,8 +96,7 @@ README.md has the rest of the commands.
 `new` copies the blinky example into `my-board/` and names the board after the folder: the
 KiCad file stem is `my_board`, the title is `My Board`, and the fab files start with
 `My_Board_revA`. `--pcbkit-source` makes the project install pcbkit from your checkout;
-once the repository is public you can leave it off and the project installs pcbkit from
-GitHub.
+leave it off and the project installs pcbkit from GitHub.
 
 What you now have is a small, working project, 30 x 20 mm: a two-pin connector, a 330 ohm
 resistor and a green LED. [Concepts](concepts.md#a-board-is-a-project) says what each file

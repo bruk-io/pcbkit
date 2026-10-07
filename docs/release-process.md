@@ -14,13 +14,13 @@ These are manual steps for the repository's owner. Nothing in CI does them.
    **Deploy from a branch**, branch `gh-pages`, folder `/ (root)`. The branch appears
    after the first docs deploy; if it does not exist yet, publish the first release
    (below), let the docs workflow create it, then set Pages.
-3. List the Claude plugin in the `bruk-io/knowhere` marketplace: in this repository,
-   run the `knowhere-publisher` plugin's `publish-setup` skill and pick URL mode (the
-   plugin stays in this repository; knowhere stores its address). It adds
-   `.github/workflows/publish-to-knowhere.yml`. Then add a repository secret
-   `KNOWHERE_PAT`: a fine-grained token with Contents read and write on
-   `bruk-io/knowhere`. From then on, a push to `main` that changes `.claude-plugin/`
-   updates the listing.
+3. List the Claude plugin in the `bruk-io/knowhere` marketplace. This repository has
+   `.github/workflows/publish-to-knowhere.yml`, made by the `knowhere-publisher`
+   plugin's `publish-setup` skill in URL mode: the plugin stays in this repository and
+   knowhere stores its address. The workflow needs a repository secret `KNOWHERE_PAT`, a
+   fine-grained token with Contents read and write on `bruk-io/knowhere`. With it, a push
+   to `main` that changes `.claude-plugin/` updates the listing; run the workflow by hand
+   to publish without a change.
 
 From then on, CI writes to the `gh-pages` branch on every release: never edit that
 branch by hand.
