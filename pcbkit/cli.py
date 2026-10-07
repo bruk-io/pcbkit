@@ -220,15 +220,20 @@ def report_cmd() -> None:
 
     Turns out/checks/results.json (left by `pcbkit check`) into
     out/checks/VALIDATION.md: the counts, then every check with its result and the
-    numbers it recorded. Exits 1 if the last run had a failed check or an error.
+    numbers it recorded. Exits 1 if the last run had a failed check or an error, or ran
+    no checks. Runs anywhere: it only reads the results file.
     """
-    env.require_pcbnew()
     proj = load_project()
     from pcbkit import report
 
     path, data = report.write_report(proj)
     click.echo(f"{report.summary_line(data)}\nReport: {path.relative_to(proj.root)}")
     counts = data.get("counts", {})
+    if not data["checks"]:
+        click.echo(
+            "The last run ran no checks: nothing matched? Run `pcbkit check` again."
+        )
+        click.get_current_context().exit(1)
     if counts.get("failed") or counts.get("error"):
         click.get_current_context().exit(1)
 

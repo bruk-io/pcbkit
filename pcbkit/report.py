@@ -41,7 +41,7 @@ def load_results(project: Project) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as err:
         raise click.ClickException(f"{path} is not readable: {err}") from None
-    if not isinstance(data.get("checks"), dict):
+    if not isinstance(data, dict) or not isinstance(data.get("checks"), dict):
         raise click.ClickException(f"{path} has no checks: run `pcbkit check` again")
     return data
 

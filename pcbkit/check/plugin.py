@@ -431,14 +431,14 @@ def pytest_runtest_makereport(
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Write out/checks/results.json, unless nothing ran."""
+    """Write out/checks/results.json, unless the run only collected."""
     config = session.config
     state = config.stash.get(STATE, None)
     if state is None or config.option.collectonly:
         return
+    # A run that selected nothing still writes (an empty list), so the results of an
+    # earlier run are never mistaken for this one's.
     checks = {k: v for k, v in state.results.items() if v["outcome"]}
-    if not checks:
-        return
     counts: dict[str, int] = {}
     for entry in checks.values():
         counts[entry["outcome"]] = counts.get(entry["outcome"], 0) + 1

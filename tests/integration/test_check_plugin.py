@@ -336,6 +336,17 @@ def test_the_expression_picks_checks_like_pytests_k(project: Path) -> None:
     assert set(result.checks) == {"checks/test_k.py::test_alpha"}
 
 
+def test_a_run_that_selects_nothing_replaces_the_old_results(project: Path) -> None:
+    """Leave an empty results file, so an older run is never read as the last one."""
+    checks_file(project, "test_old.py", "def test_old():\n    assert True\n")
+    first = run(project)
+    assert set(first.checks) == {"checks/test_old.py::test_old"}
+    second = run(project, "nothing_has_this_name")
+    assert second.done.returncode == 5
+    assert second.checks == {}
+    assert second.results["counts"] == {}
+
+
 def test_no_project_is_a_usage_error_not_a_traceback(tmp_path: Path) -> None:
     """Say where the plugin looked when there is no pcbkit.toml."""
     empty = tmp_path / "empty"
