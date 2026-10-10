@@ -149,6 +149,35 @@ From Mouser's Swagger specs (`https://api.mouser.com/api/docs/v1` and `.../v2`, 
 - Rate limits are not in the specs, and the web page that may state them blocks scripts.
   Unconfirmed.
 
+## Where datasheet links come from (measured 2026-10-09)
+
+`tools/datasheet_sources/measure.py` over the 52 parts in `parts.csv` (a quadruped
+carrier's kinds of parts plus common ones, 19 manufacturers). Mouser was asked in 6
+requests (10 part numbers each, exact, cached); each link was downloaded with pcbkit's
+own User-Agent and judged by code: a PDF, with the family name in its first three pages.
+
+| Outcome | Parts |
+|---|---|
+| Mouser link, right datasheet | 15 |
+| At Mouser, no link | 34 |
+| Not at Mouser | 3 (AO3401A, PPTC221LFBN-RC, 0ZCJ0050FF2E) |
+
+- When Mouser gives a link it is right: 15 of 15 were PDFs of the right part, and none
+  needed a browser's User-Agent. The links are on mouser.com.
+- The gaps are everywhere: 34 misses across 18 manufacturers. Texas Instruments is 12 of
+  them (every TI part), Vishay 5, ST 3, then one or two each.
+- The cached answers hold no other link to the datasheet.
+- A TI rule, `https://www.ti.com/lit/ds/symlink/<family>.pdf`, gave the right datasheet
+  for 12 of 12, with pcbkit's User-Agent. But it needs the family (`INA226` from
+  `INA226AIDGSR`), which was given by hand here; working it out from an orderable part
+  number is its own problem.
+
+So: Mouser first (31% of these parts, always right); a TI rule covers a third of the
+misses if the family can be found; the other 22 misses spread over 17 manufacturers, too
+thin for rules. The next measurement is a general fallback on those: another
+distributor's or aggregator's API (Digi-Key, Nexar/Octopart) against web search with the
+model, judged by the same checks.
+
 ## Steps
 
 1. Cache layers and `pcbkit parts lookup` (Mouser).
