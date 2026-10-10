@@ -172,11 +172,45 @@ own User-Agent and judged by code: a PDF, with the family name in its first thre
   `INA226AIDGSR`), which was given by hand here; working it out from an orderable part
   number is its own problem.
 
+### KiCad's stock symbols (measured 2026-10-09)
+
+`tools/datasheet_sources/kicad_symbols.py` matches each part number to the longest
+stock symbol name that starts it (KiCad 10.0.6, 22,756 symbols; lowercase `x` is a
+wildcard, as in `MCP1700x-330xxTT`) and judges the symbol's `Datasheet` link the same
+way. No distributor is asked.
+
+| Outcome | All 52 | The 37 Mouser missed |
+|---|---|---|
+| Right datasheet | 20 | 15 |
+| No symbol | 26 | 18 |
+| Wrong datasheet | 2 | 2 |
+| Link not a PDF | 3 | 1 |
+| No usable link | 1 | 1 |
+
+- Mouser and KiCad together give the right datasheet for 30 of 52 parts (Mouser 15,
+  KiCad 20, both 5), with no new account and only local lookups beyond Mouser.
+- KiCad covers 9 of the 12 TI parts, and the symbol name is the family (`INA226`,
+  `TCA9548APWR`), which solves the family problem the TI rule had for those.
+- Wrong datasheets: the ESP32-S3 dev board matched the bare chip's symbol, and
+  `1N5819HW` (Diodes, SOD-123) matched Vishay's `1N5817` datasheet. Also
+  `BAT54SLT1G` (onsemi) matched a Diodes datasheet for the same part type and passed
+  the family check: a family check cannot tell manufacturers apart, so the check must
+  also compare the manufacturer.
+- Stale links: ICM-20948's goes to an HTML page now, MCP1700's gets a 403, and
+  TXS0108E's has no `http://`. Infineon's failed certificate verification (not yet
+  looked at: it may be this machine's Python).
+- Still missing after both: 22 parts. Passives, connectors and discretes (10: Murata,
+  Samsung, Panasonic, Kingbright, Bel Fuse, JST, Wurth, Sullins, Vishay shunt and
+  TVS), Vishay MOSFETs (2), and ICs with no stock symbol (TPS54331, LM1117,
+  SN74LVC1G17, TXS0108E, LSM6DSOX, MP1584, MAX17048, ICM-20948, 1N5819HW, the dev
+  board).
+
 So: Mouser first (31% of these parts, always right); a TI rule covers a third of the
 misses if the family can be found; the other 22 misses spread over 17 manufacturers, too
-thin for rules. The next measurement is a general fallback on those: another
-distributor's or aggregator's API (Digi-Key, Nexar/Octopart) against web search with the
-model, judged by the same checks.
+thin for rules. KiCad's symbols next (local, and they give the family);
+then a general fallback for the remaining 22, measured on exactly those: the open
+jlcparts dataset, another distributor's or aggregator's API (Digi-Key, Nexar/Octopart),
+or web search with the model, judged by the same checks plus a manufacturer check.
 
 ## Steps
 
