@@ -5,8 +5,9 @@ any age), take the datasheet link of the exact part, download it, and judge it b
 rules a script can check:
 
 - the download is a PDF (it starts with ``%PDF``), not a landing page or a block page;
-- it is this part's datasheet: the family name from parts.csv appears in the text of
-  its first three pages (``pdftotext``), ignoring case, spaces and hyphens.
+- it is this part's datasheet, by ``pcbkit.datasheets.judge`` on its text
+  (``pdftotext``): VERIFIED, or a CANDIDATE with the reason. Parts whose kind in
+  parts.csv is in ``BUILT_KINDS`` have numbers built from a series code.
 
 Mouser is asked in batches of ten part numbers (the most one request takes), at least
 ``MOUSER_GAP`` seconds apart, and the answers are cached, so 52 parts cost 6 requests
@@ -37,7 +38,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from pcbkit import cache, mouser, parts
+from pcbkit import cache, datasheets, mouser, parts
 
 HERE = Path(__file__).parent
 PARTS = HERE / "parts.csv"
@@ -50,6 +51,7 @@ TIMEOUT = 40.0
 PAUSE = 3.0
 MOUSER_GAP = 3.0
 BATCH = mouser.MAX_PART_NUMBERS
+BUILT_KINDS = {"resistor", "capacitor", "hybrid capacitor", "crystal", "PTC fuse"}
 
 
 def squash(text: str) -> str:
@@ -99,15 +101,32 @@ def download(url: str, agent: str) -> dict[str, Any]:
         return {"status": None, "error": f"{type(reason).__name__}", "data": b""}
 
 
-def first_pages_text(pdf: Path) -> str:
-    """Return the text of the first three pages of ``pdf``, or "" if none comes."""
+def pdf_pages(pdf: Path) -> list[str]:
+    """Return the text of each page of ``pdf``: pdftotext ends each with a form feed."""
     done = subprocess.run(
-        ["pdftotext", "-l", "3", "-q", str(pdf), "-"],
+        ["pdftotext", "-q", str(pdf), "-"],
         capture_output=True,
         text=True,
         check=False,
     )
-    return done.stdout
+    return done.stdout.split("\f")
+
+
+def outcome_of(pdf: Path, row: dict[str, str]) -> dict[str, Any]:
+    """Judge ``pdf`` for the part in ``row``; return the outcome and its evidence."""
+    verdict = datasheets.judge(
+        pdf_pages(pdf),
+        row["mpn"],
+        row["manufacturer"],
+        built=row["kind"] in BUILT_KINDS,
+    )
+    return {
+        "outcome": verdict.status.value
+        + (f" {verdict.reason.value}" if verdict.reason else ""),
+        "part_number_found": verdict.part_number_found,
+        "part_number_page": verdict.part_number_page,
+        "manufacturer_name": verdict.manufacturer_name,
+    }
 
 
 def judge(
@@ -145,14 +164,7 @@ def judge(
     pdf.parent.mkdir(parents=True, exist_ok=True)
     pdf.write_bytes(data)
     result["sha256"] = digest
-    text = first_pages_text(pdf)
-    result["text_chars"] = len(text)
-    if not text.strip():
-        result["outcome"] = "PDF with no text"
-    elif squash(row["family"]) in squash(text):
-        result["outcome"] = "right datasheet"
-    else:
-        result["outcome"] = "PDF, family not found"
+    result.update(outcome_of(pdf, row))
     return result
 
 
@@ -192,9 +204,9 @@ def main(out: Path) -> None:
     by_maker: dict[str, Counter[str]] = defaultdict(Counter)
     for result in results:
         by_maker[result["manufacturer"]][result["outcome"]] += 1
-    print("\nNot right, by manufacturer:")
+    print("\nNot verified, by manufacturer:")
     for maker, outcomes in sorted(by_maker.items()):
-        bad = {k: v for k, v in outcomes.items() if k != "right datasheet"}
+        bad = {k: v for k, v in outcomes.items() if k != "VERIFIED"}
         if bad:
             print(f"  {maker}: {dict(bad)}")
 

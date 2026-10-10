@@ -212,6 +212,73 @@ then a general fallback for the remaining 22, measured on exactly those: the ope
 jlcparts dataset, another distributor's or aggregator's API (Digi-Key, Nexar/Octopart),
 or web search with the model, judged by the same checks plus a manufacturer check.
 
+## Checking a datasheet is the part's
+
+Measured on the 33 PDFs downloaded above: a check that the family name is in the PDF
+passes wrong datasheets. `BSS138LT1G` got the old Fairchild BSS138 datasheet, not
+onsemi's own, and passed; and once the family comes from the matched KiCad symbol, the
+check only agrees with itself. The check must not depend on where the link came from.
+
+A datasheet is **verified** for a part when its text has:
+
+- the full orderable part number, letters and digits only, ignoring case, with at most
+  2 characters missing at the end (reel and packaging codes: `CP2102N-A02-GQFN28` for
+  `...GQFN28R`, `DS3231SN` for `DS3231SN#T&R`). The 1N5819HW and BSS138LT1G mistakes
+  each miss 4. Small sample: watch it.
+- the manufacturer's name, from a table of names and aliases in code (Texas
+  Instruments/TI, onsemi/ON Semiconductor/Fairchild, ...), matched as a whole name. A
+  single word is not enough: "diodes" is in every diode datasheet.
+
+Passives and crystals (`RC0603FR-0710KL`, `ABM8-16.000MHZ-B2-T`) have series datasheets
+that explain how the number is built rather than listing it, so they cannot be verified
+this way: they are candidates until confirmed.
+
+Measured with `pcbkit.datasheets.judge` (`tools/datasheet_sources/rejudge.py`, offline,
+on the PDFs downloaded above, all pages):
+
+| | Mouser | KiCad | Either |
+|---|---|---|---|
+| VERIFIED | 12 | 16 | 23 of 52 |
+| CANDIDATE, part-number-missing | 1 | 5 | |
+| CANDIDATE, part-number-built | 2 | 0 | |
+| CANDIDATE, manufacturer-missing | 0 | 1 | |
+
+- Every wrong datasheet found so far is a candidate, not verified: the dev board,
+  1N5819HW, BSS138LT1G and BAT54SLT1G.
+- Right datasheets left as candidates: `SS34-E3/57T` (Vishay prints `SS34`, not its
+  `-E3/57T` packaging code) and `SM04B-SRSS-TB(LF)(SN)` (JST leaves off `(LF)(SN)`)
+  get `part-number-missing`, whose next step says to find another source; confirming
+  would be right. A table of each maker's packaging suffixes, in code, would fix
+  both. `AO3401A`'s maker seems to be named only in the logo: `manufacturer-missing`,
+  which rightly asks for a confirmation.
+- The first version matched across the whole page with spaces removed, which would
+  have joined `AO3401 Alpha` into `AO3401A`; the part number is now matched within one
+  word, and a unit test holds it.
+
+## The tool is opinionated, so the model need not remember
+
+The rules above live in code. The model does only what needs judgement, and the tool
+checks that too.
+
+- `pcbkit datasheet find <MPN>` runs the whole chain (Mouser, KiCad's symbols, later
+  sources), judges every candidate, and picks. The model never builds a URL, picks
+  between candidates, or decides a match is close enough.
+- Each answer is one of a closed set, with a reason code from a closed list and a
+  `next:` line saying what to do: `VERIFIED`; `CANDIDATE` (`part-number-missing`,
+  `manufacturer-missing`, `part-number-built`, `not-a-pdf`, `no-text`); `NOT FOUND`.
+  The model follows `next:`.
+- `pcbkit datasheet confirm <MPN> --page N --quote "..."` is how a candidate becomes
+  `CONFIRMED`: the tool checks the quote is on that page and holds the part number, or
+  for a built number the series and each segment. An opinion without evidence is
+  refused.
+- Later stages refuse what is not `VERIFIED` or `CONFIRMED`: extraction will not run on
+  it, and `verify` checks the history. Skipping a step fails at the next one.
+- Manufacturer aliases, the 2-character tolerance and the reason-to-next-step table are
+  data in code, with tests.
+- Every measured mistake is a test: 1N5819HW, BSS138LT1G, BAT54SLT1G, the ESP32-S3 dev
+  board, and "diodes" as a manufacturer.
+- The skill says: run `pcbkit datasheet find`, then do what `next:` says.
+
 ## Steps
 
 1. Cache layers and `pcbkit parts lookup` (Mouser).

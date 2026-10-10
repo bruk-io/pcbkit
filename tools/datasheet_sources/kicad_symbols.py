@@ -5,8 +5,8 @@ part number (KiCad writes a lowercase ``x`` for "any character", as in
 ``MCP1700x-330xxTT``; the longest match wins, and names under four characters or with
 no digit are left out so ``R`` and ``C`` do not match everything). Take its
 ``Datasheet`` property, or its parent's for a derived symbol, then download and judge
-it as measure.py does. No request goes to a distributor: the symbols are on disk, and
-the links point at manufacturers.
+it as measure.py does (``pcbkit.datasheets.judge``). No request goes to a
+distributor: the symbols are on disk, and the links point at manufacturers.
 
 The symbol's name is also compared with the family in parts.csv, to see whether
 matching a symbol is a way to find a part's family.
@@ -33,7 +33,7 @@ from measure import (
     PARTS,
     PAUSE,
     download,
-    first_pages_text,
+    outcome_of,
     squash,
 )
 
@@ -124,7 +124,7 @@ def main(out: Path, match_only: bool) -> None:
     if mouser_results.exists():
         for line in mouser_results.read_text().splitlines():
             record = json.loads(line)
-            mouser_links[record["mpn"]] = record["outcome"] == "right datasheet"
+            mouser_links[record["mpn"]] = record["outcome"] == "VERIFIED"
     results: list[dict[str, Any]] = []
     fetched: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -149,14 +149,10 @@ def main(out: Path, match_only: bool) -> None:
                 if link not in fetched:
                     fetched[link] = judge_link(link, out)
                 judged = dict(fetched[link])
-                text = judged.pop("_text", "")
                 result.update(judged)
-                if judged["outcome"] == "PDF":
-                    result["outcome"] = (
-                        "right datasheet"
-                        if squash(row["family"]) in text
-                        else "PDF, family not found"
-                    )
+                if judged.get("sha256"):
+                    pdf = out / "pdfs" / f"{judged['sha256']}.pdf"
+                    result.update(outcome_of(pdf, row))
         results.append(result)
         print(
             f"{result['outcome']:24} {row['mpn']:26} {result.get('symbol', '')}"
@@ -186,7 +182,7 @@ def main(out: Path, match_only: bool) -> None:
 
 
 def judge_link(link: str, out: Path) -> dict[str, Any]:
-    """Download ``link`` and return what came: the outcome, and the PDF's text."""
+    """Download ``link``; return the PDF's hash, or the outcome when none came."""
     for agent_name, agent in (("own", OWN_AGENT), ("browser", BROWSER_AGENT)):
         time.sleep(PAUSE)
         got = download(link, agent)
@@ -196,15 +192,7 @@ def judge_link(link: str, out: Path) -> dict[str, Any]:
             pdf = out / "pdfs" / f"{digest}.pdf"
             pdf.parent.mkdir(parents=True, exist_ok=True)
             pdf.write_bytes(data)
-            text = first_pages_text(pdf)
-            if not text.strip():
-                return {"outcome": "PDF with no text", "agent_needed": agent_name}
-            return {
-                "outcome": "PDF",
-                "agent_needed": agent_name,
-                "sha256": digest,
-                "_text": squash(text),
-            }
+            return {"agent_needed": agent_name, "sha256": digest}
     return {"outcome": "link is not a PDF", "download": got}
 
 
