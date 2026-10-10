@@ -14,10 +14,10 @@ Mouser is asked in batches of ten part numbers (the most one request takes), at 
 once and none on a second run. Downloads wait ``PAUSE`` seconds before each request,
 since most links point at mouser.com too.
 
-Each download is tried first as pcbkit would send it (its own User-Agent), and once
-more with a browser's when that fails, so the results show whether a CDN blocks
-scripts. Results go to ``<out>/results.jsonl`` and the PDFs to ``<out>/pdfs/``; a table
-is printed. Needs MOUSER_API_KEY for parts not yet in the cache.
+Each link is downloaded once, into pcbkit's own datasheet cache (as
+``pcbkit datasheet find`` does). Results go to ``<out>/results.jsonl``; a table is
+printed. (A first version also tried a browser's User-Agent when pcbkit's failed: on
+2026-10-09 no link needed it.) Needs MOUSER_API_KEY for parts not yet in the cache.
 
     uv run python tools/datasheet_sources/measure.py <out-folder>
 """
@@ -25,7 +25,6 @@ is printed. Needs MOUSER_API_KEY for parts not yet in the cache.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import re
 import subprocess
@@ -34,19 +33,12 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
 
-from pcbkit import cache, datasheets, mouser, parts
+from pcbkit import cache, datasheet_find, datasheets, mouser, parts
 
 HERE = Path(__file__).parent
 PARTS = HERE / "parts.csv"
-OWN_AGENT = "pcbkit-datasheet/1"
-BROWSER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 "
-    "(KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-)
 TIMEOUT = 40.0
 PAUSE = 3.0
 MOUSER_GAP = 3.0
@@ -81,24 +73,16 @@ def mouser_parts(mpns: list[str]) -> tuple[dict[str, list[dict[str, Any]]], int]
     return found, sent
 
 
-def download(url: str, agent: str) -> dict[str, Any]:
-    """Fetch ``url`` with User-Agent ``agent``, following redirects; say what came."""
-    request = Request(url, headers={"User-Agent": agent, "Accept": "*/*"})
-    try:
-        with urlopen(request, timeout=TIMEOUT) as answer:
-            data = answer.read()
-            return {
-                "status": answer.status,
-                "final_host": urlsplit(answer.geturl()).netloc,
-                "content_type": answer.headers.get("Content-Type", ""),
-                "bytes": len(data),
-                "data": data,
-            }
-    except HTTPError as err:
-        return {"status": err.code, "error": f"HTTP {err.code}", "data": b""}
-    except (URLError, OSError) as err:
-        reason = getattr(err, "reason", None) or err
-        return {"status": None, "error": f"{type(reason).__name__}", "data": b""}
+def fetch(link: str) -> tuple[str, str]:
+    """Return the hash of the PDF at ``link``, or "" and why none came.
+
+    Goes through pcbkit's datasheet cache (``datasheet_find.fetch_pdf``), so a link
+    is downloaded once; a download waits ``PAUSE`` seconds first.
+    """
+    known = cache.read(datasheet_find.links_folder(), link)
+    if known is None or not datasheet_find.pdf_path(known.value["sha256"]).is_file():
+        time.sleep(PAUSE)
+    return datasheet_find.fetch_pdf(link)
 
 
 def pdf_pages(pdf: Path) -> list[str]:
@@ -148,22 +132,12 @@ def judge(
         result["outcome"] = "no link"
         return result
     result["link_host"] = urlsplit(link).netloc
-    for agent_name, agent in (("own", OWN_AGENT), ("browser", BROWSER_AGENT)):
-        time.sleep(PAUSE)
-        got = download(link, agent)
-        data = got.pop("data")
-        result[f"download_{agent_name}"] = got
-        if data.startswith(b"%PDF"):
-            result["agent_needed"] = agent_name
-            break
-    else:
-        result["outcome"] = "link is not a PDF"
+    digest, problem = fetch(link)
+    if not digest:
+        result.update(outcome="link is not a PDF", problem=problem)
         return result
-    digest = hashlib.sha256(data).hexdigest()
-    pdf = out / "pdfs" / f"{digest}.pdf"
-    pdf.parent.mkdir(parents=True, exist_ok=True)
-    pdf.write_bytes(data)
     result["sha256"] = digest
+    pdf = datasheet_find.pdf_path(digest)
     result.update(outcome_of(pdf, row))
     return result
 
@@ -196,11 +170,6 @@ def main(out: Path) -> None:
     print("\nOutcomes:")
     for outcome, count in Counter(r["outcome"] for r in results).most_common():
         print(f"  {count:3}  {outcome}")
-    print("\nAgent needed for the PDFs that came:")
-    for agent, count in Counter(
-        r.get("agent_needed") for r in results if r.get("agent_needed")
-    ).items():
-        print(f"  {count:3}  {agent}")
     by_maker: dict[str, Counter[str]] = defaultdict(Counter)
     for result in results:
         by_maker[result["manufacturer"]][result["outcome"]] += 1

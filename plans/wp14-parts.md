@@ -5,12 +5,10 @@ Status: in progress on branch `wp14-parts`. Built: the Mouser client and cache,
 KiCad's symbols; records in `parts/`). Not built: part files, extraction, the evals,
 more sources.
 
-Before merging to main:
-
-- `tools/datasheet_sources/parts.csv` has four part numbers taken from a real board
-  (`EEH-ZA1E331P`, `SQD50P03-07_GE3`, `WSK25125L000FEA`, `PPTC221LFBN-RC`): swap them
-  for generic ones and run the measurement and `rejudge.py` again.
-- Add the CLAUDE.md line that tells parts (public datasheet facts) from board content.
+`tools/datasheet_sources/parts.csv` is generic: four rows that came from a real board were
+swapped on 2026-10-09 for common parts of the same kinds (a P-MOSFET, a shunt, a
+socket, a capacitor). Each new part came out as the old one had (no Mouser link or not
+at Mouser, and no KiCad symbol), so the counts below stand.
 
 ## Goal
 
@@ -170,7 +168,7 @@ own User-Agent and judged by code: a PDF, with the family name in its first thre
 |---|---|
 | Mouser link, right datasheet | 15 |
 | At Mouser, no link | 34 |
-| Not at Mouser | 3 (AO3401A, PPTC221LFBN-RC, 0ZCJ0050FF2E) |
+| Not at Mouser | 3 (AO3401A, PPPC081LFBN-RC, 0ZCJ0050FF2E) |
 
 - When Mouser gives a link it is right: 15 of 15 were PDFs of the right part, and none
   needed a browser's User-Agent. The links are on mouser.com.
@@ -244,23 +242,21 @@ that explain how the number is built rather than listing it, so they cannot be v
 this way: they are candidates until confirmed.
 
 Measured with `pcbkit.datasheets.judge` (`tools/datasheet_sources/rejudge.py`, offline,
-on the PDFs downloaded above, all pages):
+on the downloaded PDFs, all pages), with the makers' packaging codes in the table:
 
 | | Mouser | KiCad | Either |
 |---|---|---|---|
-| VERIFIED | 12 | 16 | 23 of 52 |
-| CANDIDATE, part-number-missing | 1 | 5 | |
+| VERIFIED | 13 | 17 | 25 of 52 |
+| CANDIDATE, part-number-missing | 0 | 4 | |
 | CANDIDATE, part-number-built | 2 | 0 | |
 | CANDIDATE, manufacturer-missing | 0 | 1 | |
 
 - Every wrong datasheet found so far is a candidate, not verified: the dev board,
   1N5819HW, BSS138LT1G and BAT54SLT1G.
-- Right datasheets left as candidates: `SS34-E3/57T` (Vishay prints `SS34`, not its
-  `-E3/57T` packaging code) and `SM04B-SRSS-TB(LF)(SN)` (JST leaves off `(LF)(SN)`)
-  get `part-number-missing`, whose next step says to find another source; confirming
-  would be right. A table of each maker's packaging suffixes, in code, would fix
-  both. `AO3401A`'s maker seems to be named only in the logo: `manufacturer-missing`,
-  which rightly asks for a confirmation.
+- `SS34-E3/57T` (Vishay prints `SS34`) and `SM04B-SRSS-TB(LF)(SN)` (JST leaves off
+  `(LF)(SN)`) were right datasheets that a first version left as candidates; the
+  packaging codes table verifies them. `AO3401A`'s maker seems to be named only in the
+  logo: `manufacturer-missing`, which rightly asks for a confirmation.
 - The first version matched across the whole page with spaces removed, which would
   have joined `AO3401 Alpha` into `AO3401A`; the part number is now matched within one
   word, and a unit test holds it.

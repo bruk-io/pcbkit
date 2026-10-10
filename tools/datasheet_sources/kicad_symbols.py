@@ -17,26 +17,17 @@ matching a symbol is a way to find a part's family.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import re
 import sys
-import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from measure import (
-    BROWSER_AGENT,
-    OWN_AGENT,
-    PARTS,
-    PAUSE,
-    download,
-    outcome_of,
-    squash,
-)
+from measure import PARTS, fetch, outcome_of, squash
 
+from pcbkit import datasheet_find
 from pcbkit.kicad import env
 from pcbkit.kicad.sexp import parse
 
@@ -151,7 +142,7 @@ def main(out: Path, match_only: bool) -> None:
                 judged = dict(fetched[link])
                 result.update(judged)
                 if judged.get("sha256"):
-                    pdf = out / "pdfs" / f"{judged['sha256']}.pdf"
+                    pdf = datasheet_find.pdf_path(judged["sha256"])
                     result.update(outcome_of(pdf, row))
         results.append(result)
         print(
@@ -182,18 +173,11 @@ def main(out: Path, match_only: bool) -> None:
 
 
 def judge_link(link: str, out: Path) -> dict[str, Any]:
-    """Download ``link``; return the PDF's hash, or the outcome when none came."""
-    for agent_name, agent in (("own", OWN_AGENT), ("browser", BROWSER_AGENT)):
-        time.sleep(PAUSE)
-        got = download(link, agent)
-        data = got.pop("data")
-        if data.startswith(b"%PDF"):
-            digest = hashlib.sha256(data).hexdigest()
-            pdf = out / "pdfs" / f"{digest}.pdf"
-            pdf.parent.mkdir(parents=True, exist_ok=True)
-            pdf.write_bytes(data)
-            return {"agent_needed": agent_name, "sha256": digest}
-    return {"outcome": "link is not a PDF", "download": got}
+    """Download ``link`` once; return the PDF's hash, or the outcome when none came."""
+    digest, problem = fetch(link)
+    if digest:
+        return {"sha256": digest}
+    return {"outcome": "link is not a PDF", "problem": problem}
 
 
 if __name__ == "__main__":

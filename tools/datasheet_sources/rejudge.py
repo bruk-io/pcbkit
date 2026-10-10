@@ -19,6 +19,8 @@ from typing import Any
 
 from measure import PARTS, outcome_of
 
+from pcbkit import datasheet_find
+
 SOURCES = (("Mouser", "results.jsonl"), ("KiCad", "kicad_results.jsonl"))
 
 
@@ -33,7 +35,7 @@ def main(out: Path) -> None:
             record = json.loads(line)
             mpn = record["mpn"]
             if record.get("sha256"):
-                pdf = out / "pdfs" / f"{record['sha256']}.pdf"
+                pdf = datasheet_find.pdf_path(record["sha256"])
                 verdicts[source][mpn] = outcome_of(pdf, rows[mpn])
             else:
                 verdicts[source][mpn] = {"outcome": f"no PDF ({record['outcome']})"}
