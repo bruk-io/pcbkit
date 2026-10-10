@@ -16,6 +16,7 @@ WORKFLOW = [
     "new",
     "doctor",
     "setup",
+    "datasheet",
     "sch",
     "build",
     "route",
@@ -35,6 +36,7 @@ WORKFLOW = [
 BUILT = {
     "new",
     "setup",
+    "datasheet",
     "doctor",
     "sch",
     "build",
@@ -115,6 +117,7 @@ def test_every_command_that_is_not_built_has_a_stub_test() -> None:
         ("route", ["--eco", "--tries", "--passes"]),
         ("finalize", ["--no-render"]),
         ("check", ["-k"]),
+        ("datasheet", ["find", "confirm"]),
         ("quote", ["--assembled", "--fab-qty", "--self-solder-tht", "--notes"]),
     ],
 )

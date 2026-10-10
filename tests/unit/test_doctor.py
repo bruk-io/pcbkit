@@ -25,6 +25,7 @@ HEALTHY: dict[str, Any] = {
     "find_rsvg_convert": Tool("/bin/rsvg-convert", "2.60.0"),
     "find_uv": Tool("/bin/uv", "0.12.15"),
     "find_ngspice": Tool("/bin/ngspice", "47"),
+    "find_pdftotext": Tool("/bin/pdftotext", "26.02.0"),
     "pcbnew_importable": True,
 }
 
@@ -38,6 +39,7 @@ MAC_ROWS = [
     "rsvg-convert",
     "uv",
     "ngspice",
+    "pdftotext",
     "pcbnew here",
 ]
 
@@ -76,10 +78,12 @@ def test_a_healthy_mac_is_all_ok_in_report_order(healthy_mac: None) -> None:
     assert found["Java"].detail == "21.0.11  /jdk/bin/java"
 
 
-def test_only_ngspice_and_pcbnew_here_are_optional(healthy_mac: None) -> None:
+def test_only_ngspice_pdftotext_and_pcbnew_here_are_optional(
+    healthy_mac: None,
+) -> None:
     """Document which items do not decide the exit status."""
     optional = [c.name for c in doctor.diagnose() if not c.required]
-    assert optional == ["ngspice", "pcbnew here"]
+    assert optional == ["ngspice", "pdftotext", "pcbnew here"]
 
 
 def test_linux_has_no_kicad_app_row(healthy_mac: None, machine: FakeMachine) -> None:
@@ -165,6 +169,19 @@ def test_a_missing_ngspice_is_reported_but_does_not_fail_the_run(
     assert not ngspice.required
     assert "only checks that run SPICE need it" in ngspice.detail
     assert ngspice.fix == "brew install ngspice"
+    assert doctor.exit_code(checks) == 0
+
+
+def test_a_missing_pdftotext_is_reported_but_does_not_fail_the_run(
+    healthy_mac: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Show the fix for pdftotext and still exit 0: only pcbkit datasheet needs it."""
+    stub(monkeypatch, find_pdftotext=None)
+    checks = doctor.diagnose()
+    pdftotext = rows(checks)["pdftotext"]
+    assert not pdftotext.ok and not pdftotext.required
+    assert "only pcbkit datasheet reads PDFs" in pdftotext.detail
+    assert pdftotext.fix == "brew install poppler"
     assert doctor.exit_code(checks) == 0
 
 

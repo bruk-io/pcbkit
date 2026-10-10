@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from pcbkit import mouser
+from pcbkit import datasheet_find, mouser
 from tests.fake_machine import FakeMachine
 from tests.fake_pcbnew import make_pcbnew
 
@@ -28,6 +28,21 @@ def no_mouser(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(mouser, "_transport", refuse)
     monkeypatch.setattr(mouser, "_sleep", lambda seconds: None)
+
+
+@pytest.fixture(autouse=True)
+def no_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep every unit test from downloading or reading a real PDF."""
+
+    def refuse_download(url: str) -> bytes:
+        raise AssertionError(f"a unit test reached for the web: {url}")
+
+    def refuse_pdftotext(tool: str, pdf: Any) -> str:
+        raise AssertionError(f"a unit test ran pdftotext on {pdf}")
+
+    monkeypatch.setattr(datasheet_find, "_download", refuse_download)
+    monkeypatch.setattr(datasheet_find, "_pdftotext", refuse_pdftotext)
+    monkeypatch.setattr(datasheet_find, "_sleep", lambda seconds: None)
 
 
 @pytest.fixture
