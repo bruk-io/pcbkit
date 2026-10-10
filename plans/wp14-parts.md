@@ -32,8 +32,8 @@ finding the right pages.
 
 | Step | Who | What |
 |---|---|---|
-| `pcbkit parts lookup <MPN>` | code | Mouser Search API by part number: manufacturer, datasheet URL, package, lifecycle (incl. obsolete/NRND), RoHS, stock, price breaks, lead time, suggested replacement. Key from `MOUSER_API_KEY`, never `pcbkit.toml`. |
-| `pcbkit datasheet fetch <MPN> [url]` | code | Download the PDF (URL from the lookup, or given); reject a landing page that is not a PDF; extract text and render page images per page; record URL, date and sha256. |
+| `pcbkit parts lookup <MPN>` | code | Mouser Search API by part number: manufacturer, datasheet URL when Mouser has one, lifecycle, RoHS, stock, price breaks, lead time, suggested replacement. Key from `MOUSER_API_KEY`, never `pcbkit.toml`. |
+| `pcbkit datasheet fetch <MPN> [url]` | code | Download the PDF; reject a landing page that is not a PDF; extract text and render page images per page; record URL, date and sha256. The URL comes from Mouser when it has one, else from the manufacturer's product page or the user. |
 | Retrieval | code or model | Pick the pages each section needs (pinout, absolute max, operating conditions, ...). Method chosen by the retrieval eval below. |
 | Extraction | model | One call per section with only its pages; writes into the part file. Every value carries its page and a short verbatim quote. |
 | `pcbkit datasheet verify` | code | Schema; each quote appears on the page it cites; pinout and package against KiCad stock where it exists; a newer datasheet revision seen at the same URL. Values read off a figure have no quote: they are marked "read from figure N" for a person to check. |
@@ -64,8 +64,28 @@ before relying on a number.
   min/typ/max, unit, conditions, page, quote.
 
 Later: key electrical characteristics (logic thresholds against supply, drive, I2C
-addresses), thermal (θJA, derating points from curves), application circuit (required
-parts, values, formulas), layout guidance, assembly (MSL, reflow, polarity marking).
+addresses), thermal (θJA, derating points from curves), reference implementations (below),
+layout guidance, assembly (MSL, reflow, polarity marking).
+
+## Reference implementations
+
+Most datasheets show one or more typical application circuits, and an evaluation board
+manual often has a full schematic and layout. They are the most useful thing to copy
+when designing a part in, so the part file captures each one:
+
+- what it is for and the conditions it was designed for (input range, output, load);
+- the parts by role (input capacitor, feedback divider top, ...), each with value,
+  rating, package where given, and the page and quote or figure it comes from;
+- the connections, as a small netlist between the part's pins and those roles;
+- the formulas that set the values (feedback divider, inductor, current sense), so a
+  change of conditions can recompute them instead of copying numbers;
+- the layout notes that go with it, and the figure number for a person to look at.
+
+Outputs: a pcbkit design helper that adds the circuit to `design.py` with values worked
+out for the board's conditions, and possibly a KiCad 9 design block. A check can then
+compare a board's circuit around the part with its reference and report the
+differences. Reading a netlist off a schematic drawing is vision work, so the extraction
+eval scores it separately.
 
 ## The evals
 
@@ -106,6 +126,28 @@ two evals do not blur together), then end to end with the chosen retrieval.
 
 The results set the model per section: for example Haiku for tables and text, Sonnet for
 pinout pages, and a Sonnet retry for any section `verify` rejects.
+
+## Mouser Search API
+
+From Mouser's Swagger specs (`https://api.mouser.com/api/docs/v1` and `.../v2`, read
+2026-10-09) and one real call:
+
+- v1: `search/partnumber`, `search/keyword`. v2: `search/partnumberandmanufacturer`,
+  `search/keywordandmanufacturer`, `search/manufacturerlist` (their v1 forms are
+  deprecated). All POST with JSON except the manufacturer list (GET); key in the
+  `apiKey` query parameter; errors in an `Errors` array.
+- Up to 10 part numbers per call, separated by `|`, each 3 to 40 characters; up to 50
+  results. A manufacturer part number works in the `mouserPartNumber` field.
+- `DataSheetUrl` came back empty for INA226AIDGSR: Mouser cannot be the only source of
+  datasheet URLs.
+- Prices come in the account's currency (CAD here). The cache keeps the raw response.
+- Mouser's CDN (Akamai) answered urllib's default client with a redirect and a scripted
+  client without a User-Agent with an HTML error page. The client sends a User-Agent and
+  `Accept: application/json`, refuses redirects, and retries a non-JSON answer.
+- A response header echoes the API key. Never log or store response headers, and never
+  put the request URL (which holds the key) in an error.
+- Rate limits are not in the specs, and the web page that may state them blocks scripts.
+  Unconfirmed.
 
 ## Steps
 
