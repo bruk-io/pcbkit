@@ -7,8 +7,8 @@ Status: scoped, not started. Branch `wp14-parts`.
 Turn a part number into a verified, page-referenced part file that pcbkit can build
 KiCad files from and that the checks can read, without hand-copying numbers out of PDFs.
 Cache everything that can be fetched or recomputed, and measure the extraction instead of
-trusting it: Haiku against Sonnet for reading, and a local embedding model against Haiku
-and plain heuristics for finding the right pages.
+trusting it: Haiku against Sonnet for reading, and Haiku against plain heuristics for
+finding the right pages.
 
 ## Decisions so far
 
@@ -46,7 +46,6 @@ and plain heuristics for finding the right pages.
 | Mouser answers | MPN | Stable fields kept; stock, price and lead time refetched past an age limit (24 h to start). Each answer keeps its fetch date. | `~/.cache/pcbkit` |
 | Datasheet PDFs | sha256 | Forever. A URL-to-hash map with dates shows when a URL starts serving a new revision. | `~/.cache/pcbkit` |
 | Page text and images | (PDF hash, extractor, extractor version) | Until the extractor changes. | `~/.cache/pcbkit` |
-| Embedding index | (PDF hash, model, model revision, dimensions, prompt format) | Until any of those change. | `~/.cache/pcbkit` |
 | Part files | (PDF hash, schema version) | Not a cache: reviewed data, never thrown away or regenerated unasked. | `parts/` in git |
 
 A board vendors the part files it uses, each with the PDF hash it came from, like a
@@ -86,20 +85,11 @@ for each section, and a hand-checked expected part file.
 | Method | How |
 |---|---|
 | Heuristic | PDF bookmarks or table of contents, then heading matches ("Absolute Maximum Ratings", "Pin Configuration", ...). No model. |
-| EmbeddingGemma 2, text | Embed each page's text as a `Document` (`title: <datasheet> \| text: <page>`), each section as a `SearchQuery`; take the top k pages. |
-| EmbeddingGemma 2, images | Embed each page image. It shares the vector space with text, so a pinout drawn as a picture can still be found. |
-| EmbeddingGemma 2, both | Text and image scores combined. |
 | Haiku as retriever | Give Haiku each page's headings and first lines and ask which pages each section needs. |
 
 Measures: recall of the gold pages at k (missing a page loses values silently), pages sent
-on (cost of the extraction that follows), time, and cost (local is free per call, Haiku is
+on (cost of the extraction that follows), time, and cost (the heuristic is free, Haiku is
 not).
-
-Facts about the model (from its Hugging Face card, read 2026-10-09): `google/embeddinggemma-2`,
-Apache 2.0, 740M parameters with about 270M for text alone, 8192-token input, 768
-dimensions with Matryoshka cuts at 512, 256 and 128 (128 is weak on images), embeds text
-and images in one space. Runs through sentence-transformers or transformers on torch;
-bfloat16 or float32 only, float16 can give NaN. No mention of GGUF, Ollama or ONNX.
 
 ### Extraction: does Haiku read the pages correctly?
 
@@ -131,15 +121,11 @@ pinout pages, and a Sonnet retry for any section `verify` rejects.
 
 ## Open questions
 
-- **Python 3.9 and torch.** The board venv runs on KiCad's 3.9, and recent torch releases
-  may no longer support 3.9 (check). Options: keep embeddings in the eval only until they
-  win; an optional extra that needs 3.10+ and says so on 3.9; or run the model as a
-  separate process, the way Freerouting is a separate tool.
 - **Text extraction library.** `pypdf` (pure Python, runs anywhere, weak on tables),
   `pdfplumber` (better tables), or `pdftotext` (good, but a non-Python dependency). The
   eval can compare them too, since retrieval and extraction both depend on the text.
-- **Page images.** Renderer (`pdftoppm`, `pypdfium2`, ...) and resolution, which sets both
-  image-embedding quality and Haiku's token cost per page.
+- **Page images.** Renderer (`pdftoppm`, `pypdfium2`, ...) and resolution, which sets
+  Haiku's token cost per page.
 - **ECAD models.** Mouser's KiCad symbols and footprints come from SamacSys and seem to need
   a separate sign-in, not the Search API key. If they can be fetched, they are a second
   independent source for the pinout cross-check.
