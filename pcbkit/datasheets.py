@@ -343,10 +343,17 @@ def check_confirmation(
                 "this series: find the series datasheet and give it with --url"
             )
         series = series_code(mpn)
-        if not any(word.startswith(series) for word in _words(quote)):
+        naming = [word for word in _words(quote) if word.startswith(series)]
+        if not naming:
             raise ConfirmationRefused(
                 f"the quote must hold the series code {series.upper()!r}, where the "
                 "datasheet explains how the number is built"
+            )
+        if all(len(word) >= len(found) for word in naming):
+            raise ConfirmationRefused(
+                f"the quote only repeats {found.upper()!r}, which the datasheet was "
+                "already seen to hold: quote where it explains how the number is "
+                f"built, the series code {series.upper()!r} followed by its fields"
             )
         return
     found, _ = _find_part_number([quote], mpn)

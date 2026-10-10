@@ -1,6 +1,16 @@
 # WP14: parts, datasheets and extraction
 
-Status: scoped, not started. Branch `wp14-parts`.
+Status: in progress on branch `wp14-parts`. Built: the Mouser client and cache,
+`pcbkit.datasheets.judge`, and `pcbkit datasheet find` and `confirm` (Mouser, then
+KiCad's symbols; records in `parts/`). Not built: part files, extraction, the evals,
+more sources.
+
+Before merging to main:
+
+- `tools/datasheet_sources/parts.csv` has four part numbers taken from a real board
+  (`EEH-ZA1E331P`, `SQD50P03-07_GE3`, `WSK25125L000FEA`, `PPTC221LFBN-RC`): swap them
+  for generic ones and run the measurement and `rejudge.py` again.
+- Add the CLAUDE.md line that tells parts (public datasheet facts) from board content.
 
 ## Goal
 

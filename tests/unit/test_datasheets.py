@@ -304,3 +304,30 @@ def test_every_confirmable_reason_says_what_the_quote_must_hold() -> None:
 def test_the_series_code_is_the_leading_letters(mpn: str, series: str) -> None:
     """Take the leading letters, or the first four characters when there are few."""
     assert datasheets.series_code(mpn) == series
+
+
+def test_a_series_quote_that_only_repeats_the_number_is_refused() -> None:
+    """Refuse a figure label that merely shows the series and size again."""
+    verdict = judge(SERIES_PAGES, "RC0603FR-0710KL", "Yageo", built=True)
+    assert "only repeats 'RC0603'" in refused(
+        SERIES_PAGES, "RC0603FR-0710KL", "Yageo", verdict, 3, "Fig. 1 RC0603"
+    )
+
+
+def test_a_series_pattern_that_starts_with_letters_and_digits_is_accepted() -> None:
+    """Accept a pattern such as ABM8 - XX.XXXMHZ, where the code holds a digit."""
+    pages = [
+        "ABM8 series crystal. Abracon",
+        "PART IDENTIFICATION\nABM8 - XX.XXXMHZ - XX - X - T",
+        "ABM8-16 frequencies",
+    ]
+    verdict = judge(pages, "ABM8-16.000MHZ-B2-T", "Abracon", built=True)
+    assert verdict.part_number_found == "abm816"
+    datasheets.check_confirmation(
+        pages,
+        "ABM8-16.000MHZ-B2-T",
+        "Abracon",
+        verdict,
+        2,
+        "ABM8 - XX.XXXMHZ - XX - X - T",
+    )

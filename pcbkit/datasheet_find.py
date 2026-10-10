@@ -44,7 +44,7 @@ from urllib.request import Request, urlopen
 
 import click
 
-from pcbkit import cache, datasheets, mouser, parts
+from pcbkit import cache, datasheets, mouser, parts, project
 from pcbkit.datasheets import Reason, Status, Verdict
 from pcbkit.kicad import env
 from pcbkit.kicad.sexp import parse
@@ -62,6 +62,8 @@ RECORD_SUFFIX = ".datasheet.json"
 NOT_VERIFIED = 3
 NOT_FOUND = "NOT FOUND"
 CONFIRMED = "CONFIRMED"
+# How good a record's status is: a run that finds less never replaces a better record.
+RANK = {"VERIFIED": 2, CONFIRMED: 2, "CANDIDATE": 1, NOT_FOUND: 0}
 
 Say = Callable[[str], None]
 
@@ -297,20 +299,35 @@ def normal_link(link: str) -> str:
 # --- Mouser --------------------------------------------------------------------------
 
 
+def mouser_parts_folder() -> Path:
+    """Return the cache folder of Mouser's matches for each part number."""
+    return cache.home() / "mouser-parts"
+
+
 def mouser_parts(
     mpns: Sequence[str], say: Say
 ) -> tuple[dict[str, list[dict[str, Any]]], set[str]]:
     """Return Mouser's parts matching each of ``mpns``, and the numbers it was asked.
 
-    Ten part numbers a request. Answers come from the cache when younger than
-    LINK_MAX_AGE; uncached requests are spaced MOUSER_GAP_SECONDS apart. Without a
-    key, or if Mouser fails, say so and go on without it.
+    Each part's matches (none is an answer too) are cached for LINK_MAX_AGE, so a
+    part asked about before costs no request, whatever it was asked with. The rest
+    go ten to a request, spaced MOUSER_GAP_SECONDS apart. Without a key, or if
+    Mouser fails, say so and go on without it.
     """
     found: dict[str, list[dict[str, Any]]] = {mpn: [] for mpn in mpns}
     asked: set[str] = set()
+    now = cache.utc_now()
+    unknown = []
+    for mpn in dict.fromkeys(mpns):
+        known = cache.read(mouser_parts_folder(), mpn)
+        if known is not None and known.age(now) <= LINK_MAX_AGE:
+            found[mpn] = list(known.value)
+            asked.add(mpn)
+        else:
+            unknown.append(mpn)
     sent = 0
-    for start in range(0, len(mpns), mouser.MAX_PART_NUMBERS):
-        batch = list(mpns[start : start + mouser.MAX_PART_NUMBERS])
+    for start in range(0, len(unknown), mouser.MAX_PART_NUMBERS):
+        batch = unknown[start : start + mouser.MAX_PART_NUMBERS]
         query = mouser.part_number(batch, exact=True)
         known = cache.read(parts.mouser_folder(), query.cache_key)
         fresh = known is not None and known.age(cache.utc_now()) <= LINK_MAX_AGE
@@ -329,6 +346,8 @@ def mouser_parts(
             for mpn in batch:
                 if number == datasheets.squash(mpn):
                     found[mpn].append(part)
+        for mpn in batch:
+            cache.write(mouser_parts_folder(), mpn, found[mpn], entry.fetched)
     return found, asked
 
 
@@ -397,6 +416,7 @@ def find(
     index: Sequence[Sequence[str]] | None,
     notes: Sequence[str] = (),
     mouser_asked: bool = True,
+    maker_from: str = "--maker",
 ) -> dict[str, Any]:
     """Find and judge ``mpn``'s datasheet; return its record (not yet written).
 
@@ -405,7 +425,7 @@ def find(
     verified datasheet.
     """
     manufacturer = (maker or "").strip()
-    source = "--maker" if manufacturer else ""
+    source = maker_from if manufacturer else ""
     if not manufacturer and matches:
         manufacturer = (matches[0].get("Manufacturer") or "").strip()
         source = "Mouser" if manufacturer else ""
@@ -456,6 +476,24 @@ def find(
 
 
 # --- records -------------------------------------------------------------------------
+
+
+def default_folder() -> Path:
+    """Return where records go: the project's parts/, else parts/ here."""
+    try:
+        return project.find_root() / "parts"
+    except project.ProjectError:
+        return Path("parts")
+
+
+def supersedes(old: dict[str, Any] | None, new: dict[str, Any]) -> bool:
+    """Say whether ``new`` may replace ``old``: never a worse status for a better one.
+
+    A run without Mouser's key, or offline with the cache cleared, can find less than
+    an earlier run did; a verified or confirmed record is reviewed data, kept unless
+    asked.
+    """
+    return old is None or RANK[new["status"]] >= RANK.get(old.get("status", ""), 0)
 
 
 def record_path(folder: Path, mpn: str) -> Path:
@@ -522,6 +560,8 @@ def keep_confirmation(old: dict[str, Any] | None, new: dict[str, Any]) -> str:
     It holds when the same PDF was chosen and its page and quote still pass.
     """
     if not old or old.get("status") != CONFIRMED or new["chosen"] is None:
+        return ""
+    if new["status"] == Status.VERIFIED.value:
         return ""
     then = old["candidates"][old["chosen"]]
     now = new["candidates"][new["chosen"]]

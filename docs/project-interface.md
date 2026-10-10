@@ -1080,12 +1080,21 @@ checks the quote is on that page, counting pages from 1 in the file's own order,
 the numbers printed on them. A confirmation for a missing or unknown maker shows only
 that the PDF is the part's; that the maker is right is the word of whoever confirms.
 
-Each part's answer goes to `parts/<part>.datasheet.json` (`--into` for another
-folder): every candidate tried with its verdict, the one chosen, the status and any
-confirmation. The PDFs stay in `~/.cache/pcbkit/datasheets/`, named by their SHA-256,
-which the record holds. A later `find` keeps a confirmation while the same PDF is
-chosen and the quote still holds. `find` exits 3 when a part is not verified or
-confirmed. It needs `pdftotext` (`pcbkit doctor` says).
+Each part's answer goes to `parts/<part>.datasheet.json` in the board project, from any
+folder inside it (`--into` for another folder): every candidate tried with its
+verdict, the one chosen, the status and any confirmation. The PDFs stay in
+`~/.cache/pcbkit/datasheets/`, named by their SHA-256, which the record holds.
+
+A later `find` never writes a worse answer over a better record: a run without
+`MOUSER_API_KEY`, or offline with the cache cleared, may find less, so a verified or
+confirmed record stays and the output says what this run found (`--replace` writes it
+anyway). A confirmation is carried over while the same PDF is chosen and the quote
+still holds. For a built number, `confirm` checks that the quote is on the page and
+names the series code with its fields after it; that the page explains the number is
+the confirmer's word.
+
+`find` exits 3 when a part is not verified or confirmed. It needs `pdftotext`
+(`pcbkit doctor` says).
 
 ## Starting a board: pcbkit new and pcbkit setup
 

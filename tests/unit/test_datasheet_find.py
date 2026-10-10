@@ -491,25 +491,120 @@ def test_finding_again_keeps_a_confirmation_that_still_holds(
     assert record(series_found, "RC0603FR-0710KL")["status"] == "CONFIRMED"
 
 
-def test_finding_another_datasheet_drops_the_confirmation(
+def test_a_lesser_find_keeps_the_confirmed_record_unless_asked(
     series_found: Path, web: Web
 ) -> None:
-    """Drop a confirmation, and say so, when find chooses a different PDF."""
+    """Keep CONFIRMED when another PDF is only a candidate; --replace writes it."""
     quote = ("--page", "2", "--quote", "RC XXXX X X X XX XXXX L")
     run("confirm", "RC0603FR-0710KL", *quote, into=series_found)
     web.pdf("https://other.test/rc.pdf", SERIES_PAGES[1:])
+    other = ("--url", "https://other.test/rc.pdf", "--maker", "Yageo", "--built")
+    kept = run("find", "RC0603FR-0710KL", *other, into=series_found)
+    assert kept.exit_code == 0, kept.output
+    assert "kept: this run found only CANDIDATE (part-number-built)" in kept.output
+    assert record(series_found, "RC0603FR-0710KL")["status"] == "CONFIRMED"
+    replaced = run("find", "RC0603FR-0710KL", *other, "--replace", into=series_found)
+    assert "earlier confirmation was dropped" in replaced.output
+    assert record(series_found, "RC0603FR-0710KL")["status"] == "CANDIDATE"
+
+
+def test_without_the_key_and_with_mouser_stale_the_record_stands(
+    series_found: Path, web: Web, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep a confirmed record when a later run cannot ask Mouser for its link."""
+    quote = ("--page", "2", "--quote", "RC XXXX X X X XX XXXX L")
+    run("confirm", "RC0603FR-0710KL", *quote, into=series_found)
+    later = cache.utc_now() + datasheet_find.LINK_MAX_AGE * 2
+    monkeypatch.setattr(cache, "utc_now", lambda: later)
+    monkeypatch.delenv("MOUSER_API_KEY")
+    result = run("find", "RC0603FR-0710KL", into=series_found)
+    assert "Mouser skipped" in result.output
+    assert "kept: this run found only NOT FOUND" in result.output
+    assert result.exit_code == 0
+    assert record(series_found, "RC0603FR-0710KL")["status"] == "CONFIRMED"
+
+
+def test_offline_with_the_pdf_gone_the_record_stands(
+    series_found: Path, web: Web
+) -> None:
+    """Keep a confirmed record when its PDF left the cache and cannot be fetched."""
+    quote = ("--page", "2", "--quote", "RC XXXX X X X XX XXXX L")
+    run("confirm", "RC0603FR-0710KL", *quote, into=series_found)
+    saved = record(series_found, "RC0603FR-0710KL")
+    datasheet_find.pdf_path(saved["candidates"][saved["chosen"]]["sha256"]).unlink()
+    web.pages["https://m.test/rc.pdf"] = OSError("offline")
+    result = run("find", "RC0603FR-0710KL", into=series_found)
+    assert "kept: this run found only NOT FOUND" in result.output
+    assert record(series_found, "RC0603FR-0710KL")["status"] == "CONFIRMED"
+
+
+def test_a_confirmed_part_that_now_verifies_says_nothing_was_dropped(
+    series_found: Path, web: Web
+) -> None:
+    """Write a verified answer over a confirmation without calling it dropped."""
+    quote = ("--page", "2", "--quote", "RC XXXX X X X XX XXXX L")
+    run("confirm", "RC0603FR-0710KL", *quote, into=series_found)
+    web.pdf("https://full.test/rc.pdf", ["RC0603FR-0710KL thick film. Yageo"])
     result = run(
         "find",
         "RC0603FR-0710KL",
         "--url",
-        "https://other.test/rc.pdf",
-        "--maker",
-        "Yageo",
-        "--built",
+        "https://full.test/rc.pdf",
         into=series_found,
     )
-    assert "earlier confirmation was dropped" in result.output
-    assert record(series_found, "RC0603FR-0710KL")["status"] == "CANDIDATE"
+    assert "VERIFIED   RC0603FR-0710KL" in result.output
+    assert "dropped" not in result.output
+
+
+def test_mouser_is_not_asked_again_for_a_part_it_answered(
+    web: Web, tmp_path: Path
+) -> None:
+    """Answer a part from its own cache entry, whatever batch it was asked in."""
+    run("find", "PARTA1", "PARTB2", "PARTC3", into=tmp_path)
+    assert len(web.mouser_requests) == 1
+    run("find", "PARTB2", into=tmp_path)
+    assert len(web.mouser_requests) == 1
+
+
+def test_url_takes_the_maker_from_the_earlier_record(web: Web, tmp_path: Path) -> None:
+    """Judge a given link with the maker already recorded, without asking Mouser."""
+    web.mouser_parts = [mouser_part("1N5819HW-7-F", "Diodes Incorporated")]
+    web.pdf("http://diodes.test/1n5817.pdf", SIBLING_PAGES)
+    run("find", "1N5819HW-7-F", into=tmp_path)
+    requests = len(web.mouser_requests)
+    web.pdf("https://diodes.test/1n5819hw.pdf", ["1N5819HW-7-F Diodes Incorporated"])
+    result = run(
+        "find",
+        "1N5819HW-7-F",
+        "--url",
+        "https://diodes.test/1n5819hw.pdf",
+        into=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert len(web.mouser_requests) == requests
+    assert record(tmp_path, "1N5819HW-7-F")["manufacturer_from"] == "the earlier record"
+
+
+@pytest.mark.parametrize("bad", ["file:///etc/passwd", "see the datasheet"])
+def test_url_must_be_a_web_link(web: Web, tmp_path: Path, bad: str) -> None:
+    """Refuse anything but an http or https link."""
+    result = run("find", "INA226AIDGSR", "--url", bad, into=tmp_path)
+    assert result.exit_code == 2
+    assert "takes an http or https link" in result.output
+
+
+def test_records_go_to_the_projects_parts_folder(
+    web: Web, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write to <project>/parts from any folder inside the project."""
+    root = tmp_path / "my-board"
+    (root / "checks").mkdir(parents=True)
+    (root / "pcbkit.toml").write_text("")
+    monkeypatch.chdir(root / "checks")
+    result = CliRunner().invoke(cli, ["datasheet", "find", "ABC123"])
+    assert result.exit_code == 3, result.output
+    assert (root / "parts" / "ABC123.datasheet.json").is_file()
+    assert not (root / "checks" / "parts").exists()
 
 
 def test_cached_answers_live_under_the_cache_home(
