@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from pcbkit import datasheets
-from pcbkit.datasheets import Reason, Status, judge
+from pcbkit.datasheets import ConfirmationRefused, Reason, Status, judge
 
 
 def test_the_whole_part_number_and_the_maker_verify_it() -> None:
@@ -110,7 +110,7 @@ def test_a_built_number_asks_for_a_confirmation_not_another_source() -> None:
     pages = ["RC series thick film chip resistors. RC0603 FR-07 10K L. Yageo"]
     verdict = judge(pages, "RC0603FR-0710KL", "Yageo", built=True)
     assert verdict.reason is Reason.PART_NUMBER_BUILT
-    assert "confirm" in verdict.next_step
+    assert "confirm" in verdict.next_step.lower()
 
 
 def test_a_pdf_with_no_text_is_only_a_candidate() -> None:
@@ -147,3 +147,160 @@ def test_no_makers_name_is_an_ordinary_word_alone() -> None:
     ordinary = {"diodes", "semiconductor", "instruments", "devices", "power", "ti"}
     names = [name for names in datasheets.MAKERS for name in names]
     assert not [name for name in names if name.lower() in ordinary]
+
+
+def test_an_empty_maker_never_verifies() -> None:
+    """Call the maker unknown when none is given: an empty name would match anywhere."""
+    pages = ["Some text. \n\nINA226AIDGSR in a table.\n"]
+    for nothing in ("", "   "):
+        verdict = judge(pages, "INA226AIDGSR", nothing)
+        assert (verdict.status, verdict.reason) == (
+            Status.CANDIDATE,
+            Reason.MANUFACTURER_UNKNOWN,
+        )
+    assert datasheets.maker_names("") == ()
+
+
+@pytest.mark.parametrize(
+    "mpn, maker, text, dropped",
+    [
+        ("SS34-E3/57T", "Vishay", "SS32 thru SS36. SS34 Vishay General", "-E3/57T"),
+        ("SM04B-SRSS-TB(LF)(SN)", "JST", "SM04B-SRSS-TB 4 circuits. JST", "(LF)(SN)"),
+    ],
+)
+def test_a_makers_own_packaging_code_may_be_missing(
+    mpn: str, maker: str, text: str, dropped: str
+) -> None:
+    """Verify a number its maker prints without its packaging code."""
+    verdict = judge([text], mpn, maker)
+    assert verdict.status is Status.VERIFIED
+    assert verdict.suffix_dropped == dropped
+
+
+def test_a_packaging_code_is_dropped_only_for_its_own_maker() -> None:
+    """Keep Vishay's code from excusing another maker's number."""
+    verdict = judge(["SS34 Schottky. Acme Parts"], "SS34-E3/57T", "Acme Parts")
+    assert verdict.reason is Reason.PART_NUMBER_MISSING
+
+
+def test_without_its_code_the_rest_of_the_number_must_be_whole() -> None:
+    """Refuse SS3 for SS34-E3/57T: dropping the code allows no other slack."""
+    verdict = judge(["SS3 series. Vishay"], "SS34-E3/57T", "Vishay")
+    assert verdict.reason is Reason.PART_NUMBER_MISSING
+
+
+# --- confirming a candidate -------------------------------------------------------
+
+SERIES_PAGES = [
+    "RC series thick film chip resistors. Yageo",
+    "GLOBAL PART NUMBER\nRC XXXX X X X XX XXXX L\n(1) SIZE 0402/0603/0805",
+    "Fig. 1 RC0603",
+]
+LOGO_PAGES = ["P-Channel MOSFET\nAO3401A 30V SOT-23", "Ordering: AO3401A"]
+
+
+def refused(*args: object) -> str:
+    """Return why check_confirmation refuses ``args``; fail if it accepts them."""
+    with pytest.raises(ConfirmationRefused) as caught:
+        datasheets.check_confirmation(*args)  # type: ignore[arg-type]
+    return str(caught.value)
+
+
+def test_a_series_datasheet_is_confirmed_by_a_quote_with_its_series_code() -> None:
+    """Accept a quote, on its page, naming the series where the number is explained."""
+    verdict = judge(SERIES_PAGES, "RC0603FR-0710KL", "Yageo", built=True)
+    assert verdict.part_number_found == "rc0603"
+    datasheets.check_confirmation(
+        SERIES_PAGES, "RC0603FR-0710KL", "Yageo", verdict, 2, "RC XXXX X X X XX XXXX L"
+    )
+
+
+def test_a_quote_must_be_on_the_page_it_names_with_its_spacing() -> None:
+    """Refuse a quote from another page, or one joining words the page keeps apart."""
+    verdict = judge(SERIES_PAGES, "RC0603FR-0710KL", "Yageo", built=True)
+    mpn = "RC0603FR-0710KL"
+    assert "not on page 1" in refused(
+        SERIES_PAGES, mpn, "Yageo", verdict, 1, "RC XXXX X X X XX XXXX L"
+    )
+    assert "not on page 2" in refused(
+        SERIES_PAGES, mpn, "Yageo", verdict, 2, "RCXXXX X X X XX XXXX L"
+    )
+    assert "pages 1 to 3" in refused(SERIES_PAGES, mpn, "Yageo", verdict, 4, "RC")
+
+
+def test_a_quote_line_break_may_be_a_space() -> None:
+    """Accept a quote that has a space where the page has a line break."""
+    verdict = judge(LOGO_PAGES, "AO3401A", "Alpha & Omega")
+    assert verdict.reason is Reason.MANUFACTURER_MISSING
+    datasheets.check_confirmation(
+        LOGO_PAGES, "AO3401A", "Alpha & Omega", verdict, 1, "MOSFET AO3401A 30V"
+    )
+
+
+def test_a_series_quote_must_hold_the_series_code() -> None:
+    """Refuse a quote from the right page that does not show the series code."""
+    verdict = judge(SERIES_PAGES, "RC0603FR-0710KL", "Yageo", built=True)
+    assert "series code 'RC'" in refused(
+        SERIES_PAGES, "RC0603FR-0710KL", "Yageo", verdict, 2, "GLOBAL PART NUMBER"
+    )
+
+
+def test_a_maker_candidate_needs_the_whole_part_number_in_the_quote() -> None:
+    """Refuse a quote without the part's whole number for an unnamed maker."""
+    verdict = judge(LOGO_PAGES, "AO3401A", "Alpha & Omega")
+    assert "whole part number AO3401A" in refused(
+        LOGO_PAGES, "AO3401A", "Alpha & Omega", verdict, 1, "P-Channel MOSFET"
+    )
+
+
+@pytest.mark.parametrize(
+    "pages, mpn, maker",
+    [
+        (["BSS138 N-Channel FET onsemi"], "BSS138LT1G", "onsemi"),
+        (["", " "], "INA226AIDGSR", "Texas Instruments"),
+    ],
+)
+def test_a_sibling_or_a_textless_pdf_cannot_be_confirmed(
+    pages: list[str], mpn: str, maker: str
+) -> None:
+    """Refuse to confirm what only another datasheet can settle."""
+    verdict = judge(pages, mpn, maker)
+    assert "cannot be confirmed" in refused(pages, mpn, maker, verdict, 1, pages[0])
+
+
+def test_a_short_series_code_is_no_evidence() -> None:
+    """Refuse a series confirmation when too little of the number was found."""
+    pages = ["RC series. Yageo"]
+    verdict = judge(pages, "RC0603FR-0710KL", "Yageo", built=True)
+    assert verdict.part_number_found == "rc"
+    assert "too little" in refused(
+        pages, "RC0603FR-0710KL", "Yageo", verdict, 1, "RC series"
+    )
+
+
+def test_a_verified_datasheet_needs_no_confirmation() -> None:
+    """Say so rather than confirm a datasheet that is verified."""
+    pages = ["INA226AIDGSR Texas Instruments"]
+    verdict = judge(pages, "INA226AIDGSR", "Texas Instruments")
+    assert "verified already" in refused(
+        pages, "INA226AIDGSR", "Texas Instruments", verdict, 1, pages[0]
+    )
+
+
+def test_every_confirmable_reason_says_what_the_quote_must_hold() -> None:
+    """Name what to quote for each reason a confirmation can settle."""
+    assert set(datasheets.QUOTE_MUST_HOLD) == datasheets.CONFIRMABLE
+
+
+@pytest.mark.parametrize(
+    "mpn, series",
+    [
+        ("RC0603FR-0710KL", "rc"),
+        ("GRM188R71C104KA01D", "grm"),
+        ("0ZCJ0050FF2E", "0zcj"),
+        ("X7R-100", "x7r1"),
+    ],
+)
+def test_the_series_code_is_the_leading_letters(mpn: str, series: str) -> None:
+    """Take the leading letters, or the first four characters when there are few."""
+    assert datasheets.series_code(mpn) == series
