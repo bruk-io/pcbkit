@@ -42,6 +42,10 @@ user, and do not build the folder by hand.
 
 - design.py: one block per function of the board. Every part gets a real, orderable part
   number; an unorderable one is reported by `finalize` later, so settle them now.
+- Once the part numbers are chosen, run `pcbkit datasheet find` on all of them at once.
+  It finds and checks each datasheet and prints a status; for anything not `VERIFIED`, do
+  what its `next` line says. When it says to give a link, the `parts-researcher` agent can
+  look for the part's own datasheet, and `find --url` then judges what it found.
 - Never guess a pin number, a footprint or a rating. Dispatch the `parts-researcher` agent
   for each part that needs a datasheet number or a stock check, in parallel, and write the
   figure and its source beside it in specs.py.

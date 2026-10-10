@@ -9,6 +9,10 @@ and, when ``tool_input.file_path`` lies under one of those folders of a director
 holds a ``pcbkit.toml``, exits 2 with the reason on stderr: Claude Code then blocks the
 tool call and shows Claude the reason. Everything else is allowed.
 
+It also blocks any edit of a datasheet record (``<part>.datasheet.json``), in a project
+or not: ``pcbkit datasheet find`` writes those and ``confirm`` is the only way to
+change one, because it checks the evidence first.
+
 It only sees the Edit and Write tools. A change made through Bash (a heredoc,
 ``sed -i``) never reaches it.
 
@@ -32,6 +36,8 @@ GENERATED = ("kicad", "out", "golden", "fab")
 MARKER = "pcbkit.toml"
 # The tools the hook is registered for.
 TOOLS = ("Edit", "Write")
+# The end of a datasheet record's name (pcbkit.datasheet_find.RECORD_SUFFIX).
+RECORD_SUFFIX = ".datasheet.json"
 
 ALLOW = 0
 UNREADABLE = 1
@@ -85,6 +91,23 @@ def blocked_by(file_path: str, cwd: str) -> tuple[str, str] | None:
     return None
 
 
+def is_record(file_path: str, cwd: str) -> bool:
+    """Say whether ``file_path``, as written or through a link, is a record."""
+    written = os.path.normpath(os.path.join(cwd, os.path.expanduser(file_path)))
+    names = {os.path.basename(written), os.path.basename(os.path.realpath(written))}
+    return any(name.casefold().endswith(RECORD_SUFFIX) for name in names)
+
+
+def record_reason(file_path: str) -> str:
+    """Return what Claude is told when an edit of a datasheet record is blocked."""
+    return (
+        f"Blocked: {file_path} is a datasheet record, which only pcbkit writes. Run "
+        "`pcbkit datasheet find <part>` to look again, or `pcbkit datasheet confirm "
+        "<part> --page <n> --quote '<text>'` to confirm a candidate: confirm checks "
+        "the quote against the PDF, an edit would not."
+    )
+
+
 def reason(file_path: str, folder: str) -> str:
     """Return what Claude is told when an edit of ``file_path`` is blocked."""
     return (
@@ -112,6 +135,8 @@ def decide(event: object, fallback_cwd: str) -> tuple[int, str]:
     cwd = event.get("cwd")
     if not isinstance(cwd, str) or not os.path.isabs(cwd):
         cwd = fallback_cwd
+    if is_record(path, cwd):
+        return BLOCK, record_reason(path)
     found = blocked_by(path, cwd)
     if found is None:
         return ALLOW, ""
