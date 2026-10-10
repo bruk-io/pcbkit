@@ -76,7 +76,7 @@ makes it. If a hook refuses, the call does not happen and Claude is shown the re
 
 | Hook | Applies to | Refuses |
 |---|---|---|
-| `guard_generated.py` | Every Edit and Write, from anyone. | A file in `kicad/`, `out/`, `golden/` or `fab/` of a board project. |
+| `guard_generated.py` | Every Edit and Write, from anyone. | A file in `kicad/`, `out/`, `golden/` or `fab/` of a board project, and any datasheet record (`*.datasheet.json`): `pcbkit datasheet confirm` is the way to change one. |
 | `confine_check_writer.py` | Edit and Write by the `check-writer` agent only. | A file in the session's board project that is not under its `checks/` folder. |
 
 The first stops edits to generated files, which the next build overwrites. A board project

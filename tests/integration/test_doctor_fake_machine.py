@@ -48,6 +48,11 @@ def install_fake_mac(machine: FakeMachine) -> None:
         "** ngspice-47 : Circuit level simulation\n",
         on_path="ngspice",
     )
+    machine.exe(
+        bin_dir / "pdftotext",
+        "pdftotext version 26.02.0\nCopyright 2005-2026 The Poppler Developers\n",
+        on_path="pdftotext",
+    )
 
 
 def with_pcbnew_here(monkeypatch: pytest.MonkeyPatch, importable: bool) -> None:
@@ -89,6 +94,7 @@ def test_doctor_runs_exactly_the_commands_it_needs(
         "rsvg-convert",
         "uv",
         "ngspice",
+        "pdftotext",
     ]
 
 

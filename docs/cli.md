@@ -13,9 +13,10 @@ any folder below one. The ones that need KiCad's `pcbnew` module (`build`, `rout
 including one started with `uvx`. [Concepts](concepts.md#the-two-tiers) explains why.
 
 A command that cannot do its job prints what is wrong and what to do about it, and
-exits 1. Three commands use other codes where they have more to say: `check` exits with
+exits 1. Four commands use other codes where they have more to say: `check` exits with
 pytest's code (0 all passed, 1 a check failed, 5 nothing matched), `mutants` exits 2
-when its control run does not pass, and `compare` exits 2 when a file is not a board.
+when its control run does not pass, `compare` exits 2 when a file is not a board, and
+`datasheet find` exits 3 when a part's datasheet is not verified or confirmed.
 
 ::: mkdocs-click
     :module: pcbkit.cli
@@ -33,6 +34,12 @@ when its control run does not pass, and `compare` exits 2 when a file is not a b
     :module: pcbkit.cli
     :command: setup_cmd
     :prog_name: pcbkit setup
+    :depth: 1
+
+::: mkdocs-click
+    :module: pcbkit.cli
+    :command: datasheet_group
+    :prog_name: pcbkit datasheet
     :depth: 1
 
 ::: mkdocs-click

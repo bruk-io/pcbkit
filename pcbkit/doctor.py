@@ -9,9 +9,9 @@ Required (exit status 1 if one is missing): KiCad 10.0 or newer, kicad-cli, KiCa
 libraries, KiCad's Python importing pcbnew, Java 17 or newer, the Freerouting jar,
 rsvg-convert (finalize draws the assembly drawing with it, shots every PNG) and uv.
 
-Optional: ngspice, which only checks that run SPICE need, and pcbnew in the Python that
-is running pcbkit, which only the tier 2 commands need (`pcbkit setup` makes a project
-environment where it works).
+Optional: ngspice, which only checks that run SPICE need; pdftotext, which only
+`pcbkit datasheet` needs; and pcbnew in the Python that is running pcbkit, which only
+the tier 2 commands need (`pcbkit setup` makes a project environment where it works).
 """
 
 from __future__ import annotations
@@ -56,6 +56,11 @@ FIXES: dict[str, dict[str, str]] = {
     "uv": {
         "macos": "brew install uv",
         "other": "curl -LsSf https://astral.sh/uv/install.sh | sh",
+    },
+    "pdftotext": {
+        "macos": "brew install poppler",
+        "linux": "sudo apt install poppler-utils",
+        "other": "install poppler (it provides pdftotext)",
     },
     "ngspice": {
         "macos": "brew install ngspice",
@@ -224,6 +229,15 @@ def diagnose() -> list[Check]:
             env.find_ngspice(),
             "ngspice",
             "only checks that run SPICE need it",
+            required=False,
+        )
+    )
+    checks.append(
+        _check_tool(
+            "pdftotext",
+            env.find_pdftotext(),
+            "pdftotext",
+            "only pcbkit datasheet reads PDFs",
             required=False,
         )
     )

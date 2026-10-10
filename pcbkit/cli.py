@@ -132,6 +132,142 @@ def setup_cmd() -> None:
     click.echo(bootstrap.format_next(result))
 
 
+@cli.group("datasheet", cls=_WorkflowGroup)
+def datasheet_group() -> None:
+    """Find a part's datasheet, check it is the part's, and record it.
+
+    `find` tries Mouser (with MOUSER_API_KEY) and KiCad's stock symbols and judges
+    each PDF by its own text; `confirm` settles a candidate with a page and a quote.
+    Each part's answer goes to parts/<part>.datasheet.json, in the board project when
+    run inside one. `find` exits 3 when a part is not verified or confirmed. Runs
+    anywhere; needs pdftotext.
+    """
+
+
+@datasheet_group.command("find")
+@click.argument("mpns", nargs=-1, required=True, metavar="PART_NUMBER...")
+@click.option("--url", help="Judge this datasheet link only (one part number).")
+@click.option("--maker", help="The manufacturer, when Mouser does not know the part.")
+@click.option(
+    "--built",
+    is_flag=True,
+    help="The part number is built from a series code (resistors, capacitors...).",
+)
+@click.option(
+    "--replace",
+    is_flag=True,
+    help="Write this run's answer even over a better record.",
+)
+@click.option(
+    "--into",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="The folder for the records [default: the project's parts/].",
+)
+def datasheet_find_cmd(
+    mpns: tuple[str, ...],
+    url: str | None,
+    maker: str | None,
+    built: bool,
+    replace: bool,
+    into: Path | None,
+) -> None:
+    """Find each part's datasheet, judge it, and record the answer.
+
+    A datasheet is VERIFIED when its text holds the part's whole orderable number and
+    its maker's name. Anything less is a CANDIDATE, with a reason and the next step to
+    take, or NOT FOUND. Mouser is asked ten part numbers at a time and its answers are
+    cached, as are the PDFs, so running it again is cheap. A run that finds less than
+    the record already holds (no key, offline) leaves the record as it is.
+    """
+    from pcbkit import datasheet_find as finding
+
+    if url and len(mpns) > 1:
+        raise click.UsageError("--url judges one part's datasheet: give one number")
+    if maker and len(mpns) > 1:
+        raise click.UsageError("--maker names one part's maker: give one number")
+    if url and not finding.normal_link(url):
+        raise click.UsageError(f"--url takes an http or https link, not {url!r}")
+    folder = into or finding.default_folder()
+    olds = {mpn: finding.read_record(folder, mpn) for mpn in mpns}
+    maker_from = "--maker"
+    if url and not maker and (olds[mpns[0]] or {}).get("manufacturer"):
+        maker, maker_from = olds[mpns[0]]["manufacturer"], "the earlier record"
+    index = None if url else finding.symbol_index(click.echo)
+    notes: list[str] = []
+    matches: dict[str, list[dict[str, object]]] = {}
+    asked: set[str] = set()
+    if not (url and maker):
+        matches, asked = finding.mouser_parts(list(mpns), notes.append)
+    unverified = 0
+    for number, mpn in enumerate(mpns):
+        old = olds[mpn]
+        record = finding.find(
+            mpn,
+            url=finding.normal_link(url) if url else None,
+            maker=maker,
+            built=built,
+            matches=matches.get(mpn, []),
+            index=index,
+            notes=notes,
+            mouser_asked=mpn in asked,
+            maker_from=maker_from,
+        )
+        dropped = finding.keep_confirmation(old, record)
+        if dropped:
+            record["notes"].append(dropped)
+        path = finding.record_path(folder, mpn)
+        if old is not None and not replace and not finding.supersedes(old, record):
+            found = record["status"]
+            if record["chosen"] is not None and record["status"] == "CANDIDATE":
+                found += (
+                    f" ({record['candidates'][record['chosen']]['verdict']['reason']})"
+                )
+            shown = dict(
+                old,
+                notes=[
+                    *record["notes"],
+                    f"kept: this run found only {found}; --replace writes it",
+                ],
+            )
+            click.echo(("\n" if number else "") + finding.describe(shown, path))
+            record = old
+        else:
+            finding.write_record(folder, record)
+            click.echo(("\n" if number else "") + finding.describe(record, path))
+        unverified += record["status"] not in ("VERIFIED", finding.CONFIRMED)
+    if unverified:
+        click.get_current_context().exit(finding.NOT_VERIFIED)
+
+
+@datasheet_group.command("confirm")
+@click.argument("mpn", metavar="PART_NUMBER")
+@click.option(
+    "--page",
+    type=int,
+    required=True,
+    help="The page of the PDF, counted from 1 in the file's own order.",
+)
+@click.option("--quote", required=True, help="Text copied from that page.")
+@click.option(
+    "--into",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="The folder for the records [default: the project's parts/].",
+)
+def datasheet_confirm_cmd(mpn: str, page: int, quote: str, into: Path | None) -> None:
+    """Confirm a candidate datasheet with a page and a quote from it.
+
+    Only a candidate the text check could not settle can be confirmed: a part number
+    built from a series code (quote the series code where the datasheet explains it),
+    or a maker the text does not name (quote the whole part number). The PDF is judged
+    again and the quote must be on that page.
+    """
+    from pcbkit import datasheet_find as finding
+
+    folder = into or finding.default_folder()
+    record = finding.confirm(folder, mpn, page, quote)
+    click.echo(finding.describe(record, finding.record_path(folder, mpn)))
+
+
 @cli.command("sch")
 def sch_cmd() -> None:
     """Generate the schematic, run ERC and export the netlist.

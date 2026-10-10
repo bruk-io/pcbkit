@@ -1,0 +1,158 @@
+{
+ "Errors": [],
+ "SearchResults": {
+  "NumberOfResult": 1,
+  "Parts": [
+   {
+    "DataSheetUrl": "",
+    "Description": "Current & Power Monitors & Regulators Hi-Side Msmt Bi-Dir Current/Pwr Mon A 59 A 595-INA226AIDGST",
+    "FactoryStock": "0",
+    "ImagePath": "https://www.mouser.com/images/texasinstruments/images/ITP_TI_MSOP-10_DGS_t.jpg",
+    "Category": "Current & Power Monitors & Regulators",
+    "LeadTime": "140 Days",
+    "LifecycleStatus": null,
+    "Manufacturer": "Texas Instruments",
+    "ManufacturerPartNumber": "INA226AIDGSR",
+    "Min": "1",
+    "Mult": "1",
+    "MouserPartNumber": "595-INA226AIDGSR",
+    "ProductAttributes": [
+     {
+      "AttributeName": "Packaging",
+      "AttributeValue": "Reel"
+     },
+     {
+      "AttributeName": "Packaging",
+      "AttributeValue": "Cut Tape"
+     },
+     {
+      "AttributeName": "Packaging",
+      "AttributeValue": "MouseReel",
+      "AttributeCost": "$8.50 MouseReel\u2122 fee will be added and calculated in your shopping cart. All MouseReel\u2122 orders are non-cancellable and non-returnable."
+     },
+     {
+      "AttributeName": "Standard Pack Qty",
+      "AttributeValue": "2500"
+     }
+    ],
+    "PriceBreaks": [
+     {
+      "Quantity": 1,
+      "Price": "$3.96",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 10,
+      "Price": "$2.94",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 25,
+      "Price": "$2.69",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 100,
+      "Price": "$2.40",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 250,
+      "Price": "$2.28",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 500,
+      "Price": "$2.20",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 1000,
+      "Price": "$2.10",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 2500,
+      "Price": "$2.07",
+      "Currency": "CAD"
+     },
+     {
+      "Quantity": 5000,
+      "Price": "$2.02",
+      "Currency": "CAD"
+     }
+    ],
+    "AlternatePackagings": [
+     {
+      "APMfrPN": "INA226AIDGST"
+     }
+    ],
+    "ProductDetailUrl": "https://www.mouser.ca/en/ProductDetail/Texas-Instruments/INA226AIDGSR?qs=tQG3bEuiOZD4quG3egR36g%3D%3D",
+    "Reeling": true,
+    "ROHSStatus": "RoHS Compliant",
+    "SuggestedReplacement": "595-INA226AIDGST",
+    "MultiSimBlue": 0,
+    "UnitWeightKg": {
+     "UnitWeight": 3.31e-05
+    },
+    "AvailabilityInStock": "0",
+    "AvailabilityOnOrder": [
+     {
+      "Quantity": 78272,
+      "Date": "2026-11-26T00:00:00"
+     },
+     {
+      "Quantity": 30000,
+      "Date": "2026-12-24T00:00:00"
+     }
+    ],
+    "InfoMessages": [],
+    "SurchargeMessages": null,
+    "ProductCompliance": [
+     {
+      "ComplianceName": "CAHTS",
+      "ComplianceValue": "8542390000"
+     },
+     {
+      "ComplianceName": "CNHTS",
+      "ComplianceValue": "8542399000"
+     },
+     {
+      "ComplianceName": "USHTS",
+      "ComplianceValue": "8542390090"
+     },
+     {
+      "ComplianceName": "JPHTS",
+      "ComplianceValue": "854239099"
+     },
+     {
+      "ComplianceName": "TARIC",
+      "ComplianceValue": "8542399000"
+     },
+     {
+      "ComplianceName": "MXHTS",
+      "ComplianceValue": "8542399999"
+     },
+     {
+      "ComplianceName": "ECCN",
+      "ComplianceValue": "EAR99"
+     }
+    ],
+    "TradeCompliance": [
+     {
+      "ComplianceName": "Country of Origin",
+      "ComplianceValue": "Malaysia"
+     },
+     {
+      "ComplianceName": "Assembly Country of Origin",
+      "ComplianceValue": "Malaysia"
+     },
+     {
+      "ComplianceName": "Country of Diffusion",
+      "ComplianceValue": null
+     }
+    ]
+   }
+  ]
+ }
+}

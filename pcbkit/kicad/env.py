@@ -407,6 +407,11 @@ def find_rsvg_convert() -> Tool | None:
     return _find_tool("rsvg-convert", ["--version"], r"version (\S+)")
 
 
+def find_pdftotext() -> Tool | None:
+    """Return pdftotext (poppler) from PATH."""
+    return _find_tool("pdftotext", ["-v"], r"version (\S+)")
+
+
 def find_uv() -> Tool | None:
     """Return uv from PATH."""
     return _find_tool("uv", ["--version"], r"uv (\S+)")

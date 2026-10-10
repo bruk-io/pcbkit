@@ -111,6 +111,36 @@ def test_the_block_names_the_file_and_what_to_change_instead(project: Path) -> N
     assert "pcbkit build" in message
 
 
+@pytest.mark.parametrize("tool", ["Edit", "Write"])
+@pytest.mark.parametrize(
+    "relative", ["parts/INA226AIDGSR.datasheet.json", "elsewhere/ABC.DATASHEET.JSON"]
+)
+def test_a_datasheet_record_is_blocked_and_confirm_is_named(
+    project: Path, tmp_path: Path, tool: str, relative: str
+) -> None:
+    """Block a record in a project or out of one; point at find and confirm."""
+    for root in (project, tmp_path / "no-project"):
+        done = run_guard(edit(root / relative, tool), root.parent)
+        assert done.returncode == 2, stderr(done)
+        assert "pcbkit datasheet confirm" in stderr(done)
+
+
+def test_a_link_to_a_datasheet_record_is_blocked(project: Path) -> None:
+    """Block an edit through a link whose own name hides the record."""
+    record = project / "parts" / "INA226AIDGSR.datasheet.json"
+    record.parent.mkdir()
+    record.write_text("{}")
+    link = project / "notes.json"
+    link.symlink_to(record)
+    assert run_guard(edit(link), project).returncode == 2
+
+
+def test_other_json_in_parts_is_allowed(project: Path) -> None:
+    """Leave other files in parts/ alone."""
+    done = run_guard(edit(project / "parts" / "INA226AIDGSR.json"), project)
+    assert done.returncode == 0, stderr(done)
+
+
 def test_a_new_file_in_a_new_subfolder_is_blocked(project: Path) -> None:
     """Write can create folders: the guard cannot rely on the file existing."""
     done = run_guard(
@@ -408,3 +438,18 @@ def test_the_script_imports_only_the_standard_library() -> None:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     assert imported <= {"__future__", "json", "os", "sys"}, imported
+
+
+def test_the_guard_knows_the_record_name_pcbkit_writes() -> None:
+    """Keep the guard's record suffix in step with pcbkit's, which it cannot import."""
+    from pcbkit import datasheet_find
+
+    tree = ast.parse(HOOK.read_text(encoding="utf-8"))
+    values = {
+        node.targets[0].id: node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and isinstance(node.value, ast.Constant)
+    }
+    assert values["RECORD_SUFFIX"] == datasheet_find.RECORD_SUFFIX

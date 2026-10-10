@@ -90,6 +90,15 @@ pcbkit/fab/           export (export_fab), bom (grouping, CSV/XLSX, the project'
                       renders), pcbway (file names, the 600-character notes, the quote)
 pcbkit/compare.py     copper, track, via and zone-fill comparison of two boards
 pcbkit/shots.py       SVG crops, PNGs and 3D renders (kicad-cli + rsvg-convert, no pcbnew)
+pcbkit/mouser.py      a plain Mouser Search API client; imports nothing from pcbkit (a test
+                      holds it to that)
+pcbkit/cache.py       ~/.cache/pcbkit: fetched answers with their date; the reader picks the age
+pcbkit/parts.py       Mouser's answers through the cache
+pcbkit/datasheets.py  judge: is this PDF the part's (whole number + maker), and confirmations
+pcbkit/datasheet_find.py  `pcbkit datasheet find`/`confirm`: sources, PDF cache, KiCad symbol
+                      index, records in parts/<part>.datasheet.json
+tools/datasheet_sources/  measurements of datasheet sources (parts.csv, measure.py, rejudge.py)
+plans/                work package plans (wp14-parts.md: datasheets and part files)
 docs/                 project-interface.md
 tests/unit/           one module each, nothing real touched; the fake machine is automatic
 tests/integration/    several modules together; the tests marked kicad need real KiCad
@@ -162,7 +171,9 @@ is meant to change.
 - Generated files in a board project (`kicad/`, `out/`, `golden/`, `fab/`) are never
   hand-edited.
 - Examples in docs and tests are generic (`my-board`, plain part references). Never paste
-  in content from a real board.
+  in content from a real board. Real part numbers and datasheet facts are public and
+  fine (`tools/datasheet_sources/parts.csv`, a test's datasheet text); a real board's
+  parts list, values or design choices are not.
 - Canadian/British spelling and plain hyphens (no em dashes) in prose.
 - One branch per work package, `wp<N>-<slug>`, small commits. Don't push or publish
   without the owner's say-so.

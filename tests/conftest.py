@@ -22,7 +22,13 @@ def machine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeMachine:
     """
     fake = FakeMachine(root=tmp_path / "machine")
     fake.home.mkdir(parents=True)
-    for name in ("KICAD_SHARE", "FREEROUTING_JAR", "JAVA_HOME"):
+    for name in (
+        "KICAD_SHARE",
+        "FREEROUTING_JAR",
+        "JAVA_HOME",
+        "MOUSER_API_KEY",
+        "XDG_CACHE_HOME",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(fake.home))
     monkeypatch.setattr(env, "MAC_APP", fake.mac_app)
