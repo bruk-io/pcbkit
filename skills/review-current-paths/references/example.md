@@ -1,7 +1,7 @@
 # Worked example: my-board
 
 A generic two-layer board, made up to show the review. 60 x 40 mm. 24 V comes in on J1
-at the left edge. U2, a 500 kHz buck with inductor L2, makes 5 V at up to 3 A. U4, a
+at the left edge. U2, a 1 MHz buck with inductor L2, makes 5 V at up to 3 A. U4, a
 motor driver on the right, draws up to 4 A peaks from 24 V through shunt R10, read by
 amplifier U7. A thermistor on J6 feeds an ADC pin of U1, a radio module whose antenna
 overhangs the top edge. Ground pours on both sides; stitching from `[stitch]`.
@@ -21,7 +21,7 @@ the victim that matters; motors may stall at 4 A for a second.
 |---|---|---|---|
 | J1 - R10 - U4 - motor | 4 A, stall | U4 GND pads, bottom pour, under U1's ADC corner, J1 pin 2 | Problem |
 | U2 hot loop: C20 - U2 - GND - C20 | 3 A switched, ns edges | C20 on top beside U2, via to the bottom pour, back up at U2 | Concern |
-| U2 switch node and L2 | 24 V swing at 500 kHz | capacitive: no conducted return | Measured by a check once `COUPLING` lists it |
+| U2 switch node and L2 | 24 V swing at 1 MHz | capacitive: no conducted return | Measured by a check once `COUPLING` lists it |
 | R10 sense pair - U7 | tens of mV full scale | differential, top | Measured by a check once `SENSE_LOOPS` lists it |
 | J6 thermistor - U1 ADC | slow, high impedance | bottom pour | Concern |
 
@@ -46,22 +46,35 @@ COUPLING = {
     "sensitive": {"adc": ["TEMP_SENSE"]},
     "aggressors": {
         "buck_sw": {"nets": ["SW"], "kind": "switch", "region": (8, 4, 22, 18)},
-        "motor": {"nets": ["VMOT", "MOT_A", "MOT_B"], "kind": "current",
-                  "region": (40, 5, 60, 35)},
+        "motor": {
+            "nets": ["VMOT", "MOT_A", "MOT_B"],
+            "kind": "current",
+            "region": (40, 5, 60, 35),
+        },
     },
     "filters": {"TEMP_SENSE": {"t_edge": 1e-6, "pin_ref": "U1", "max_mm": 3.0}},
 }
 SENSE_LOOPS = [
-    {"name": "motor shunt", "nets": ("SNS_P", "SNS_N"), "from_ref": "R10",
-     "to_ref": "U7", "to_pads": ("3", "4"), "max_mm2": 10.0},
+    {
+        "name": "motor shunt",
+        "nets": ("SNS_P", "SNS_N"),
+        "from_ref": "R10",
+        "to_ref": "U7",
+        "to_pads": ("3", "4"),
+        "max_mm2": 10.0,
+    },
 ]
 RESERVED_COPPER = [
     ("antenna_top", "top", 0, 0, 18, 6, []),
     ("antenna_bottom", "bottom", 0, 0, 18, 6, []),
 ]
 COPPER_SEGMENTS = [
-    {"name": "motor return", "net": "GND", "heating": False,
-     "terminals": [("U4", "9", 1.0), ("J1", "2", -1.0)]},
+    {
+        "name": "motor return",
+        "net": "GND",
+        "heating": False,
+        "terminals": [("U4", "9", 1.0), ("J1", "2", -1.0)],
+    },
 ]
 ```
 

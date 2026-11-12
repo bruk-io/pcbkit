@@ -36,7 +36,7 @@ not limits: a limit belongs in `specs.py`, with its source, where a check reads 
 **Return current follows inductance, not resistance, once edges are fast.** Below a few
 kHz it spreads by resistance. Above about 100 kHz, and for every fast edge, it crowds
 under the signal in the nearest reference, because that path encloses the least area.
-A converter at 500 kHz with nanosecond edges is firmly in the second regime.
+A converter switching at a few hundred kHz with nanosecond edges is firmly in the second regime.
 
 **A gap in the reference forces a detour.** A slot, a cut pour, or a row of close vias
 whose clearances merge into a slot, under a fast net sends the return around it. The
@@ -46,9 +46,9 @@ detour is a loop antenna and a shared path with whatever else crosses there.
 loop area times dI/dt, and a victim with a large loop picks up more.
 
 **Ground copper has resistance and inductance.** 1 oz (35 um) copper is about 0.5
-milliohm per square; a via is around 1 nH. So 8 A through 1 milliohm of shared ground is
-8 mV of ground shift, large next to an ADC step or a sense signal of tens of millivolts;
-and 8 A switched in 5 ns through 1 nH is a 1.6 V spike, which is why a hot loop stays on
+milliohm per square; a via is around 1 nH. So 5 A through 1 milliohm of shared ground is
+5 mV of ground shift, large next to an ADC step or a sense signal of tens of millivolts;
+and 5 A switched in 5 ns through 1 nH is a 1 V spike, which is why a hot loop stays on
 one side with the input capacitor tight to the switch pins.
 
 **Switch nodes couple capacitively; inductors couple magnetically.** A switch node swings

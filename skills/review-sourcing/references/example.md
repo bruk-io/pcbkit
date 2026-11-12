@@ -13,7 +13,7 @@ counted again; the review starts from it.
 
 ## Recognise deliberate consolidation
 
-U2 and U5 are the same buck regulator in a 3 x 3 mm leadless package, one making 12 V and
+U2 and U5 are the same buck regulator in a small leadless package, one making 12 V and
 one 5 V, with the same inductor part number. The 5 V rail could use a smaller, cheaper
 part.
 

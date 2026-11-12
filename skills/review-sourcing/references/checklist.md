@@ -75,7 +75,7 @@ Read the assembler's current pricing and capability pages for each of these, and
 
 Connector families have many near-identical part numbers. Confirm, for each connector line, against the manufacturer datasheet:
 
-- Entry: top (vertical) or side (right-angle). JST uses the part-number prefix for this in several families (for example a leading `S` for side entry and `B` for top entry in the PH and SH ranges); check the family's ordering-code table rather than relying on the pattern.
+- Entry: top (vertical) or side (right-angle). JST uses the part-number prefix for this in several families (for example a leading `S` for side entry and `B` for top entry in some of its ranges); check the family's ordering-code table rather than relying on the pattern.
 - Mount: SMD or through-hole, and whether SMD versions have solder tabs that need their own pads.
 - Pin count and pitch match the footprint and the mating housing.
 - Locating bosses or pegs and whether the footprint has the holes.

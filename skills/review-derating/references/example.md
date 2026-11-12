@@ -1,7 +1,7 @@
 # Worked examples: my-board
 
 A generic board, made up to show the reasoning: a 24 V input (20 to 28 V) through a
-10 A fuse F1, four DC gear motors on four 2-pin headers, a buck making 12 V, a buck
+6 A fuse F1, four DC gear motors on four 2-pin headers, a buck making 12 V, a buck
 making 5 V for an off-board display, and a 3.3 V logic rail. Numbers marked
 illustrative show the arithmetic and are not to be reused.
 
@@ -19,18 +19,18 @@ illustrative show the arithmetic and are not to be reused.
 
 ## 2. Motor stall on 2.54 mm headers
 
-- **Stress:** stall assumed at 2.5 A per motor against header pins rated about 3 A: 83 %,
-  over the 80 % target, `MARGINAL`, and the figure is `assumed`.
+- **Stress:** stall assumed at 1.8 A per motor against header contacts rated about
+  2.2 A: 82 %, over the 80 % target, `MARGINAL`, and the figure is `assumed`.
 - **The finding is the assumption.** Stall current scales with the voltage across the
   winding: measure it at the rail's highest voltage, shaft locked, on a current-limited
   bench supply, for a second or two.
 - **Fix limits:** the motor's own plug and lead are the same class of contact, so a
   better board-side header helps only if the plug changes too.
 
-## 3. Four motors behind one 10 A fuse
+## 3. Four motors behind one 6 A fuse
 
-- **Budget:** 4 x 2.5 A stall = 10 A behind a fuse that should carry no more than about
-  75 % of 10 A after rerating.
+- **Budget:** 4 x 1.8 A stall = 7.2 A behind a fuse that should carry no more than about
+  75 % of 6 A, 4.5 A, after rerating.
 - **Is simultaneous stall credible?** A jammed mechanism or a start from rest loads
   several motors at once. Nobody has said how many can stall together: `UNSTATED`, and
   the first finding. Decide it and write down who decided (firmware limit, staggered
@@ -74,7 +74,7 @@ def divider_high(nl):
 
 
 SUPPLY_LIMITS = [
-    ("motors stalling together (A)", 4 * 2.5, "<=", 0.75 * 10),  # F1 rerating 75 %
+    ("motors stalling together (A)", 4 * 1.8, "<=", 0.75 * 6),  # F1 rerating 75 %
     divider_high,
 ]
 ```

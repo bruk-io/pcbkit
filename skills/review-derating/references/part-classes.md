@@ -4,7 +4,7 @@ House targets below are starting defaults. Where the user has set a different ta
 
 ## Ceramic capacitors (MLCC)
 
-- **DC bias.** Class II dielectrics (X5R, X7R, X6S) lose capacitance with applied DC voltage. Smaller cases and higher capacitance per volume lose more. A 22uF 25V part at 12V can deliver well under half its nominal; at 16.8V less again.
+- **DC bias.** Class II dielectrics (X5R, X7R, X6S) lose capacitance with applied DC voltage. Smaller cases and higher capacitance per volume lose more. A 10uF 25V part at 12V can deliver well under half its nominal; at 20V less again.
 - **Temperature.** The code gives the band: X7R and X5R allow +/-15% over their range (-55 to +125 C and -55 to +85 C). Y5V and Z5U allow far more loss; treat them as unfit for regulator duty. C0G is flat but rarely available above a few nF in small cases.
 - **AC ripple and ageing** reduce it further; ageing is a few percent per decade-hour for class II.
 - **Look up:** the exact part number in the manufacturer's simulation tool (Murata SimSurfing, TDK SEAT, Samsung Electro-Mechanics' characterisation tool, KEMET K-SIM) at the worst-case DC voltage and hottest ambient. Record the tool and operating point in the table. If the BOM gives only a generic value, the finding is "part not specified tightly enough to derate".
