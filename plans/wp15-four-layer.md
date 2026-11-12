@@ -358,14 +358,19 @@ changed stops and asks.
   - `pcbkit/stackup.py` (new).
   - `pcbkit/place.py` and `pcbkit/route/pre.py`: only the one-line guard call at the top
     of `place_board` and `pre`.
-  - `docs/project-interface.md`: the `[stackup]` rows and example only.
-  - `tests/unit/test_project.py`, `tests/unit/test_docs.py` (`TYPE_WORDS`),
+  - `docs/project-interface.md`: the `[stackup]` rows, and a second, four-layer
+    `[stackup]` example below the unchanged two-layer one.
+  - `tests/unit/test_project.py`, `tests/unit/test_docs.py` (`TYPE_WORDS`, and the example test: see below),
     `tests/unit/test_stackup.py` (new).
   - `skills/new-board/SKILL.md:28`, with its interim line, "Four-layer boards are in
     progress (WP15); build two-layer boards for now."
   - `tests/unit/test_plugin.py:1259-1261`.
 - **Must not touch:** `kicad/board.py`, `route/*` apart from the guard line, `check/*`,
   `fab/*`, fixtures.
+- **Review follow-up (owner-authorised):** `test_the_example_pcbkit_toml_files_are_valid_and_complete` (renamed from `..._toml_is_valid_...`)
+  in `tests/unit/test_docs.py` is changed beyond `TYPE_WORDS`: each example must parse (the
+  four-layer one borrows `[board]` from the first) and together they show every schema
+  key. The first example stays the two-layer one main had.
 - **Acceptance:**
   - A two-layer `pcbkit.toml` gives a `Config` equal to main's.
   - The old row `("stackup","layers",4,...)` is replaced by `layers = 3` with "must be 2

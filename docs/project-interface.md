@@ -58,15 +58,9 @@ rev = "A"                    # shown in the title block
 fab_name = "My_Board_revA"   # prefix of the files written for the fab house
 
 [stackup]
-layers = 4                   # 2 or 4; the three keys below are for four layers only
+layers = 2
 thickness_mm = 1.6
-copper_mm = 0.035            # outer copper; 1 oz; 2 oz is 0.070
-inner_copper_mm = 0.035      # inner copper
-prepreg_mm = 0.2             # outer copper to the next inner layer
-inner = [
-  { role = "plane", net = "GND" },   # In1.Cu
-  { role = "split" },                # In2.Cu: routing.py's planes hook draws it
-]
+copper_mm = 0.035            # 1 oz; 2 oz is 0.070
 
 [route]
 freerouting_passes = 40
@@ -84,6 +78,22 @@ profile = "pcbway"
 
 [checks]
 groups = ["kicad", "outputs", "fab"]
+```
+
+A four-layer board sets the extra `[stackup]` keys below. `pcbkit build` and `pcbkit route`
+stop a four-layer project for now (WP15), so this is the shape the file will take:
+
+```toml
+[stackup]
+layers = 4                   # 2 or 4; the three keys below are for four layers only
+thickness_mm = 1.6
+copper_mm = 0.035            # outer copper; 1 oz; 2 oz is 0.070
+inner_copper_mm = 0.035      # inner copper
+prepreg_mm = 0.2             # outer copper to the next inner layer
+inner = [
+  { role = "plane", net = "GND" },   # In1.Cu
+  { role = "split" },                # In2.Cu: routing.py's planes hook draws it
+]
 ```
 
 Only `[board]` is required, and every key in it is. Leave out any other table or key and

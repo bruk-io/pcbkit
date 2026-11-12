@@ -122,12 +122,28 @@ def test_each_schema_row_states_the_right_type_and_default(
         assert cells[2] == f"`{toml_text(rule.default)}`", (section, key)
 
 
-def test_the_example_pcbkit_toml_is_valid_and_complete() -> None:
-    """Parse the example in the docs, and make sure it shows every key."""
-    example = tomllib.loads(code_blocks("toml")[0])
-    config = parse_config(example, source="docs/project-interface.md")
+def test_the_example_pcbkit_toml_files_are_valid_and_complete() -> None:
+    """Parse each example in the docs, and make sure together they show every key.
+
+    The first is a whole two-layer file; the second is the four-layer ``[stackup]``
+    table and borrows ``[board]`` from the first.
+    """
+    two_layer = tomllib.loads(code_blocks("toml")[0])
+    four_layer = tomllib.loads(code_blocks("toml")[1])
+    config = parse_config(two_layer, source="docs/project-interface.md")
     assert config.board.stem == "my_board"
-    shown = {f"{table}.{key}" for table, keys in example.items() for key in keys}
+    assert config.stackup.layers == 2
+    four = parse_config(
+        {"board": two_layer["board"], **four_layer}, source="docs/project-interface.md"
+    )
+    assert four.stackup.layers == 4
+    assert set(four_layer) == {"stackup"}
+    shown = {
+        f"{table}.{key}"
+        for example in (two_layer, four_layer)
+        for table, keys in example.items()
+        for key in keys
+    }
     assert shown == set(schema_rows())
 
 
