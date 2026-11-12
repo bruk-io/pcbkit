@@ -189,7 +189,7 @@ def test_two_keys_that_read_as_one_pad_are_an_error() -> None:
 
 def test_a_wrong_length_row_is_one_error_for_the_row_at_its_path() -> None:
     """Report the pins row of the plan's example, path and all."""
-    shape = tables.PROPOSED["FAULT_STATES"]
+    shape = tables.registry()["FAULT_STATES"]
     value = {
         "logic_absent": {
             "scenario": {"vin": 5.0},

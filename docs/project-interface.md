@@ -963,13 +963,14 @@ before it fails. A pad the schematic leaves unwired (KiCad's `unconnected-(...)`
 none) is `None`.
 
 **`power`** (opt-in, like `ports`: a board that has not listed it is untouched; once it is
-on, a missing table fails by name and `{}` says "none here"). It runs on the netlist, at
-the `sch` gate:
+on, a missing table fails by name and `{}` says "none here"). It runs on the netlist,
+and on `circuits.scenario` for the fault states, at the `sch` gate:
 
 | Name | Shape | Holds |
 |---|---|---|
 | `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `DNI`, `NF`, `NP`, `NC`, `NM`, `NL`, `NOPOP`, in any case: the footprint is there to fit at bring-up), or a two-pad jumper: a part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one), or any two-pad part with reference letters `JP`, such as a header with a shunt. It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
 | `SUPPLY_NETS` | `[supply or ground net]` | The supply and ground nets, by name as the netlist writes them (no leading slash). The enable-link walk never crosses one, nor the ground net (`GROUND_NET`, or `"GND"` when that is not defined and the design has a `GND` net), so a pull-up or pull-down through a resistor is fine. pcbkit does not guess supplies from net or pin names: a supply you leave out is walked like a signal. List only real rails: a signal listed here hides every path through it, so a real bridge between two enables can pass. Each net must be in the design. Needed whenever `power` is on (`[]` says none). |
+| `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | The level each listed pin must hold in a fault condition ("controller absent", "input supply off"). `scenario` is the keyword arguments of `circuits.scenario` that make the condition: what the scenario fixes is driven, what it leaves free is not, so "controller absent, so +5V is off" is written into the scenario by hand (`circuit.fix("+5V", 0)`). The window is the datasheet's (an enable's VIL for "off": `(0, 0.4)`). Pads are pad numbers as the netlist writes them, never pin names. `{}` says there is no fault state to check. |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
 looks at the whole table) fails naming each regulator whose enable pad is wired straight
@@ -1062,6 +1063,60 @@ It records `enable links`,
 `{net: {ref: link ref or None}}`, before it fails (a regulator listed on two pads is
 keyed `"U3 pad 4"`).
 
+`test_fault_state_pins[condition]` (one per key of `FAULT_STATES`) builds
+`circuits.scenario(nl, **scenario)`, solves it, and fails for each listed pin that:
+
+- is not on a net (a reference that is not in the design, or a pad the netlist does not
+  list: the message gives the pads it has);
+- is *floating*: no resistor, diode or FET the circuit holds joins its net to a net the
+  scenario fixes (a diode or FET counts only where it conducts in the solution). The DC
+  solver ties every net to ground through 1 nS, so a floating net reads 0.0 V, inside an
+  "off" window such as `(0, 0.4)`; the check never trusts that reading, and a floating
+  pin fails whatever its window says. A pin with nothing on its net but parts the model
+  leaves out (an IC pin, a capacitor, a `Device:D`) is floating, and the message names
+  those parts;
+- cannot be judged because the model leaves something out. The nets that set a pin's
+  level are its own net and every net reached from it through any element of the circuit
+  (every resistor, diode and FET terminal, conducting or not), stopping at the nets the
+  scenario fixes. Every pad on those nets must belong to a part the circuit holds an
+  element for on the net of every pad it has (an element whose ref is the part's reference, or the
+  reference and a dot: `dc.build` names pack elements `RN1.1` and body diodes `Q1.body`),
+  be a capacitor from
+  KiCad's `Device` library (`C`, `C_Small`, `C_Polarized`, `CP` and their `_Small` and
+  `_US` forms: open at DC), or be listed in the same condition's pins (a listed pad is
+  taken to draw no current; its own level is judged). Anything else, an IC pin, a
+  connector pad, a `Device:D`, a Zener, a generic FET or BJT, a `Device:R_Small` (only
+  the symbols `dc.build` names are built), a capacitor from another library, fails by
+  name. The way out the message gives: model the part in `circuits.scenario` with its
+  reference as the element's ref (`circuit.D("SIG", "EN", 0.7, ref="D2")`), fix the net
+  it drives, or, for a pad that draws no current in the condition (an absent
+  controller's pin), list it in the condition's pins with its own window. A part the
+  scenario models on some of its pads but not all (one diode of a pair) has the pads it
+  leaves out named, wherever they are, since current can come in through them;
+- is outside its window;
+- reads its level only because of the 1 nS leak: the level moves by more than 50 mV
+  when the leak is made 1000 times smaller, which happens when the pin is held through
+  about a gigaohm or more.
+
+A scenario that raises fails naming the condition and what it raised; a solve that does
+not converge fails with "the DC solve did not converge in condition X". It records
+`pins`, `{"U2 pad 5": [V, min, max, state]}` with state `driven`, `floating`, `no net`
+or `unsolved` (V is null without a net or a solution), and `not modelled`, `{"U2 pad 5":
+["U1 pad 3 (lib:part) on EN"]}`, when the model leaves out a pad on a pin's nets, before
+it fails.
+
+What it proves, and what it does not. It proves that, in the circuit the scenario
+describes, each listed pin is joined through modelled parts to a net the scenario fixes,
+that nothing the solver does not model sits on the nets that set its level, and that the
+level is inside the window. The scenario is the whole truth: a net the scenario fixes is
+taken at that voltage whatever really drives it, and a net it leaves free is undriven.
+There are no ICs in the model: no regulator turns its output off when its enable drops,
+no internal pull-up or pull-down, no ESD diode, no input leakage, no Zener breakdown, no
+BJT, and a current source the scenario injects (`Circuit.inject`) is not a drive, so a
+pin held only by one fails as floating. Consequences are not chased: "enable low, so the
+output is off, so the next enable is low" must be written into the scenario as fixed
+nets. A listed pad is taken at its word to draw nothing.
+
 **`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
 name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the
 `sch` gate:
@@ -1116,7 +1171,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 
 | Name | Shape | Read by |
 |---|---|---|
-| `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | fault-state pins (`power`) |
 | `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count; the nets a path names should be members of `nets` (the check says so, this shape does not) |
 | `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": True or False, "rows": 1 or 2 (optional, default 1)}}` | mis-plug (`ports`) |
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |

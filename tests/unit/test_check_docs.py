@@ -78,6 +78,7 @@ def test_the_modules_are_found() -> None:
         "test_enable_links.py",
         "test_esp32s3.py",
         "test_fab.py",
+        "test_faults.py",
         "test_i2c_expected.py",
         "test_kicad.py",
         "test_outputs.py",
@@ -148,6 +149,7 @@ TABLE_GROUP = {
     "CAP_DERATE": "circuit",
     "PIN_NETS": "ports",
     "ENABLE_LINKS": "power",
+    "FAULT_STATES": "power",
     "SUPPLY_NETS": "power",
     "I2C_EXPECTED": "bringup",
 }

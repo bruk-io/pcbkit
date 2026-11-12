@@ -54,6 +54,8 @@ FROZEN = {
     "test_esp32s3::test_strapping_pins_at_reset": "sch",
     "test_esp32s3::test_no_esp32_gpio_above_abs_max": "sch",
     "test_esp32s3::test_esp32_gpio_source_current": "sch",
+    # test_faults
+    "test_faults::test_fault_state_pins": "sch",
     # test_fab
     "test_fab::test_annular_rings_and_drills_meet_pcbway": "route",
     "test_fab::test_design_rules_cover_fab_limits": "route",
@@ -151,7 +153,7 @@ def test_the_gate_the_rule_gives_is_the_frozen_one(key: str) -> None:
 def test_the_gates_have_the_counts_the_design_gives() -> None:
     """Count the checks at each gate, so a bulk change cannot pass quietly."""
     counts = {gate: list(FROZEN.values()).count(gate) for gate in GATES}
-    assert counts == {"sch": 21, "place": 2, "route": 15, "order": 6}
+    assert counts == {"sch": 22, "place": 2, "route": 15, "order": 6}
 
 
 def test_the_exceptions_are_real_checks_whose_gate_the_fixtures_get_wrong() -> None:
