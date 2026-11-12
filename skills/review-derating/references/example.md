@@ -1,85 +1,86 @@
 # Worked examples: my-board
 
-A generic LED lighting driver, made up to show the reasoning: a 36 V input (30 to 42 V)
-through a 5 A fuse F1 into three constant-current buck LED drivers, U3 to U5, one per
-channel at 1.5 A into a string of about 24 V; a buck making 3.3 V for the controller;
-the board sealed inside a luminaire housing. Numbers marked illustrative show the
-reasoning and are not to be reused. Every stress below came from a check's record or a
-solve of `circuits.scenario`, never from arithmetic in the conversation.
+A generic USB-C hot plate for reflowing small boards, made up to show the reasoning. U1,
+a USB-C power-delivery sink controller, asks the charger on J1 for 20 V at up to 5 A on
+`VBUS`. Q1, an N-channel FET, switches a heating element on J2 with slow PWM. U2, a
+linear regulator, makes 3.3 V from `VBUS` for U3, the controller, which reads a
+thermistor. The board sits in the plate's base, under the heated surface. Numbers marked
+illustrative show the reasoning and are not to be reused. Every stress and margin below
+came from a check's record or from `stress.py`; every derived limit is a function row.
 
-## 1. A common return through one contact
+## 1. The heater through a small header
 
-- **Draft:** the three strings share one return wire, which leaves through one contact
-  of a 4-pin 2.0 mm-pitch wire-to-board header rated about 2 A per contact; the three
-  channel outputs use the other three.
-- **Per contact:** the return carries all three channels, 4.5 A, through one contact
-  rated about 2 A: `FAIL`. Judged per connector ("4 pins at 2 A, 8 A") it looks fine,
-  which is the trap; the failure is a return contact that runs hot and loosens.
-- **Fix:** a connector whose return has as many contacts as the channels, or a
-  terminal block rated for the total per position, with the wire gauge its rating
-  assumes.
-- **Written:** a `CONTACT_RATINGS` row for the header with `GND` at 4.5 A and each
-  channel at 1.5 A (proposed table: `add-check` writes the check, which fails on the
-  draft).
+- **Draft:** the element plugs into J2, a 2-pin 2.54 mm wire-to-board header rated about
+  3 A per contact (illustrative; the datasheet's figure at the base's ambient).
+- **Per contact:** each of the two contacts carries the whole element current. A
+  resistive element draws more cold than hot: the function row of section 5 solves it
+  at about 6 A (illustrative), twice the contact rating. Judged by the running current
+  with the plate hot, it looks fine, which is the trap.
+- **Fix:** a connector rated for the cold current per contact, with the wire gauge its
+  rating assumes, or two contacts per side if the cable has both wired.
+- **Written:** a `CONTACT_RATINGS` row for J2 (proposed table: `add-check` writes the
+  check, with the per-net currents at the top of its module, sourced, until the table
+  says where they come from). It fails on the draft.
 
-## 2. Inductor saturation at the housing's temperature
+## 2. The FET against a hot-plug transient
 
-- **Stress:** peak inductor current is the 1.5 A load plus half the ripple at the
-  highest input, 0.3 A illustrative, so 1.8 A. The inductor's Isat at 100 C is 1.9 A
-  from its curve: 95 % of capability, `MARGINAL`.
-- **The finding is the assumption.** The ambient inside the sealed housing is
-  `assumed` at 60 C. Measure it: thermocouple on the inductor at full output for an
-  hour, housing closed.
-- **Written:** a `SUPPLY_LIMITS` row, U3's current limit against Isat at the hottest
-  ambient, with the curve and its operating point beside it.
+- **Stress:** plugging a charged USB-C cable into ceramic input capacitance rings well
+  above 20 V. With no measurement, the envelope takes the undamped case, about twice
+  the supply, as a `STRESS_SCENARIOS` row (`vbus: 40.0, transient: True`, illustrative).
+- **Result:** `stress.py` prints `Q1 vds` at 40 V against the 30 V rating in
+  `SEMI_VRATED`: verdict `FAIL`. Q1 is fine at 20 V; it is the transient that fails it.
+- **The finding is the assumption.** Measure the ring at J1 with the scope, or clamp it.
+- **Fix:** a TVS at J1 rated for the input, and a 60 V FET.
 
-## 3. Three channels behind one 5 A fuse
+## 3. Ceramics on a 20 V rail
 
-- **Budget:** at the lowest input, all three channels at full draw about 3.9 A from the
-  input (the solve at the `30 V, all channels on` scenario), against a fuse that should
-  carry no more than 75 % of 5 A, 3.75 A, after rerating.
-- **Is all-on credible?** Full white on every channel is the product's normal use, not
-  a fault. Nobody has said whether firmware caps the total: `UNSTATED`, and the first
-  finding. Decide it and write down who decided.
-- **Inrush:** illustrative: 42 V into 100 uF through 0.15 ohm in total gives
-  I2t = V2C / (2R), about 0.59 A2s; the real row is a `SUPPLY_LIMITS` function that
-  sums the capacitance after F1 from the netlist (not shown). Compare with the fuse's melting I2t after its
-  pulse derating factor: `LOOKUP` in the fuse datasheet.
-
-## 4. 4.7 uF 50 V ceramics on the 42 V input
-
-- **Stress:** `test_capacitor_voltage_derated` fails once the 42 V corner is in
-  `STRESS_SCENARIOS`: 84 % of 50 V, before any hot-plug ringing on long supply leads.
+- **Stress:** `test_capacitor_voltage_derated` fails once the transient row is in
+  `STRESS_SCENARIOS`; at the steady 20 V row `stress.py` shows the 25 V parts at exactly
+  the 80 % target, so the margin is gone even before any ringing.
 - **Real capacitance:** `LOOKUP`. Enter the exact part number in the maker's tool at
-  42 V and the hottest ambient; write no number until the tool gives one.
-- **Fix options:** 100 V parts in a larger case, and a bulk electrolytic at the input
-  whose ESR damps the ringing.
+  20 V and the hottest ambient; write no number until the tool gives one.
+- **Fix:** 50 V parts in a larger case, and a bulk electrolytic at J1 whose ESR damps
+  the ring.
 
-## 5. LED current set by a sense resistor
+## 4. A linear regulator in a hot base
 
-- **High end:** each driver sets its current as a sense threshold over a shunt. With a
-  3 % threshold and a 1 % shunt, the worst-case current sits above nominal; compare it
-  with the strip's maximum.
-- **Written:** a `SUPPLY_LIMITS` function row that reads the shunt from the netlist, so
-  a changed resistor is judged again:
+The base is `assumed` at 70 C. U2 drops 20 V to 3.3 V, so its dissipation depends on the
+controller's current, which comes from U3's datasheet, and its junction temperature on
+the package's thermal resistance. That is arithmetic, so it is a function row, its
+figures sourced beside it:
 
 ```python
-from pcbkit.check.netlist import parse_value
-
-
-def led_current_high(nl):
-    """Return channel 1's worst-case LED current against the strip's maximum."""
-    shunt = parse_value(nl.parts["R11"]["value"])
-    amps = 0.2 * 1.03 / (shunt * 0.99)  # U3 sense threshold 0.2 V +/-3 % (illustrative)
-    return ("channel 1 LED current, worst case high (A)", round(amps, 2), "<=", 1.8)
-
-
-SUPPLY_LIMITS = [
-    # 3.9 A: the solve at the 30 V all-on scenario; F1 rerated to 75 %
-    ("all channels on at 30 V, input current (A)", 3.9, "<=", 0.75 * 5),
-    led_current_high,
-]
+def u2_junction(nl):
+    """Return U2's junction temperature at the hottest base, against its limit."""
+    vin, vout = 20.0, 3.3  # envelope: VBUS high; U2's output
+    amps = 0.025  # U3 datasheet, typical active current (illustrative)
+    theta_ja = 160.0  # U2 datasheet, C/W in its package (illustrative)
+    t_j = 70.0 + (vin - vout) * amps * theta_ja
+    return ("U2 junction at 70 C ambient (C)", round(t_j, 1), "<=", 125.0)
 ```
 
-The first row fails until the all-on question is settled: that is the point. It stays
-red in `out/checks/results.json` until the design or a sourced decision changes it.
+`stress.py` reports the row's value and margin. The finding is the 70 C assumption:
+measure the base at full plate temperature before trusting the margin.
+
+## 5. The input current against the charger's contract
+
+The charger promises 5 A. The element's cold current at the top of the input range is
+a solve, not a number to copy, so the row solves it:
+
+```python
+def element_current_cold(nl):
+    """Return the element's current, cold, at 20 V, against the USB-C contract."""
+    import circuits
+
+    solved = circuits.scenario(nl, vbus=20.0, element="cold", duty=1.0).solve()
+    amps = solved.resistor_current("element")  # the off-board element the scenario adds
+    return ("element current, cold, 20 V (A)", round(amps, 2), "<=", 5.0)
+
+
+SUPPLY_LIMITS = [u2_junction, element_current_cold]
+```
+
+The second row fails on the draft: the element must be chosen for the contract, or the
+firmware must ramp the duty from cold, and the review says which, and who decided. It
+stays red in `out/checks/results.json` until the design or a sourced decision changes
+it.

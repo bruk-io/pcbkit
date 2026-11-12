@@ -22,7 +22,7 @@ and the over-temperature trip works with no firmware at all.
 
 ```python
 # Proposed tables: checks/test_fault_states.py and checks/test_power_paths.py
-# (from add-check) read them. U3 pin 3 is EN (net DRV_EN), pin 2 is IN (net
+# (from add-check) read them. U3 pad 3 is EN (net DRV_EN), pad 2 is IN (net
 # HEAT_PWM): below 0.8 V each reads low (U3 datasheet, input thresholds).
 FAULT_STATES = {
     "controller_in_reset": {
@@ -34,13 +34,25 @@ FAULT_STATES = {
         "pins": [("U3", "3", (0.0, 0.8)), ("U3", "2", (0.0, 0.8))],
     },
 }
-POWER_PATHS = [("VBUS", "+3V3", ("D1",)), ("VBUS", "VIN", ())]
+POWER_PATHS = {
+    "nets": ["VIN", "+12V", "+3V3", "VBUS"],
+    "paths": [
+        ("VIN", "+12V", ("U4",)),
+        ("VIN", "+3V3", ("U2",)),
+        ("VBUS", "+3V3", ("D1",)),
+    ],
+    # in pad to out pad for the regulators (datasheets); the rest pass no power
+    "parts": {"U4": [("1", "3")], "U2": [("2", "5")], "U1": [], "U3": [], "U5": []},
+}
 ```
 
 `scenario` in circuits.py gained the `u1_pins_floating` and `logic` keywords: the first
-leaves U1's pins unfixed with no pull, the second also sets `+3V3` to 0 V and adds U3's
+leaves U1's pins unfixed with no pull, the second also fixes `+3V3` at 0 V and adds U3's
 internal pull-up on `DRV_EN` to `+12V`. On the first draft both conditions fail on both
-pins: `DRV_EN` sits at the pull-up and `HEAT_PWM` floats. `POWER_PATHS` passes.
+pads. `DRV_EN` sits at the pull-up, outside its window. `HEAT_PWM` is floating: the
+solve alone reads it at 0.0 V, inside the window, and the check fails it as floating
+whatever the window, as the table's rule says. `POWER_PATHS` passes: nothing joins
+`VBUS` to `VIN`.
 
 ## State table, first draft
 
@@ -53,12 +65,13 @@ pins: `DRV_EN` sits at the pull-up and `HEAT_PWM` floats. `POWER_PATHS` passes.
 | 5. USB only | off [d] | works | on |
 | 8. Probe powered, board not | off | dead | undefined [e] |
 
-- [a] `test_fault_states`: `DRV_EN` at the pull-up and `HEAT_PWM` floating; the heater
-  follows whatever the gate driver's input floats to.
+- [a] `test_fault_states`: `DRV_EN` at the pull-up and `HEAT_PWM` floating (failed as
+  floating); the heater follows whatever the gate driver's input floats to.
 - [b] U5 runs from the rail whose loss it should cover: a judgement, not a solve.
 - [c] A hung CPU leaves the PWM peripheral running at its last duty; only U5 limits it.
-- [d] No 24 V, so no heater supply; `POWER_PATHS` confirms USB stops at `+3V3`.
-- [e] The probe drives U1's pins through their ESD diodes into `+3V3`.
+- [d] No 24 V, so no heater supply; `POWER_PATHS` shows USB reaches `+3V3` only.
+- [e] The probe drives U1's pins through their ESD diodes into `+3V3`: no check models
+  it, so the cell comes from U1's injection-current limit.
 
 ## Findings
 

@@ -25,20 +25,20 @@ ground pour on the other side.
 
 ## 1. Start from the checks that apply at this gate
 
-A placed board exists, so the netlist checks and the checks that need only part
-positions apply: the `circuit` and `esp32s3` groups, `test_erc_clean`,
-`test_decoupling_caps_are_close` and `test_power_footprints_match_datasheet` (`fab`),
-and `test_filter_caps_sit_by_the_adc_pin` (`copper`). Run exactly those:
+It needs the `kicad`, `circuit`, `fab` and `copper` groups (and `esp32s3` on a DevKit
+board): switch on in `[checks] groups` of pcbkit.toml any the first line says is off. A
+group just switched on fails by name each table it lacks. Run one selection, placed or routed:
 
 ```
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit fab copper
 .venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean or test_decoupling_caps_are_close or test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin"
+.venv/bin/pcbkit check -k "not test_outputs"
 ```
 
-Add `or test_<topic>` for a project check that needs no tracks (`PART_SPACING`, say).
-The rest of `copper`, DRC and `outputs` need a routed board or fab files: a check whose
-inputs do not exist yet is not a finding. A `-k` run leaves partial results; the order
-gate runs all. A gate option (WP17, --gate place) will replace this selection. After a
-route these measure what this review writes; never judge by eye what they measure:
+Placed: netlist and part-position checks, plus `or test_<topic>` for a project check
+that needs no tracks (`PART_SPACING`). Routed: every copper check too. Missing inputs
+are not findings; a `-k` run is partial, and the order gate runs all. Once routed these
+measure what this review writes; never judge by eye what they measure:
 
 | Question | Check (group) | Table |
 |---|---|---|
@@ -78,12 +78,13 @@ Ask for what is missing and say what it blocks; review the rest.
   `review-derating`.
 - `RESERVED_COPPER` for an antenna or a region under an inductor or a sensitive part,
   with the matching keep-out in routing.py; `[stitch] dense` boxes under converters.
-- `PART_SPACING` and `HOT_LOOPS`: proposed tables, which no built-in check reads yet;
-  shapes in "Proposed tables" in `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`.
-  Hand each to `add-check`.
+- `PART_SPACING`, `HOT_LOOPS` (the loop's pads in order around it) and
+  `REFERENCE_PLANES` (each fast net and the side its return runs on): proposed tables,
+  which no built-in check reads yet; shapes in "Proposed tables" in
+  `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`. Hand each to `add-check`.
 
-Run the selection again: decoupling and filter-capacitor distances are decided now; the
-copper checks decide the rest after the route.
+Run the selection again: decoupling and filter-capacitor distances are decided when
+placed; on a routed board the copper checks decide the rest now, and after every route.
 
 ## 4. Judge the placement
 
@@ -96,9 +97,8 @@ connector return contacts. A generic worked review, for the shape of the table a
 
 ## Lane and hand-offs
 
-Not this review: ratings and margins (`review-derating`), fault states
-(`walk-fault-states`), plugs (`review-misplug`). After routing, `review-board` looks at
-the copper itself, a fast track crossing a gap in its reference pour included.
+Not this review: ratings (`review-derating`), fault states (`walk-fault-states`), plugs
+(`review-misplug`). After routing, `review-board` looks at the copper itself.
 
 ## Output
 

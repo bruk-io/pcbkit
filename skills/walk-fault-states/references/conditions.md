@@ -38,9 +38,9 @@ that turns on timing or order stays judgement.
 - Rails: all present.
 - Controller: pins frozen at the last state written, or reset by a watchdog and back in
   row 3.
-- Trace: both outcomes. If an output stays on when firmware stops updating it, the
-  hardware has to remove it (a watchdog-driven enable, a pulse-required enable, the stop
-  loop). A PWM peripheral keeps running when the CPU hangs.
+- Trace: both outcomes. If an output stays on when firmware stops updating it, only
+  hardware can remove it (an external watchdog, a thermal cut-out, a current limit). A
+  PWM peripheral keeps running when the CPU hangs.
 
 ## 5. Powered from USB only
 
@@ -52,20 +52,21 @@ that turns on timing or order stays judgement.
 
 ## 6. Brownout during a load spike
 
-- Rails: the input sags under stall or inrush current; the logic rail may follow if it
-  shares the source.
+- Rails: the input sags under a load's start-up or inrush current; the logic rail may
+  follow if it shares the source.
 - Controller: may reset, run through a corrupt state, or land in row 3.
 - Trace: the order in which parts cross their thresholds as the rail falls and recovers.
   Does the logic reset before or after the enables lose their hold? What do the outputs
   do on the way back up: row 1 again, with the mechanism mid-motion?
 
-## 7. Stop input opened
+## 7. Safety input opened
 
-- Rails: all present, unless the stop cuts a rail directly.
-- Controller: running, possibly commanding motion.
-- Trace: whether the stop acts in hardware on the enable path or is only read by
-  firmware. A stop that only firmware reads is row 4 waiting to happen. Check that a
-  broken wire or an unplugged stop connector reads as open.
+- Rails: all present, unless the input cuts a rail directly.
+- Controller: running, possibly commanding the output.
+- Trace: whether the input (an interlock, a lid or door switch, a stop) acts in
+  hardware on the enable path or is only read by firmware. One that only firmware reads
+  is row 4 waiting to happen. Check that a broken wire or an unplugged connector reads
+  as open.
 
 ## 8. Another device powered while this board is not
 

@@ -2,8 +2,8 @@
 description: >-
   Walk a pcbkit board's circuit through every abnormal power and control condition
   (logic rail missing, controller in reset or its bootloader, firmware hung, USB-only
-  power, brownout, stop input open, back-feed from another powered device, supply pulled
-  under load, hot-plug) and state what every actuator output and rail enable does in
+  power, brownout, safety input open, back-feed from another powered device, supply
+  pulled under load, hot-plug) and state what every actuator output and rail enable does in
   each, as a fixed state table plus findings, then write the intended states into
   specs.py so a check holds them. Load it after the schematic and before layout on any
   board that drives motors, heaters, relays or other actuators, and before answering
@@ -22,27 +22,28 @@ decides it; the review supplies intent, datasheet facts and the judgement on wha
 
 ## 1. Start from the checks that apply at this gate
 
-At the schematic gate only the netlist exists, so only these apply: the `circuit` and
-`esp32s3` groups and `test_erc_clean` (`kicad`), plus project checks that read only the
-netlist and specs.py. Run exactly those:
+At the schematic gate only the netlist exists: the `kicad` and `circuit` groups apply
+(and `esp32s3` on an ESP32-S3 DevKit board), with project checks that read only the
+netlist. Switch on in `[checks] groups` of pcbkit.toml any group the first line says is
+off, then run:
 
 ```
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
 .venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"
 ```
 
-Add `or test_<topic>` for each such project check (a previous run's
-`test_fault_states`, say). `outputs`, DRC and `copper` need a board or fab files that do
-not exist yet: a check whose inputs do not exist is not a finding. A `-k` run leaves
-partial results (`selection.complete` false); the order gate runs all. A gate option
-(WP17, --gate sch) will replace this selection. Take as given, and report a failure
-rather than re-derive it:
+A group just switched on fails by name each table it lacks: write those first. Add
+`or test_<topic>` per such project check (a previous run's `test_fault_states`). A check
+whose inputs do not exist yet (`outputs`, DRC, `copper`) is not a finding; a `-k` run is
+partial, and the order gate runs all. Take as given, and report a failure rather than
+re-derive it:
 
 - Floating and unconnected pins: `test_erc_clean`. An open pin with a no-connect flag
   in design.py was left open on purpose.
 - Supply pins inside their range at `SUPPLY_SCENARIO`: `test_supply_pins_in_range`.
 - ESP32-S3 DevKit boards: strapping pins at reset (`test_strapping_pins_at_reset`), and
-  every GPIO under its absolute maximum in each `GPIO_SCENARIOS` row, which is how
-  injected current from another powered device is judged.
+  each GPIO under the powered chip's 3.6 V in each `GPIO_SCENARIOS` row. The limit is
+  fixed, so a board at 0 V back-powered through its pins passes: that is step 4's.
 - A project check reading `FAULT_STATES` or `POWER_PATHS`: its rows are decided.
 
 ## 2. Settle intent and gather the facts
@@ -60,21 +61,23 @@ rather than re-derive it:
 
 ## 3. Write the rows, then let the checks decide
 
-The rows are proposed tables: no built-in check reads them yet. Their shapes are in
-"Proposed tables" in `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`.
+The rows are proposed tables: no built-in check reads them yet. Their shapes and the
+rule each check must apply are in "Proposed tables" in
+`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`.
 
 1. `FAULT_STATES`: one entry per condition a DC solve can show, with the keyword
-   arguments of `circuits.scenario` that make it (a rail at 0 V, controller pins
-   floating with their datasheet reset pulls) and the window each enable or output pin
-   must sit in, from the datasheet threshold, its source beside it. Extend `scenario`
-   in circuits.py for keywords it lacks.
-2. `POWER_PATHS`: which supply may reach which rail and through which parts (USB onto
-   the logic rail only, say). Which rails USB reaches is a graph walk, not a trace.
-3. `GPIO_SCENARIOS` (ESP32-S3): a row per condition where another device drives the
-   board's pins while it is unpowered.
-4. Hand each proposed table to `add-check`, which writes the project check, proves it
-   fails (a `mutants.py` entry: the missing pull) and runs it with the selection above.
-   Each failed row is a cell that is not where intent wants it.
+   arguments of `circuits.scenario` that make it (a rail fixed at 0 V, controller pins
+   left unfixed with their datasheet reset pulls) and, per enable or output pad (a pad
+   number, never a pin name), the window from the datasheet threshold, its source
+   beside it. A floating pad fails whatever its window. Extend `scenario` in
+   circuits.py for keywords it lacks.
+2. `POWER_PATHS`: the supply nets, which may reach which and through which parts (USB
+   onto the logic rail only, say), and each regulator's directed path in `parts`.
+3. Hand each table to `add-check`, which writes the project check, proves it fails (a
+   `mutants.py` entry: the missing pull) and runs it with the selection above. Each
+   failed row is a cell that is not where intent wants it.
+4. `SUPPLY_PINS` for each pin traced in the normal case; `STRAP_SCENARIO` (ESP32-S3)
+   if the walk changed what reset looks like.
 
 ## 4. Judge what the checks cannot
 
@@ -82,23 +85,19 @@ The rows are proposed tables: no built-in check reads them yet. Their shapes are
   which part crosses its threshold first; trace them from the datasheets.
 - **Who holds it**: an off that only firmware maintains is not off when firmware
   crashes, resets or sits in the bootloader. Mark which cells hold in hardware.
+- **Back-powering** (condition 8): current from another powered device through input
+  ESD diodes into this board's unpowered rail. No check models it: trace it against each
+  part's injection-current limit (`parts-researcher`).
 - **Consequence and remedy** for every cell that is not off where intent says off:
   what the mechanism does, and a fix for this design.py from
-  [references/patterns.md](references/patterns.md).
-
-For the shape of the table and the rows, when unclear, see a finished walk of a generic
-board: [references/example.md](references/example.md).
-
-## 5. Write the rest down
-
-`SUPPLY_PINS` for each pin traced in the normal case; `STRAP_SCENARIO` (ESP32-S3) if
-the walk changed what reset looks like.
+  [references/patterns.md](references/patterns.md). A finished walk of a generic board,
+  for the shape of the table and the rows: [references/example.md](references/example.md).
 
 ## Lane and hand-offs
 
-Not this review: sizing parts (`review-derating`), current and return paths
-(`review-current-paths`), plugs mated wrongly (`review-misplug`), the bench
-(`plan-bringup`), buying (`review-sourcing`). Note such a problem under Out of scope.
+Not this review: sizing parts (`review-derating`), current paths (`review-current-paths`),
+plugs (`review-misplug`), the bench (`plan-bringup`), buying (`review-sourcing`). Note such
+a problem under Out of scope.
 
 ## Output
 

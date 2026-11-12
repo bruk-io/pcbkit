@@ -31,8 +31,10 @@ A review skill (`walk-fault-states`, `review-derating`, `review-current-paths`,
 rows it wrote to a specs.py table. If a built-in group reads that table, switch the group
 on. If the table is a proposed one with no built-in check yet (such as `FAULT_STATES`,
 `MATING` or `CONTACT_RATINGS`; "Proposed tables" in
-`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md` gives each one's shape), write the
-project check that reads it, parametrised from the table, and prove it fails.
+`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md` gives each one's shape and rule), write
+the project check that reads it, parametrised from the table, applying that rule exactly,
+and prove it fails. A `FAULT_STATES` check calls `Solution.floating` on each pad's net
+and fails a floating one whatever its window: the solver reads a floating net as 0 V.
 
 ## 2. Pin down the rule and its source
 

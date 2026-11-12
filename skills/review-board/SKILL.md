@@ -4,7 +4,7 @@ description: >-
   the findings: signals running under switching regulators, fast tracks crossing a gap
   in their reference pour, copper pours sliced into islands or thin necks, and slivers.
   Use when the user asks for a layout review of the routed board, a second look at the
-  copper, "does this layout look right", or a look before promote. Not for where
+  routed copper, "does this routing look right", or a look before promote. Not for where
   currents flow and return, grounding, hot loops or placement intent before routing:
   that is review-current-paths.
 # The renders, crops and DRC listings it reads are noisy: only the findings come back.
