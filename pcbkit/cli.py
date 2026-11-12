@@ -271,6 +271,101 @@ def datasheet_confirm_cmd(mpn: str, page: int, quote: str, into: Path | None) ->
     click.echo(finding.describe(record, finding.record_path(folder, mpn)))
 
 
+@cli.group("parts", cls=_WorkflowGroup)
+def parts_group() -> None:
+    """Ask a distributor about the parts of the board.
+
+    `stock` asks Mouser (with MOUSER_API_KEY) whether each BOM line is in stock, at
+    what price and whether the part is still made. Runs anywhere.
+    """
+
+
+MAX_AGE_LIMIT_HOURS = 100_000  # about eleven years: a bound, so no overflow, no inf
+
+
+def _finite_hours(
+    ctx: click.Context, param: click.Parameter, value: float | None
+) -> float | None:
+    """Refuse a --max-age that is not a number (nan); the range check does the rest."""
+    if value is not None and value != value:
+        raise click.BadParameter("must be a number of hours, not nan", ctx, param)
+    return value
+
+
+@parts_group.command("stock")
+@click.option(
+    "--qty",
+    type=click.IntRange(min=1),
+    default=1,
+    show_default=True,
+    metavar="N",
+    help="Number of boards to buy parts for.",
+)
+@click.option(
+    "--max-age",
+    type=click.FloatRange(min=0, max=MAX_AGE_LIMIT_HOURS),
+    callback=_finite_hours,
+    metavar="HOURS",
+    help=(
+        "Ask Mouser again when the cached answer is older, and call an answer "
+        "that is older still stale [default: 24]."
+    ),
+)
+@click.option(
+    "--offline",
+    is_flag=True,
+    help="Use the cache at any age and never ask Mouser.",
+)
+def parts_stock_cmd(qty: int, max_age: float | None, offline: bool) -> None:
+    """Print, as JSON, each BOM line's stock, price and lifecycle at Mouser.
+
+    One object per BOM line, in BOM order, with the status ok, short (stock is below
+    the order quantity), not-active, not-found, ambiguous, no-mpn, not-asked (Mouser
+    could not be asked and nothing is cached), unreadable (Mouser's answer could not be
+    judged) or stale (the only answer is older than --max-age: Mouser could not be
+    asked again). A part on several lines is judged on the total of them, in the
+    smallest order Mouser sells (its minimum and multiple). Mouser's answers are cached
+    and asked for ten part numbers at a time. With --offline an answer of any age is
+    judged normally. Exits 0 when every line is ok, 1 when any is not, and 2 when any
+    line is not-asked or stale. The JSON goes to stdout only with those three codes; a
+    usage error (also 2) or a missing project (1) prints a message instead.
+    """
+    import json
+    from datetime import timedelta
+
+    from pcbkit import cache, stock
+    from pcbkit.design import load_design
+    from pcbkit.fab import bom
+
+    if offline and max_age is not None:
+        raise click.UsageError(
+            "--offline takes the cache at any age: --max-age does nothing with it"
+        )
+    proj = load_project()
+    parts = load_design(proj.root / "design.py").parts
+    lines = bom.bom_lines(parts, set(), bom.load_overrides(proj.root))
+    now = cache.utc_now()
+    hours = stock.DEFAULT_MAX_AGE_HOURS if max_age is None else max_age
+    answers = stock.fetch_answers(
+        [line.mpn for line in lines if stock.asked_number_problem(line) is None],
+        max_age=timedelta(hours=hours),
+        offline=offline,
+        now=now,
+    )
+    rows = stock.build_rows(
+        lines,
+        qty,
+        answers,
+        now,
+        max_age=timedelta(hours=hours),
+        offline=offline,
+    )
+    click.echo(json.dumps(rows, indent=2))
+    code = stock.exit_code(rows)
+    if code:
+        click.get_current_context().exit(code)
+
+
 @cli.command("sch")
 def sch_cmd() -> None:
     """Generate the schematic, run ERC and export the netlist.

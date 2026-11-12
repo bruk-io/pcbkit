@@ -164,14 +164,14 @@ Every check records before it asserts. The failure precedence (reverse bias, the
 
 - Runs anywhere (tier 1).
 - Reads `design.py` and the project's `bom.py` through `bom.bom_lines(parts, through_hole=set(), overrides)`. Through-hole status does not matter to stock.
-- Asks Mouser through `parts.ask_mouser` with `mouser.part_number(batch, exact=True)`, ten part numbers per request, spaced like `datasheet_find`. It picks the match whose squashed part number equals the line's (`datasheets.squash`).
+- Asks Mouser with `mouser.part_number(batch, exact=True)` (directly through `mouser.send` and `cache.write`, not `parts.ask_mouser`: see "Slice 5 review changes"), ten part numbers per request, spaced like `datasheet_find`. It picks the match whose squashed part number equals the line's (`datasheets.squash`).
 - Options:
   - `--qty N` boards (default 1);
   - `--max-age HOURS` (default 24, from `STOCK_MAX_AGE`);
   - `--offline` (use the cache at any age; never ask Mouser).
-- Prints JSON, one object per BOM line: `item`, `refs`, `mpn`, `mfr`, `qty_per_board`, `needed`, `status`, `fetched` (ISO date, or null), `age_hours`, `mouser` (`part_number`, `manufacturer`, `stock`, `availability` as raw text, `lifecycle`, `lead_time`, `price_breaks` as `[{"qty", "price" raw, "price_value", "currency"}]`, `unit_price_at_needed`, `min`, `mult`, `suggested_replacement`).
-- `status` is one of `ok`, `short`, `not-active`, `not-found`, `ambiguous`, `no-mpn`, `not-asked` (no key and nothing cached).
-- Exit codes: 0 when every line is `ok`, 1 otherwise, 2 when Mouser could not be asked and the cache had nothing (**owner's call**).
+- Prints JSON, one object per BOM line: `item`, `refs`, `mpn`, `mfr`, `qty_per_board`, `needed`, `needed_total`, `order_qty`, `status`, `fetched` (ISO date, or null), `age_hours`, `mouser` (`part_number`, `manufacturer`, `stock`, `availability` as raw text, `lifecycle`, `lead_time`, `price_breaks` as `[{"qty", "price" raw, "price_value", "currency"}]`, `unit_price_at_order`, `min`, `mult`, `suggested_replacement`).
+- `status` is one of `ok`, `short`, `not-active`, `not-found`, `ambiguous`, `no-mpn`, `not-asked` (no key and nothing cached), `unreadable` and `stale` (see "Slice 5 review changes").
+- Exit codes: 2 if any line is `not-asked` or `stale`, else 1 if any line is not `ok`, else 0 (**owner's call**; `stale` added by the slice 5 review).
 - Logic goes in a new `pcbkit/stock.py`: pure functions from a Mouser answer to rows, plus the batching. `pcbkit/mouser.py` is not touched; its plainness test stays.
 - The Mouser field names are assumed until M3 confirms them.
 
@@ -431,7 +431,7 @@ Order:
   - `--offline` with an empty cache gives `not-asked` and exit 2.
   - A cached answer older than `--max-age` is refetched, and `fetched` shows the new date.
   - No request URL and no header text appears in any output.
-- **Planted mistakes:** price breaks read at the per-board quantity instead of the total (`unit_price_at_needed` test red); stale cache accepted (age test red).
+- **Planted mistakes:** price breaks read at the per-board quantity instead of the total (`unit_price_at_order` test red); stale cache accepted (age test red).
 - **No KiCad needed:** yes. M3 confirms the field names.
 - **Size:** medium. The field names are unknown.
 
@@ -471,7 +471,7 @@ All are verifiable with no KiCad. Sizes: A medium, B large, C small, D large, F 
 |---|---|---|---|
 | M1 | Which checks are clean at each gate | Generic blinky template: `pcbkit sch`, `pcbkit check --gate sch`; `pcbkit build`, `--gate place`; `route`, `--gate route`; `finalize`, `--gate order`. Record each run's counts and failures. | Clean at each gate, with D1's table. |
 | M2 | Is the schematic gate tier 1 in practice | In a venv with no pcbnew: `pcbkit check --gate sch` on blinky | Runs. The netlist and ERC need only kicad-cli. |
-| M3 | Mouser's field names and price format | Print `SearchResults.Parts[0]` keys and one `PriceBreaks` entry from a cached answer in `~/.cache/pcbkit/mouser` (a generic part from `tools/datasheet_sources/parts.csv`) | `Availability`, `AvailabilityInStock`, `LifecycleStatus`, `LeadTime`, `Min`, `Mult`, `SuggestedReplacement`, `PriceBreaks[{Quantity, Price, Currency}]`, price as text with a currency sign and a dot decimal |
+| M3 | Mouser's field names, price format and maker strings | Print `SearchResults.Parts[0]` keys and one `PriceBreaks` entry from a cached answer in `~/.cache/pcbkit/mouser` (a generic part from `tools/datasheet_sources/parts.csv`) | `Availability`, `AvailabilityInStock`, `LifecycleStatus`, `LeadTime`, `Min`, `Mult`, `SuggestedReplacement`, `PriceBreaks[{Quantity, Price, Currency}]`, price as text with a currency sign and a dot decimal; also record Mouser's real maker strings (`Manufacturer`) for the makers on a real BOM, to check `stock.same_maker` |
 | M4 | Necks, slivers, islands | On a generic finalized two-layer board: (a) draw a track meeting a pour edge at about 10°, then `kicad-cli pcb drc --severity-all`: is `copper_sliver` reported? (b) add a `.kicad_dru` with `(rule neck (constraint connection_width (min 0.5mm)))`, cut a 0.3 mm pour neck: reported? Does the `.kicad_dru` survive `SaveBoard` and `finalize`? (c) any `isolated_copper` after `post`? | (a) yes, (b) yes but the file is not kept, (c) none |
 | M7 | The validator against real boards | `pcbkit specs` on the owner's own boards. Report only the error count and the table names, never the contents. | 0 errors |
 | M8 | 2xN pad numbering | Read the pad positions of `PinHeader_2x05_P2.54mm_Vertical` and a 1x04 JST footprint | Odd pads in one row, even in the other; a 180° turn maps k to N+1−k |
@@ -581,3 +581,23 @@ Three existing tests hold `BUILTIN_GROUPS` and `CHECK_GROUPS` to the modules tha
 The nineteen follow-ups of the independent review of slice 2 are done (`pcbkit/check/tables.py`, the `specs` command in `pcbkit/cli.py`, the `TableError` handling in `pcbkit/check/plugin.py`, the docs and the tests). The rule held for each existing shape: exactly as permissive as the check that reads the table, and refusing what makes that check crash. Two of the review's counts differ from the code: `EXISTING` holds 55 shapes, not 49, and each now has a positive example in `tests/unit/test_check_tables.py`; the copper and fab group `specs.py` texts moved to `tests/check_group_specs.py`, which the kicad-marked integration tests import back (their text is unchanged byte for byte).
 
 For WP18: holding every existing table's docs row to `describe(shape)` is still to do. Only the proposed tables' rows are generated from the shape and checked against it (and now against the Shape cell, not the whole line); the rows of the existing tables are prose, so a shape can drift from its row. WP18 wires `tables.read` into the existing checks, and that is the moment to put each shape in its row and test it.
+
+## Slice 5 review changes (2026-11-12)
+
+The independent review rejected slice 5 for four false `ok` results. The rule behind every fix: when something cannot be known (a stale answer, an unknown lifecycle text, an uncertain maker, an unreadable field), the line is not `ok` and `notes` says why.
+
+- **Statuses:** `ok`, `short`, `not-active`, `not-found`, `ambiguous`, `no-mpn`, `not-asked`, `unreadable`, `stale`.
+  - `stale`: not `--offline`, and the answer used is older than `--max-age` or dated in the future. The `mouser` block, the age and a note are kept. With `--offline` the status is judged normally and the age is on the row.
+  - `unreadable` now also covers a lifecycle text outside the allow-list (`null`, empty, `New Product`, `New at Mouser`, `Active`) and not on the known not-active list, a non-text lifecycle, an unreadable `IsDiscontinued`, `Min` or `Mult`, and parts with no `ManufacturerPartNumber`.
+  - `ambiguous` also covers the one match being by another maker than the line's (whole name or known alias; never a prefix).
+- **Exit code:** 2 if any line is `not-asked` or `stale`, else 1 if any line is not `ok`, else 0. The JSON is on stdout only with those codes; a usage error (2) and a missing project (1) print a message.
+- **New row fields:** `needed_total` (the part's total over every BOM line, by squashed part number, times `--qty`) and `order_qty` (`needed_total` raised to `Min`, then to a multiple of `Mult`; null when no part was matched or `Min`/`Mult` were unreadable). Stock and price are judged at them; `mouser.unit_price_at_order` is the price at `order_qty`.
+- `stock.fetch_answers` asks through `mouser.send` and `cache.write` rather than `parts.ask_mouser`, so a cache that cannot be written still yields the fresh answer; `parts.py` and `cache.py` are untouched.
+
+### Second review (2026-11-12)
+
+- **Totals (N1, N4):** every line is matched first; `needed_total` is then summed per matched Mouser part (its Mouser part number, or its number and maker when that is missing), so one part bought by its maker number on one line and by Mouser's own on another is judged on both, and one number from two makers is two parts. A line that matched no part (`not-found`, `ambiguous`, `not-asked`, `unreadable`) gets the sum over lines with the same squashed number; a `no-mpn` line has `needed_total` null.
+- **Maker match (N2):** two names also match when one's whole words are the leading whole words of the other ("Microchip" and "Microchip Technology"), after the company words and punctuation are folded away; never a character prefix. This makes "Murata" and "Murata Power Solutions" the same maker; two such candidates for one line stay `ambiguous`. The long names in the tests are from memory: M3 records Mouser's real maker strings.
+- **Tests (N3, N7):** a stale `short` or `not-found` line is `stale` with exit 2; the precedence (`no-mpn`, `not-asked`, then `stale` over any judged status, and within a judged line `not-active`, `unreadable`, `short`, `ok`) is pinned.
+- **Field name (N6):** `mouser.unit_price_at_order`, the price at `order_qty` (it was `unit_price_at_needed`).
+- **Direct asking is a work-around (N5):** `stock.fetch_answers` calls `mouser.send` and `cache.write` only because this slice may not touch `parts.py`, `cache.py` or `mouser.py`. Follow-up: give `cache.fetch` / `parts.ask_mouser` the future-date rule (a future-dated entry is not fresh: today `ask_mouser` treats it as fresh, a latent bug for `datasheet find`) and a keep-on-write-failure path; have `mouser.send` wrap `http.client.HTTPException` as `MouserError` with a retry; then point `stock` back at `parts.ask_mouser`.

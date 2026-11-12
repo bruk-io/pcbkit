@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from pcbkit import datasheet_find, mouser
+from pcbkit import datasheet_find, mouser, stock
 from tests.fake_machine import FakeMachine
 from tests.fake_pcbnew import make_pcbnew
 
@@ -28,6 +28,7 @@ def no_mouser(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(mouser, "_transport", refuse)
     monkeypatch.setattr(mouser, "_sleep", lambda seconds: None)
+    monkeypatch.setattr(stock, "_sleep", lambda seconds: None)
 
 
 @pytest.fixture(autouse=True)
