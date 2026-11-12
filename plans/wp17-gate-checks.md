@@ -571,3 +571,7 @@ The owner deferred every call to the plan's recommendation. Recorded here so the
 | `parts stock` exit codes | 0 all `ok`, 1 otherwise, 2 when Mouser could not be asked and nothing was cached |
 | Adjacent pads in the mis-plug check | Recorded, not failed; `review-misplug` keeps that judgement |
 | WP17 scope | Kept whole (B and D stay in) |
+
+## Change to slice 3 (2026-11-12)
+
+Three existing tests hold `BUILTIN_GROUPS` and `CHECK_GROUPS` to the modules that exist (`test_check_gates.py::test_every_built_in_module_is_in_a_group`, `test_check_plugin_helpers.py::test_builtin_groups_name_exactly_the_check_modules_in_the_folder` and `::test_every_group_a_project_may_switch_on_has_a_module_or_a_pack`), so a group or a module stem cannot be declared ahead of its module. Those tests are right and stay as they are. Slice 3 is therefore only `Netlist.functions`. Each check slice adds its own `BUILTIN_GROUPS` row with its module, and the first slice in a group also adds the group to `CHECK_GROUPS` and the `checks.groups` docs row. That makes `pcbkit/check/results.py`, `pcbkit/project.py` and that docs row shared one-line edits: the check slices merge one at a time.
