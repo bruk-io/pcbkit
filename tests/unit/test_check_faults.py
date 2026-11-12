@@ -251,8 +251,9 @@ def test_a_diode_dc_does_not_model_beside_a_pull_down_cannot_be_judged() -> None
     assert report.problems == [
         "U2 pad 3 (EN) cannot be judged: the DC model leaves out D2 pad 1 (Device:D) "
         "on EN. Model each in circuits.scenario (an element whose ref is the part's "
-        "reference), fix the net it drives, or, for a pad that draws no current in "
-        "this condition, list it in this condition's pins"
+        "reference), fix the net it drives, or, for a pad that is high-impedance in "
+        "this condition, list it in this condition's pins (listing a pad claims it "
+        "draws no current and drives nothing)"
     ]
 
 
@@ -343,11 +344,167 @@ def test_another_pad_of_the_judged_part_on_a_free_net_is_left_out() -> None:
     assert report.not_modelled == {"U2 pad 3": ["U2 pad 1 (Regulator:LDO) on VIN"]}
 
 
-def test_a_capacitor_from_another_library_is_left_out() -> None:
-    """Not known to be a capacitor, so it may conduct: it fails by name."""
+def test_a_two_pad_part_with_reference_letters_c_is_open_at_dc_from_any_library() -> (
+    None
+):
+    """The rule is the reference letters ``C`` and two pads, whatever the library."""
     toy = board()
     toy.add("C1", "100n", "MyLib:Cap", {"1": ("EN", "~"), "2": ("GND", "~")})
-    assert judge(toy).not_modelled == {"U2 pad 3": ["C1 pad 1 (MyLib:Cap) on EN"]}
+    toy.add("C2", "100n", "MyLib:C", {"1": ("EN", "~"), "2": ("GND", "~")})
+    assert judge(toy).not_modelled == {}
+
+
+def test_a_device_capacitor_symbol_without_reference_letters_c_is_left_out() -> None:
+    """``Device:C`` referenced ``X1``, a three-pad ``C3`` and a ``CF1``: not exempt."""
+    toy = board()
+    toy.add("X1", "100n", "Device:C", {"1": ("EN", "~"), "2": ("GND", "~")})
+    toy.add(
+        "C3",
+        "1u",
+        "Device:C_Feedthrough",
+        {"1": ("EN", "~"), "2": ("GND", "~"), "3": ("EN_OUT", "~")},
+    )
+    toy.add("CF1", "1u", "MyLib:C", {"1": ("EN", "~"), "2": ("GND", "~")})
+    assert judge(toy).not_modelled == {
+        "U2 pad 3": [
+            "X1 pad 1 (Device:C) on EN",
+            "C3 pad 1 (Device:C_Feedthrough) on EN",
+            "CF1 pad 1 (MyLib:C) on EN",
+        ]
+    }
+
+
+def test_a_pin_the_scenario_fixes_is_recorded_as_fixed() -> None:
+    """A-m1: not "driven": the scenario says so."""
+    report = judge(board(), fixed={**RAILS, "EN": 0.0})
+    assert report.pins == {"U2 pad 3": [0.0, 0.0, 0.4, "fixed"]}
+    assert report.problems == []
+
+
+def test_a_part_with_both_pads_on_the_pins_net_carries_no_current() -> None:
+    """A-m2: a resistor shorted to EN cannot move its level: not named."""
+    toy = board()
+    check_toy.resistor(toy, "R10", "10k", "EN", "EN")
+    toy.add("FB1", "BEAD", "MyLib:Bead", {"1": ("EN", "~"), "2": ("EN", "~")})
+    report = judge(toy)
+    assert report.not_modelled == {}
+    assert report.problems == []
+
+
+def test_a_zero_ohm_link_on_the_enable_solves() -> None:
+    """A-m3: an ordinary 0 ohm enable link used to raise ZeroDivisionError."""
+    toy = Toy()
+    regulator(toy)
+    check_toy.resistor(toy, "R1", "0", "EN_SHARED", "EN")
+    check_toy.resistor(toy, "R2", "100k", "EN_SHARED", "GND")
+    report = judge(toy)
+    assert report.problems == []
+    assert report.pins["U2 pad 3"][3] == "driven"
+
+
+def test_the_left_out_message_says_listing_claims_high_impedance() -> None:
+    """A-m4: listing a pad is a claim, and the message says so."""
+    toy = board()
+    toy.add("U1", "MCU", "MCU:MCU", {"1": ("EN", "IO1"), "2": ("GND", "GND")})
+    (problem,) = judge(toy).problems
+    assert problem.endswith(
+        "or, for a pad that is high-impedance in this condition, list it in this "
+        "condition's pins (listing a pad claims it draws no current and drives "
+        "nothing)"
+    )
+
+
+def fet_board(gate_pull: bool) -> Toy:
+    """A-B1: the reviewer's load switch, its P-FET's gate pull-up fitted or not."""
+    toy = Toy()
+    toy.add(
+        "U4",
+        "LSW",
+        "Power:LOADSW",
+        {"1": ("VIN", "VIN"), "2": ("GND", "GND"), "3": ("NEN", "~{EN}")},
+    )
+    check_toy.resistor(toy, "R11", "100k", "NEN", "GND")
+    toy.add(
+        "Q4",
+        "AO3401A",
+        "Transistor_FET:AO3401A",
+        {"1": ("Q4G", "G"), "2": ("+3V3", "S"), "3": ("NEN", "D")},
+    )
+    toy.add(
+        "Q3",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("Q3G", "G"), "2": ("GND", "S"), "3": ("Q4G", "D")},
+    )
+    check_toy.resistor(toy, "R13", "100k", "Q3G", "GND")
+    if gate_pull:
+        check_toy.resistor(toy, "R12", "100k", "+3V3", "Q4G")
+    return toy
+
+
+def test_a_p_fet_whose_gate_floats_cannot_decide_the_pin() -> None:
+    """A-B1: Q4's gate reads 0 V from the leak, so Q4 counted as on; now it fails."""
+    report = judge(fet_board(gate_pull=False), [("U4", "3", (2.0, 3.6))])
+    assert report.problems == [
+        "U4 pad 3 (NEN): the gate of Q4 (Q4G) is floating, so whether Q4 conducts is "
+        "the solver's guess (the leak holds the gate at 0 V); pull the gate to a net "
+        "the scenario fixes, or fix it in the scenario"
+    ]
+
+
+def test_with_its_gate_pull_up_the_p_fet_is_off_and_the_pin_is_judged() -> None:
+    """The pull-up fitted: Q4 off, NEN pulled down, outside the (2, 3.6) window."""
+    report = judge(fet_board(gate_pull=True), [("U4", "3", (2.0, 3.6))])
+    assert report.problems == ["U4 pad 3 (NEN) is at 0.000 V, outside 2 to 3.6 V"]
+
+
+def test_an_n_fet_whose_gate_floats_cannot_decide_the_pin() -> None:
+    """The mirror case: an N-FET read as off because its gate floats."""
+    toy = board()
+    check_toy.resistor(toy, "R1", "100k", "EN", "+3V3")
+    toy.add(
+        "Q1",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("QG", "G"), "2": ("GND", "S"), "3": ("EN", "D")},
+    )
+    report = judge(toy, [("U2", "3", ON)])
+    assert report.problems == [
+        "U2 pad 3 (EN): the gate of Q1 (QG) is floating, so whether Q1 conducts is "
+        "the solver's guess (the leak holds the gate at 0 V); pull the gate to a net "
+        "the scenario fixes, or fix it in the scenario"
+    ]
+
+
+def test_a_gate_held_only_through_a_gigaohm_cannot_decide_the_pin() -> None:
+    """The gate's level moves with the leak: the same failure, said so."""
+    toy = fet_board(gate_pull=False)
+    check_toy.resistor(toy, "R12", "10000M", "+3V3", "Q4G")
+    (problem,) = judge(toy, [("U4", "3", (2.0, 3.6))]).problems
+    assert (
+        problem.startswith("U4 pad 3 (NEN): the gate of Q4 (Q4G) reads ")
+        and "only because of the solver's leak" in problem
+    )
+
+
+def test_ignored_scenario_keywords_are_named() -> None:
+    """A-M1: a keyword that lands only in **kwargs, or nowhere, is named."""
+
+    def scenario(nl: Any, vin: float = 5.0, drive: Any = None, **kw: Any) -> None:
+        return None
+
+    def strict(nl: Any, vin: float = 5.0) -> None:
+        return None
+
+    def positional(nl: Any, vin: float, /) -> None:
+        return None
+
+    assert faults.ignored_keywords(scenario, {"vin": 5, "controller": "absent"}) == [
+        "controller"
+    ]
+    assert faults.ignored_keywords(strict, {"vin": 5, "x": 1}) == ["x"]
+    assert faults.ignored_keywords(strict, {"vin": 5}) == []
+    assert faults.ignored_keywords(positional, {"vin": 5}) == ["vin"]
 
 
 def test_a_resistor_symbol_dc_does_not_model_is_left_out() -> None:
@@ -426,3 +583,20 @@ def test_a_condition_with_no_pins_fails_rather_than_judging_nothing() -> None:
         "it lists no pins, so nothing is judged: list the pins whose level the "
         "condition must hold, or remove the condition"
     ]
+
+
+def test_a_partly_modelled_parts_pad_on_a_fixed_net_is_not_named() -> None:
+    """Current into a net the scenario fixes moves no level: only free pads count."""
+    toy = board()
+    toy.add(
+        "D2",
+        "BAV",
+        "Diode:Dual",
+        {"1": ("EN", "K"), "2": ("SIG", "A"), "3": ("VIN", "A")},
+    )
+
+    def model(c: Circuit) -> None:
+        c.D("SIG", "EN", 0.7, ref="D2.a")
+        c.fix("SIG", 0.0)
+
+    assert judge(toy, extra=model).not_modelled == {}

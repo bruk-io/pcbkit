@@ -10,9 +10,11 @@ from the schematic and on ``circuits.scenario``. What the project gives, in
   is whatever that scenario fixes and leaves free); the window comes from the part's
   datasheet (VIL and VIH of an enable). ``{}`` says there is no fault state to check.
 
-Each listed pin must be driven (a floating pin fails whatever its window says), every
-pad on the nets that set its level must be one the model holds, and its level must be
-inside the window. ``pcbkit.check.faults`` says exactly what that means.
+Each keyword of a condition's scenario must be a named parameter of
+``circuits.scenario``. Each listed pin must be driven (a floating pin fails whatever its
+window says), every pad on the nets that set its level must be one the model holds, no
+FET there may be decided by a floating gate, and its level must be inside the window.
+``pcbkit.check.faults`` says exactly what that means.
 """
 
 from __future__ import annotations
@@ -43,13 +45,22 @@ def test_fault_state_pins(
     """Hold each listed pin driven and inside its window in the condition.
 
     Records ``pins``, ``{"U2 pad 5": [V, min, max, state]}`` (state ``driven``,
-    ``floating``, ``no net`` or ``unsolved``; V is null when there is no net or no
-    solution), and ``not modelled``, ``{"U2 pad 5": ["U1 pad 3 (lib:part) on EN"]}``,
-    the pads on the pin's nets the model leaves out, when there are any, before any
-    failure is raised.
+    ``fixed``, ``floating``, ``no net`` or ``unsolved``; V is null when there is no net
+    or no solution), and ``not modelled``, ``{"U2 pad 5": ["U1 pad 3 (lib:part) on
+    EN"]}``, the pads on the pin's nets the model leaves out, when there are any, before
+    any failure is raised.
     """
     row = tables.read(specs, "FAULT_STATES")[condition]
     pins = row["pins"]
+    ignored = faults.ignored_keywords(circuits.scenario, row["scenario"])
+    if ignored:
+        record("pins", faults.unsolved(pins))
+        names = ", ".join(repr(k) for k in ignored)
+        raise AssertionError(
+            f"condition {condition}: circuits.scenario has no parameter named {names} "
+            "(it would land in **kwargs, or nowhere, so the condition solved may not "
+            "be the one named): name it in scenario's signature"
+        )
     try:
         circuit = circuits.scenario(nl, **row["scenario"])
     except Exception as err:  # noqa: BLE001 - the project's code: say what it raised

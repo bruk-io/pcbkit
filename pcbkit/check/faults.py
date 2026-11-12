@@ -12,7 +12,11 @@ builds ``circuits.scenario(nl, **scenario)``, solves it, and judges every listed
   and a floating pin fails whatever its window says;
 * nothing that can conduct may be missing from the model on the nets that set the pin's
   level (see below);
-* the voltage must be inside the window, and must not depend on that 1 nS leak;
+* no FET on the nets that set the pin's level may have a gate that is floating or held
+  only by the leak, since its state would then be the solver's guess;
+* the voltage must be inside the window, and must not depend on that 1 nS leak.
+
+A pin on a net the scenario fixes is recorded as ``fixed`` and judged at that voltage.
 
 What "missing from the model" means. The nets that set a pin's level are the pin's own
 net and every net reached from it through any element of the circuit (every resistor,
@@ -20,11 +24,13 @@ diode and FET terminal, conducting or not), stopping at the nets the scenario fi
 whose level does not depend on anything beyond them. Every pad on those nets must
 belong to a part the circuit holds elements for on the nets of all its pads (an element
 whose ref is the part's reference or starts with it and a dot, as ``dc.build`` names
-pack elements and body diodes), to a capacitor from KiCad's ``Device`` library (open at
-DC), or be listed in the same condition's pins (a listed pad is taken to draw no
-current: its own level is what is judged). Anything else, an IC pin, a connector, a
-diode or FET ``dc.build`` does not model, a resistor symbol it does not know, fails by
-name, because the solve could be wrong about it. So a pin left to nothing but parts
+pack elements and body diodes), to a capacitor (two pads, reference letters ``C``, any
+library: open at DC), to a two-pad part with both pads on one net (it carries no
+current), or be listed in the same condition's pins (listing a pad claims it is
+high-impedance: it draws no current and drives nothing, and its own level is judged).
+Anything else, an IC pin, a connector, a diode or FET ``dc.build`` does not model, a
+resistor symbol it does not know, fails by name, because the solve could be wrong
+about it. So a pin left to nothing but parts
 ``dc`` does not model is floating (nothing joins it to a fixed net) and names those
 parts as the reason.
 
@@ -36,11 +42,13 @@ so ``pcbkit specs`` can read ``TABLES``.
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable, Sequence
+import inspect
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from pcbkit.check.netlist import Netlist, natkey
+from pcbkit.check.ports import letters
 from pcbkit.check.tables import (
     Any_,
     DictOf,
@@ -68,28 +76,14 @@ TABLES: dict[str, Shape] = {
 }
 
 DRIVEN = "driven"
+FIXED = "fixed"
 FLOATING = "floating"
 NO_NET = "no net"
 UNSOLVED = "unsolved"
 
-# KiCad's own capacitor symbols in the Device library: open at DC. A capacitor from
-# another library is not known to be one, so it counts as a part the model leaves out.
-CAPACITORS = frozenset(
-    {
-        "C",
-        "C_Small",
-        "C_US",
-        "C_Small_US",
-        "C_Polarized",
-        "C_Polarized_Small",
-        "C_Polarized_US",
-        "C_Polarized_Small_US",
-        "CP",
-        "CP_Small",
-        "CP_US",
-        "CP_Small_US",
-    }
-)
+# A capacitor is open at DC: a part with two pads whose reference letters are ``C``,
+# from any library. Nothing else is exempt.
+CAPACITOR_LETTERS = "C"
 
 # The leak a second solve uses to see whether a reading depends on dc's 1 nS one.
 SMALL_LEAK = 1e-12
@@ -109,9 +103,9 @@ class FaultReport:
     """The verdict on one condition.
 
     ``pins`` is the record, ``{"U2 pad 5": [V or None, min, max, state]}`` with state
-    ``driven``, ``floating``, ``no net`` or ``unsolved``; ``not_modelled`` maps a pin to
-    the pads on its nets that the circuit leaves out (``"U1 pad 3"``); ``problems`` is
-    one sentence per failure.
+    ``driven``, ``fixed``, ``floating``, ``no net`` or ``unsolved``; ``not_modelled``
+    maps a pin to the pads on its nets that the circuit leaves out (``"U1 pad 3"``);
+    ``problems`` is one sentence per failure.
     """
 
     pins: dict[str, list[Any]] = field(default_factory=dict)
@@ -200,9 +194,14 @@ def level_nets(circuit: Any, net: str) -> list[str]:
 
 
 def is_open_at_dc(nl: Netlist, ref: str) -> bool:
-    """Return True for a capacitor from KiCad's ``Device`` library."""
-    part = nl.parts.get(ref)
-    return part is not None and part["lib"] == "Device" and part["part"] in CAPACITORS
+    """Return True for a capacitor: two pads and the reference letters ``C``."""
+    return letters(ref) == CAPACITOR_LETTERS and len(nl.functions(ref)) == 2
+
+
+def is_shorted(nl: Netlist, ref: str) -> bool:
+    """Return True for a two-pad part with both pads on one net: it carries nothing."""
+    pads = nl.functions(ref)
+    return len(pads) == 2 and len({nl.net(ref, pad) for pad in pads}) == 1
 
 
 def left_out(
@@ -211,11 +210,13 @@ def left_out(
     """Return ``"U1 pad 3 (Module:MCU) on EN"`` for each pad the model leaves out.
 
     A pad on one of ``nets`` is left out unless the pad is in ``listed`` (the
-    condition's pins) or its part is a ``Device`` capacitor or is modelled. A part is
+    condition's pins), or its part is a capacitor (``is_open_at_dc``), has both its two
+    pads on one net (``is_shorted``: no current through it), or is modelled. A part is
     modelled when the circuit holds elements for it that touch the net of every one of
     its pads: one that is modelled on the pad's net but not on another of its pads (a
     scenario that models one diode of a pair) has the pads it leaves out named instead,
-    wherever they are, because current can come in through them.
+    wherever they are, because current can come in through them, unless the scenario
+    fixes that pad's net (current into a fixed net moves no level).
     """
     held = element_nets(circuit)
     found: list[str] = []
@@ -226,16 +227,69 @@ def left_out(
 
     for net in nets:
         for ref, pad, _func in nl.nets.get(net, []):
-            if (ref, pad) in listed or is_open_at_dc(nl, ref):
+            if (ref, pad) in listed or is_open_at_dc(nl, ref) or is_shorted(nl, ref):
                 continue
             if ref not in held:
                 found.append(name(ref, pad, net))
                 continue
             for other in sorted(nl.functions(ref), key=natkey):
                 other_net = nl.net(ref, other)
-                if other_net is not None and other_net not in held[ref]:
+                if (
+                    other_net is not None
+                    and other_net not in held[ref]
+                    and other_net not in circuit.fixed
+                ):
                     found.append(name(ref, other, other_net))
     return list(dict.fromkeys(found))
+
+
+def undecided_fets(
+    circuit: Any, solved: Any, recheck: Any, nets: Iterable[str]
+) -> list[str]:
+    """Return a sentence for each FET on ``nets`` whose state the solver guessed.
+
+    A FET with any terminal on ``nets`` (the nets that set a level) whose gate net is
+    floating, or whose gate's level moves by more than ``LEAK_MOVE_V`` when the leak is
+    made smaller (``recheck``, or None), is on or off only because of the leak.
+    """
+    on = set(nets)
+    found = []
+    for f in circuit.fets:
+        g = f["g"]
+        if not g or not ({f["g"], f["d"], f["s"]} & on) or g in circuit.fixed:
+            continue
+        ref = f["ref"] or "a FET"
+        if solved.floating(g):
+            found.append(
+                f"the gate of {ref} ({g}) is floating, so whether {ref} conducts is "
+                "the solver's guess (the leak holds the gate at 0 V); pull the gate to "
+                "a net the scenario fixes, or fix it in the scenario"
+            )
+        elif recheck is not None and abs(recheck[g] - solved[g]) > LEAK_MOVE_V:
+            found.append(
+                f"the gate of {ref} ({g}) reads {solved[g]:.3f} V only because of "
+                f"the solver's leak (it is {recheck[g]:.3f} V with a smaller leak), "
+                f"so whether {ref} conducts is the solver's guess; give the gate a "
+                "real pull"
+            )
+    return found
+
+
+def ignored_keywords(scenario: Any, keywords: Mapping[str, Any]) -> list[str]:
+    """Return the keywords ``scenario`` has no named parameter for.
+
+    A keyword that would land only in ``**kwargs`` (or that the function cannot take
+    at all, or only by position) may be ignored, so the condition it names may not be
+    the one solved. A function whose signature cannot be read names every keyword.
+    """
+    try:
+        params = inspect.signature(scenario).parameters.values()
+    except (TypeError, ValueError):
+        return sorted(keywords)
+    named = {
+        p.name for p in params if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+    }
+    return [k for k in keywords if k not in named]
 
 
 def low_leak_solution(circuit: Any) -> Any:
@@ -289,7 +343,16 @@ def judge(
             )
             continue
         where = f"{key} ({net})"
-        missing = left_out(nl, circuit, level_nets(circuit, net), listed)
+        if net in circuit.fixed:
+            report.pins[key] = [_volts(solved[net]), lo, hi, FIXED]
+            if not lo <= solved[net] <= hi:
+                report.problems.append(
+                    f"{where} is fixed by the scenario at {solved[net]:.3f} V, "
+                    f"outside {lo:g} to {hi:g} V"
+                )
+            continue
+        lnets = level_nets(circuit, net)
+        missing = left_out(nl, circuit, lnets, listed)
         if missing:
             report.not_modelled[key] = missing
         if solved.floating(net):
@@ -317,9 +380,14 @@ def judge(
                 f"{where} cannot be judged: the DC model leaves out "
                 + ", ".join(missing)
                 + ". Model each in circuits.scenario (an element whose ref is the "
-                "part's reference), fix the net it drives, or, for a pad that draws "
-                "no current in this condition, list it in this condition's pins"
+                "part's reference), fix the net it drives, or, for a pad that is "
+                "high-impedance in this condition, list it in this condition's pins "
+                "(listing a pad claims it draws no current and drives nothing)"
             )
+            continue
+        guessed = undecided_fets(circuit, solved, recheck, lnets)
+        if guessed:
+            report.problems.extend(f"{where}: {text}" for text in guessed)
             continue
         if not lo <= v <= hi:
             report.problems.append(

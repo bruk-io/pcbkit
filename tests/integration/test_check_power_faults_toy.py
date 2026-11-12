@@ -164,3 +164,34 @@ def test_a_missing_table_fails_by_name(tmp_path: Path) -> None:
     entry = result.entry(CHECK)
     assert entry["outcome"] == "failed"
     assert "specs.FAULT_STATES is not defined" in entry["message"]
+
+
+def test_a_keyword_the_scenario_would_ignore_fails_by_name(tmp_path: Path) -> None:
+    """A-M1: ``controller`` lands only in **kw, so the condition is not what it says."""
+    toy = board()
+    del toy.parts["R7"], toy.pins["R7"]
+    check_toy.resistor(toy, "R8", "1k", "GPIO_EN", "EN")
+    circuits = check_toy.CIRCUITS.replace(
+        "def scenario(nl, vin=5.0, drive=None):",
+        "def scenario(nl, vin=5.0, drive=None, **kw):",
+    ).replace(
+        "    return circuit\n",
+        "    circuit.fix('GPIO_EN', 0.0)\n    return circuit\n",
+        1,
+    )
+    specs = SPECS + TABLE.replace(
+        '"scenario": {"vin": 5.0}', '"scenario": {"vin": 5.0, "controller": "absent"}'
+    )
+    root = check_toy.write_project(
+        tmp_path / "ignored", toy, ["power"], specs, circuits
+    )
+    result = run(root, "test_faults")
+    entry = result.entry(f"{CHECK}[logic_absent]")
+    assert entry["outcome"] == "failed"
+    assert said(entry) == (
+        "condition logic_absent: circuits.scenario has no parameter named "
+        "'controller' (it would land in **kwargs, or nowhere, so the condition solved "
+        "may not be the one named): name it in scenario's signature"
+    )
+    assert entry["numbers"]["pins"] == {"U2 pad 3": [None, 0, 0.4, "unsolved"]}
+    assert result.outcome(f"{CHECK}[input_high]") == "passed"
