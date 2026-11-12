@@ -46,6 +46,18 @@ from tests.check_group_run import (  # noqa: E402
     write_netlist,
     write_toml,
 )
+from tests.check_group_specs import (  # noqa: E402
+    CABLE_C_PER_M,
+    CABLE_M,
+    DECOUPLING_MAX_MM,
+    DRILL_MM,
+    EXEMPT,
+    LIMITS,
+    PIN_C,
+    TR_MAX,
+    TRACE_C_PER_MM,
+)
+from tests.check_group_specs import FAB_SPECS as SPECS  # noqa: E402
 
 pytestmark = pytest.mark.kicad
 
@@ -53,22 +65,6 @@ MODULE = "pcbkit.check.builtin.test_fab"
 
 # --- the plan: the limits and the model written into the specs ------------------------
 
-# generic limits for the test, not any fab house's: the check reads whatever PCBWAY says
-LIMITS = {
-    "min_annular": 0.15,
-    "min_drill": 0.3,
-    "min_plated_slot": 0.5,
-    "silk_min_height": 0.8,
-    "silk_min_stroke": 0.15,
-    "min_track_2oz": 0.2,
-    "min_space_2oz": 0.2,
-}
-DECOUPLING_MAX_MM = 3.0
-DRILL_MM = 1.0  # the lead of the header, on the datasheet
-TR_MAX = 300e-9  # s, for 400 kHz
-PIN_C = 10e-12  # F per device
-TRACE_C_PER_MM = 0.1e-12
-CABLE_M, CABLE_C_PER_M = 0.3, 100e-12
 OFFBOARD = 1  # the display on the end of the cable
 PAD_MM = 1.7  # the stock header's pads are 1.7 mm across
 
@@ -82,30 +78,6 @@ CONTROL = {
     "test_power_footprints_match_datasheet",
     "test_i2c_rise_time[main]",
 }
-
-DECOUPLING = f'DECOUPLING = [("U1", 8, ("C1",), {DECOUPLING_MAX_MM!r})]\n'
-EXEMPT = 'ASSEMBLY_TEXT_EXEMPT = ("J1",)\n'
-POWER = (
-    "POWER_FOOTPRINTS = [\n"
-    '    dict(ref="Q1", tab_pad=2, tab_net="VBUS", smaller=[(1, 2), (3, 2)]),\n'
-    f'    dict(ref="J1", drill_mm={{"1": {DRILL_MM!r}}}),\n'
-    "]\n"
-)
-SPECS = (
-    '"""Specs of the fab-group test board."""\n'
-    "from __future__ import annotations\n\n"
-    f"PCBWAY = {LIMITS!r}\n"
-    'WIRE_PADS = {"J1": ("1", "2")}\n'
-    f"{DECOUPLING}"
-    f"{POWER}"
-    'I2C_BUSES = {"main": ("SDA", "SCL", 400e3, [("DISPLAY", 0x3C, 10)])}\n'
-    f"I2C_TR_MAX = {{400e3: {TR_MAX!r}}}\n"
-    f"I2C_PIN_C = {PIN_C!r}\n"
-    f"TRACE_C_PER_MM = {TRACE_C_PER_MM!r}\n"
-    f"I2C_CABLE_LEN = {CABLE_M!r}\n"
-    f"I2C_CABLE_C_PER_M = {CABLE_C_PER_M!r}\n"
-    f"{EXEMPT}"
-)
 
 
 # --- projects: the control, and the control with one thing changed --------------------

@@ -51,6 +51,26 @@ from tests.check_group_run import (  # noqa: E402
     write_netlist,
     write_toml,
 )
+from tests.check_group_specs import (  # noqa: E402
+    BUDGET_V,
+    CAP_MAX_MM,
+    CENTRES_MM,
+    DI_DT,
+    DROP_MAX_V,
+    FILTERS,
+    I_CONT,
+    I_PEAK,
+    LMAX_MM,
+    LOAD_SHARES,
+    LOOP_MAX_MM2,
+    MAX_FRACTION,
+    MAX_RISE_C,
+    NOMINAL_V,
+    REGULATION_SPEC,
+    T_EDGE,
+    grover,
+)
+from tests.check_group_specs import COPPER_SPECS as SPECS  # noqa: E402
 
 pytestmark = pytest.mark.kicad
 
@@ -58,17 +78,7 @@ MODULE = "pcbkit.check.builtin.test_copper"
 
 # --- the plan: budgets and limits written into the specs ------------------------------
 
-I_CONT, I_PEAK = 4.0, 8.0  # A: the heating test current, and the current of the drops
-MAX_RISE_C = 20.0
-DROP_MAX_V = 0.08  # V per segment, at I_PEAK
-NOMINAL_V, MAX_FRACTION = 12.0, 0.01  # the far load may lose 1 % of 12 V: 120 mV
-LOAD_SHARES = {"near": 0.4, "far": 0.6}  # of the test current, in both segments
-LMAX_MM = 12.0  # how far SENSE may run beside PWR at the closest approach, by design
-DI_DT = 5.0e6  # A/s of the class "sense"
-T_EDGE = 10e-6  # s: the edge the filter on SENSE has to smooth
 FILTER_R, FILTER_C = 10e3, 100e-9  # R10 and C1 in the netlist: tau is 1 ms
-LOOP_MAX_MM2 = 60.0
-CAP_MAX_MM = 5.0
 RES = 0.1  # mm: the copper solver's raster
 RHO = 1.72e-8  # ohm m, copper at 20 C
 H_BOARD = 1.6  # mm: [stackup] thickness_mm by default, the 3H rule's h
@@ -121,19 +131,6 @@ def ipc_rise(amps: float, width_mm: float, copper_mm: float = OZ) -> float:
     """
     area = width_mm / 0.0254 * (copper_mm / OZ) * 1.378
     return (amps / (0.048 * area**0.725)) ** (1 / 0.44)
-
-
-def grover(length_mm: float, centres_mm: float) -> float:
-    """Return the mutual inductance (H) of two parallel filaments (Grover).
-
-    M = (mu0 / 2 pi) * l * (asinh(l / d) - sqrt(1 + (d / l)^2) + d / l), l and d in m.
-    """
-    length, d = length_mm * 1e-3, centres_mm * 1e-3
-    return (
-        2e-7
-        * length
-        * (math.asinh(length / d) - math.hypot(1, d / length) + d / length)
-    )
 
 
 def length_at_noise(budget_v: float, centres_mm: float) -> float:
@@ -201,75 +198,6 @@ LATTICE_WORST = gb.PITCH / math.sqrt(
 
 
 # --- the specs of the control project -------------------------------------------------
-
-CENTRES_MM = (gb.AGG_MM + gb.VICTIM_MM) / 2  # SENSE and PWR at their closest approach
-BUDGET_V = grover(LMAX_MM, CENTRES_MM) * DI_DT  # the noise of LMAX_MM, by construction
-
-
-def reserved_row(name: str, layer: str, box: gb.Box) -> str:
-    """Return a row of RESERVED_COPPER: a box where only ground may have copper."""
-    x0, y0, x1, y1 = box
-    return f'    ("{name}", "{layer}", {x0!r}, {y0!r}, {x1!r}, {y1!r}, {{"/GND"}}),\n'
-
-
-def segment_text(name: str, net: str, terminals: str, heating: bool = True) -> str:
-    """Return a dict of COPPER_SEGMENTS, ``terminals`` being the text of its list."""
-    return (
-        f'    dict(name="{name}", net="{net}", heating={heating},\n'
-        f"         terminals=[{terminals}]),\n"
-    )
-
-
-NEAR, FAR = LOAD_SHARES["near"], LOAD_SHARES["far"]
-FILTERS = (
-    '    "filters": {"SENSE": {"t_edge": '
-    f'{T_EDGE!r}, "pin_ref": "U1", "max_mm": {CAP_MAX_MM!r}}}}},\n'
-)
-BUDGETS = (
-    f"COPPER_BUDGETS = dict(i_cont={I_CONT!r}, i_peak={I_PEAK!r},\n"
-    f"                      segment_drop_max_v={DROP_MAX_V!r}, "
-    f"max_rise_c={MAX_RISE_C!r})\n"
-)
-REGULATION_SPEC = (
-    "SUPPLY_REGULATION = dict(supply='vin_path', ground='rtn_path',\n"
-    f"                         label='the far load', nominal_v={NOMINAL_V!r},\n"
-    f"                         max_fraction={MAX_FRACTION!r})\n"
-)
-SPECS = (
-    '"""Specs of the copper-group test board."""\n'
-    "from __future__ import annotations\n\n"
-    "RESERVED_COPPER = [\n"
-    + reserved_row("return_strip", "bottom", gb.STRIP)
-    + reserved_row("rf_keepout", "top", gb.KEEPOUT)
-    + "]\n"
-    "COUPLING = {\n"
-    f'    "classes": {{"sense": ({BUDGET_V!r}, 1.0e4, {DI_DT!r})}},\n'
-    '    "sensitive": {"sense": ["SENSE"]},\n'
-    '    "aggressors": {"supply": {"nets": ["PWR"], "kind": "current"}},\n'
-    + FILTERS
-    + "}\n"
-    "SENSE_LOOPS = [\n"
-    '    dict(name="shunt", nets=("SA", "SB"), from_ref="R1", to_ref="R2",\n'
-    f'         to_pads=("1", "2"), max_mm2={LOOP_MAX_MM2!r}),\n'
-    "]\n"
-    "COPPER_SEGMENTS = [\n"
-    + segment_text(
-        "vin_path",
-        "VIN",
-        f'("TP2", 1, -{NEAR!r}, "load"), ("TP3", 1, -{FAR!r}, "load"), '
-        '("TP1", 1, 1.0, "source")',
-    )
-    + segment_text(
-        "rtn_path",
-        "RTN",
-        f'("TP5", 1, {NEAR!r}, "load"), ("TP6", 1, {FAR!r}, "load"), '
-        '("TP4", 1, -1.0, "source")',
-        heating=False,
-    )
-    + "]\n"
-    + BUDGETS
-    + REGULATION_SPEC
-)
 
 
 # --- projects: the control, and the control with one thing changed --------------------
