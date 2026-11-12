@@ -25,7 +25,7 @@ from typing import Any
 import click
 
 from pcbkit.kicad import board as kb
-from pcbkit.project import Project
+from pcbkit.project import Project, require_finished_layers
 from pcbkit.route.files import route_files
 from pcbkit.route.hooks import board_size, load_hooks
 from pcbkit.route.rules import apply_rules
@@ -96,6 +96,7 @@ def pre(project: Project) -> PreResult:
     Raise a ClickException if there is no placed board (run ``pcbkit build``) or the
     DSN cannot be exported.
     """
+    require_finished_layers(project.config)
     import pcbnew
 
     files = route_files(project)

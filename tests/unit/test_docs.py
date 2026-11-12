@@ -30,6 +30,7 @@ TYPE_WORDS = {
     "choice": "string",
     "groups": "list of strings",
     "boxes": "list of boxes",
+    "layers": "list of tables",
 }
 
 HOOKS = [

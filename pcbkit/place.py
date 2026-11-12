@@ -38,7 +38,7 @@ from pcbkit import libs, project
 from pcbkit.kicad import board as kb
 from pcbkit.kicad import env
 from pcbkit.kicad.sexp import find, findall, parse
-from pcbkit.project import Project, ProjectError
+from pcbkit.project import Project, ProjectError, require_finished_layers
 
 # Reference text on a placed board: small and tidy, 0.8 mm with a 0.15 mm stroke.
 REF_TEXT_MM = 0.8
@@ -351,6 +351,7 @@ def place_board(proj: Project) -> PlaceResult:
     wrong: a missing netlist or layout.py, a footprint that is not in its library, a
     hole with no position.
     """
+    require_finished_layers(proj.config)
     import pcbnew
 
     stem = proj.config.board.stem

@@ -18,6 +18,7 @@ from pcbkit.project import (
     ChecksConfig,
     Config,
     FabConfig,
+    InnerLayer,
     Project,
     ProjectError,
     RouteConfig,
@@ -29,6 +30,7 @@ from pcbkit.project import (
     load_config,
     load_project,
     parse_config,
+    require_finished_layers,
 )
 
 MINIMAL_TOML = """\
@@ -314,7 +316,7 @@ BAD_VALUES = [
     ("stackup", "layers", "2", "expected a whole number >= 1, got '2' (string)"),
     ("stackup", "layers", 2.0, "expected a whole number >= 1, got 2.0 (float)"),
     ("stackup", "layers", 0, "expected a whole number >= 1"),
-    ("stackup", "layers", 4, "must be 2, got 4 (pcbkit builds two-layer boards only)"),
+    ("stackup", "layers", 3, "must be 2 or 4, got 3"),
     ("stackup", "thickness_mm", "1.6", "expected a number > 0, got '1.6' (string)"),
     ("stackup", "thickness_mm", True, "expected a number > 0, got True (boolean)"),
     ("stackup", "thickness_mm", 0, "expected a number > 0"),
@@ -322,6 +324,25 @@ BAD_VALUES = [
     ("stackup", "copper_mm", float("inf"), "expected a number > 0"),
     ("stackup", "copper_mm", float("nan"), "expected a number > 0"),
     ("stackup", "copper_mm", 10**400, "expected a number > 0"),
+    ("stackup", "inner_copper_mm", "x", "expected a number > 0, got 'x' (string)"),
+    ("stackup", "inner_copper_mm", 0, "expected a number > 0"),
+    ("stackup", "prepreg_mm", True, "expected a number > 0, got True (boolean)"),
+    ("stackup", "prepreg_mm", -0.2, "expected a number > 0"),
+    ("stackup", "inner", "GND", "expected a list of tables like"),
+    ("stackup", "inner", ["plane"], "entry 0 should be a table like"),
+    ("stackup", "inner", [{"net": "GND"}], "entry 0 is missing 'role'"),
+    ("stackup", "inner", [{"role": "ground"}], "entry 0 role should be one of"),
+    ("stackup", "inner", [{"role": 3}], "entry 0 role should be one of"),
+    ("stackup", "inner", [{"role": "plane"}], "entry 0 is a plane and needs a 'net'"),
+    (
+        "stackup",
+        "inner",
+        [{"role": "plane", "net": " "}],
+        "expected a non-empty string",
+    ),
+    ("stackup", "inner", [{"role": "split", "net": "V"}], "takes no 'net'"),
+    ("stackup", "inner", [{"role": "signal", "net": "V"}], "takes no 'net'"),
+    ("stackup", "inner", [{"role": "signal", "nett": "V"}], "unknown key 'nett'"),
     ("route", "tries", 0, "expected a whole number >= 1"),
     ("route", "tries", 2.5, "expected a whole number >= 1, got 2.5 (float)"),
     ("route", "freerouting_passes", -1, "expected a whole number >= 1"),
@@ -357,6 +378,126 @@ def test_wrong_types_and_values_are_rejected(
         parse_config(with_key(section, key, value))
     assert f"[{section}] {key}: " in err.value.message
     assert expected in err.value.message
+
+
+# --- config: four layers -----------------------------------------------------------
+
+FOUR_LAYER = {
+    "layers": 4,
+    "inner": [{"role": "plane", "net": "GND"}, {"role": "split"}],
+}
+
+
+def four_layer(**changes: object) -> dict[str, Any]:
+    """Return a valid four-layer config dict with ``changes`` applied to [stackup]."""
+    data = good()
+    data["stackup"] = {**FOUR_LAYER, **changes}
+    return data
+
+
+def test_a_four_layer_table_is_read_with_its_defaults() -> None:
+    """Fill the inner copper and prepreg defaults and keep the inner roles in order."""
+    stackup = parse_config(four_layer()).stackup
+    assert stackup == StackupConfig(
+        layers=4,
+        thickness_mm=1.6,
+        copper_mm=0.035,
+        inner_copper_mm=0.035,
+        prepreg_mm=0.2,
+        inner=(InnerLayer("plane", "GND"), InnerLayer("split")),
+    )
+    assert isinstance(stackup.inner_copper_mm, float)
+
+
+def test_a_four_layer_table_keeps_every_value() -> None:
+    """Read each four-layer key, turning TOML ints into floats."""
+    inner = [{"role": "signal"}, {"role": "plane", "net": "VCC"}]
+    data = four_layer(thickness_mm=4, inner_copper_mm=1, prepreg_mm=0.5, inner=inner)
+    stackup = parse_config(data).stackup
+    assert (stackup.thickness_mm, stackup.inner_copper_mm, stackup.prepreg_mm) == (
+        4.0,
+        1.0,
+        0.5,
+    )
+    assert stackup.inner == (InnerLayer("signal"), InnerLayer("plane", "VCC"))
+
+
+def test_a_two_layer_file_gives_the_config_main_gave() -> None:
+    """Make a two-layer config equal to one built from the original three keys."""
+    assert parse_config(good()).stackup == StackupConfig(2, 1.6, 0.035)
+    data = good()
+    data["stackup"] = {"layers": 2, "thickness_mm": 1.6, "copper_mm": 0.035}
+    assert parse_config(data) == parse_config(good())
+
+
+CROSS_KEY_ERRORS = [
+    # (changes to the four-layer table, text the message must contain)
+    ({"inner": []}, "[stackup] inner: a 4-layer board needs 2 entries, got 0"),
+    (
+        {"inner": [{"role": "plane", "net": "GND"}]},
+        "[stackup] inner: a 4-layer board needs 2 entries, got 1",
+    ),
+    (
+        {"inner": [{"role": "signal"}] * 3},
+        "[stackup] inner: a 4-layer board needs 2 entries, got 3",
+    ),
+    (
+        {"thickness_mm": 0.6},
+        "[stackup] thickness_mm: the core would be 0.06 mm, under the 0.1 mm minimum",
+    ),
+    ({"thickness_mm": 0.63}, "the core would be 0.09 mm, under the 0.1 mm minimum"),
+    ({"prepreg_mm": 0.7}, "the core would be 0.06 mm, under the 0.1 mm minimum"),
+]
+
+
+@pytest.mark.parametrize(("changes", "expected"), CROSS_KEY_ERRORS)
+def test_four_layer_keys_are_checked_against_each_other(
+    changes: dict[str, object], expected: str
+) -> None:
+    """Reject a wrong inner count and a core under 0.1 mm, naming the key."""
+    with pytest.raises(ProjectError) as err:
+        parse_config(four_layer(**changes))
+    assert expected in err.value.message
+
+
+def test_a_core_of_exactly_the_minimum_is_accepted() -> None:
+    """Accept a core of 0.1 mm: the limit is "at least"."""
+    assert parse_config(four_layer(thickness_mm=0.64)).stackup.layers == 4
+
+
+@pytest.mark.parametrize("key", ["inner_copper_mm", "prepreg_mm", "inner"])
+@pytest.mark.parametrize("layers", [2, None])
+def test_four_layer_keys_are_refused_on_a_two_layer_board(
+    key: str, layers: int | None
+) -> None:
+    """Name the key when a two-layer file sets one that is for four layers only."""
+    values = {"inner_copper_mm": 0.035, "prepreg_mm": 0.2, "inner": []}
+    data = good()
+    data["stackup"] = {key: values[key]}
+    if layers is not None:
+        data["stackup"]["layers"] = layers
+    with pytest.raises(ProjectError) as err:
+        parse_config(data)
+    assert f"[stackup] {key}: only for a four-layer board (set layers = 4)" in (
+        err.value.message
+    )
+
+
+def test_a_bad_value_is_reported_once_and_not_again_across_keys() -> None:
+    """Skip the cross-key checks for a key that failed its own."""
+    with pytest.raises(ProjectError) as err:
+        parse_config(four_layer(prepreg_mm="x", inner="GND"))
+    assert err.value.message.count("\n  ") == 2
+    assert "core would be" not in err.value.message
+    assert "needs 2 entries" not in err.value.message
+
+
+def test_a_four_layer_project_is_stopped_by_the_interim_guard() -> None:
+    """Refuse four layers until the build stages can make them; allow two."""
+    require_finished_layers(parse_config(good()))
+    with pytest.raises(ProjectError) as err:
+        require_finished_layers(parse_config(four_layer()))
+    assert err.value.message == "four-layer boards are not finished yet (WP15)"
 
 
 def test_every_schema_key_rejects_something() -> None:

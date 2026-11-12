@@ -28,6 +28,8 @@ from typing import Any
 
 import click
 
+from pcbkit.stackup import MIN_CORE_MM, core_mm
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # Python 3.9 and 3.10 have no tomllib; tomli is the same parser
@@ -44,6 +46,13 @@ CHECK_GROUPS = ("kicad", "outputs", "fab", "copper", "circuit", "esp32s3")
 
 # Fab profiles pcbkit has code for.
 FAB_PROFILES = ("pcbway",)
+
+# What an inner copper layer may be: a whole-board plane of one net, a power layer whose
+# zones routing.py draws, or an ordinary routing layer.
+INNER_ROLES = ("plane", "split", "signal")
+
+# The [stackup] keys that only a four-layer board may set.
+FOUR_LAYER_KEYS = ("inner_copper_mm", "prepreg_mm", "inner")
 
 # A stem or fab name ends up in file names: no spaces, slashes or leading dots.
 NAME_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
@@ -64,12 +73,27 @@ class BoardConfig:
 
 
 @dataclass(frozen=True)
+class InnerLayer:
+    """One entry of ``[stackup] inner``: what an inner copper layer is for."""
+
+    role: str  # one of INNER_ROLES
+    net: str | None = None  # the net of a "plane" layer; None for the other roles
+
+
+@dataclass(frozen=True)
 class StackupConfig:
-    """The ``[stackup]`` table: board build-up in millimetres."""
+    """The ``[stackup]`` table: board build-up in millimetres.
+
+    ``inner_copper_mm``, ``prepreg_mm`` and ``inner`` only mean something on a
+    four-layer board; a two-layer file may not set them.
+    """
 
     layers: int
     thickness_mm: float
     copper_mm: float
+    inner_copper_mm: float = 0.035
+    prepreg_mm: float = 0.2
+    inner: tuple[InnerLayer, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -161,8 +185,10 @@ class Rule:
 
     ``kind`` picks the converter: ``text`` (non-empty string), ``name`` (a string that
     is safe in a file name), ``whole`` (integer >= 1), ``number`` (finite float > 0),
-    ``choice`` (one of ``choices``), ``groups`` (list of names from ``choices``) or
-    ``boxes`` (list of [x0, y0, x1, y1, pitch]). ``note`` is added to the error.
+    ``choice`` (one of ``choices``), ``groups`` (list of names from ``choices``),
+    ``boxes`` (list of [x0, y0, x1, y1, pitch]) or ``layers`` (list of tables with a
+    ``role`` from ``choices`` and, for a plane, a ``net``). ``note`` is added to the
+    error.
     """
 
     kind: str
@@ -179,11 +205,12 @@ SCHEMA: dict[str, dict[str, Rule]] = {
         "fab_name": Rule("name"),
     },
     "stackup": {
-        "layers": Rule(
-            "whole", 2, choices=(2,), note="pcbkit builds two-layer boards only"
-        ),
+        "layers": Rule("whole", 2, choices=(2, 4)),
         "thickness_mm": Rule("number", 1.6),
         "copper_mm": Rule("number", 0.035),
+        "inner_copper_mm": Rule("number", 0.035),
+        "prepreg_mm": Rule("number", 0.2),
+        "inner": Rule("layers", (), choices=INNER_ROLES),
     },
     "route": {
         "freerouting_passes": Rule("whole", 40),
@@ -313,6 +340,43 @@ def _to_boxes(rule: Rule, value: object) -> object:
     return tuple(boxes)
 
 
+def _to_layers(rule: Rule, value: object) -> object:
+    """Accept a list of ``{ role, net }`` tables; return a tuple of InnerLayer."""
+    shape = '{ role = "plane", net = "GND" }'
+    if not isinstance(value, list):
+        raise ValueError(
+            f"expected a list of tables like {shape}, got {_describe(value)}"
+        )
+    allowed = ", ".join(repr(choice) for choice in rule.choices)
+    layers = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"entry {index} should be a table like {shape}, got {_describe(item)}"
+            )
+        for key in item:
+            if key not in ("role", "net"):
+                hint = _suggest(key, ("role", "net"))
+                raise ValueError(f"entry {index} has an unknown key {key!r}{hint}")
+        if "role" not in item:
+            raise ValueError(f"entry {index} is missing 'role'")
+        role = item["role"]
+        if not isinstance(role, str) or role not in rule.choices:
+            raise ValueError(
+                f"entry {index} role should be one of {allowed}, got {_describe(role)}"
+            )
+        if role == "plane":
+            if "net" not in item:
+                raise ValueError(f"entry {index} is a plane and needs a 'net'")
+            net = str(_to_text(rule, item["net"]))
+        elif "net" in item:
+            raise ValueError(f"entry {index} is a {role!r} layer and takes no 'net'")
+        else:
+            net = None
+        layers.append(InnerLayer(role, net))
+    return tuple(layers)
+
+
 _CONVERTERS = {
     "text": _to_text,
     "name": _to_name,
@@ -321,6 +385,7 @@ _CONVERTERS = {
     "choice": _to_choice,
     "groups": _to_groups,
     "boxes": _to_boxes,
+    "layers": _to_layers,
 }
 
 
@@ -360,6 +425,47 @@ def _section(name: str, table: object, errors: list[str]) -> dict[str, Any]:
     return values
 
 
+def _check_stackup(table: object, values: Mapping[str, Any], errors: list[str]) -> None:
+    """Add the problems that only show across the ``[stackup]`` keys to ``errors``.
+
+    Runs on the keys that passed their own checks and skips the rest, so one mistake is
+    reported once.
+    """
+    layers = values.get("layers")
+    if layers == 2 and isinstance(table, dict):
+        for key in FOUR_LAYER_KEYS:
+            if key in table:
+                errors.append(
+                    f"[stackup] {key}: only for a four-layer board (set layers = 4)"
+                )
+    if layers != 4:
+        return
+    inner = values.get("inner")
+    if inner is not None and len(inner) != layers - 2:
+        errors.append(
+            f"[stackup] inner: a {layers}-layer board needs {layers - 2} entries, "
+            f"got {len(inner)}"
+        )
+    numbers = ("thickness_mm", "copper_mm", "inner_copper_mm", "prepreg_mm")
+    if all(key in values for key in numbers):
+        core = core_mm(StackupConfig(layers=4, **{key: values[key] for key in numbers}))
+        if core < MIN_CORE_MM:
+            errors.append(
+                f"[stackup] thickness_mm: the core would be {core:g} mm, under the "
+                f"{MIN_CORE_MM:g} mm minimum (thickness_mm less two each of copper_mm, "
+                "inner_copper_mm and prepreg_mm)"
+            )
+
+
+def require_finished_layers(config: Config) -> None:
+    """Stop a four-layer project: the build stages cannot make one yet.
+
+    Interim guard for ``place_board`` and ``pre`` until the four-layer work lands.
+    """
+    if config.stackup.layers != 2:
+        raise ProjectError("four-layer boards are not finished yet (WP15)")
+
+
 def parse_config(data: Mapping[str, object], source: str = CONFIG_NAME) -> Config:
     """Validate parsed TOML ``data`` and return a Config; raise ProjectError if invalid.
 
@@ -373,6 +479,7 @@ def parse_config(data: Mapping[str, object], source: str = CONFIG_NAME) -> Confi
             tail = "" if isinstance(value, dict) else " (keys belong inside a table)"
             errors.append(f"unknown {kind} {key!r}{_suggest(key, SCHEMA)}{tail}")
     values = {name: _section(name, data.get(name), errors) for name in SCHEMA}
+    _check_stackup(data.get("stackup"), values["stackup"], errors)
     if errors:
         count = f"{len(errors)} problem{'' if len(errors) == 1 else 's'}"
         lines = "".join(f"\n  {error}" for error in errors)
