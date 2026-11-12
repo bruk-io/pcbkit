@@ -18,7 +18,11 @@ It reports a problem when
   the checks it ran, and an exit status of 0 when those passed, so the file is read for
   what it lacks: a check group the project switched on that has no result at all, and a
   check of the project's own (``checks/test_*.py``, read as Python and never run) that
-  has none.
+  has none;
+* the BOM or the centroid is not the file the sourcing review judged: ``sourcing.json``,
+  which ``skills/review-sourcing/scripts/stamp.py`` writes, is missing, unreadable, or
+  holds another sha256 for it. ``--before-sourcing`` leaves this out, for the sourcing
+  review's own first look at the files.
 
 What it cannot see: a ``-k`` run that leaves a result in every group and for every
 project check (``-k "not drc"``, say) looks complete, because the results file does not
@@ -29,7 +33,7 @@ Nor does it look for a check the module does not spell out as ``def test...`` (a
 
 Exit codes: 0 every file is current, the checks passed and none of the above is
 missing, 1 at least one problem (each is printed, with what to run), 2 no board
-project was found.
+project was found or an argument it does not know.
 
 Standard library only; it runs under whichever ``python3`` is on PATH, 3.9 included.
 """
@@ -37,6 +41,7 @@ Standard library only; it runs under whichever ``python3`` is on PATH, 3.9 inclu
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import sys
@@ -54,6 +59,10 @@ FAB_FILES = ("_gerbers.zip", "_BOM.csv", "_centroid.csv")
 # What a line about missing results says to do, and how many checks it names.
 PARTIAL = "the last run was partial (pcbkit check -k?): run pcbkit check with no -k"
 SHOWN = 3
+# What the sourcing review leaves for the order to verify, and the files it judged.
+STAMP = "sourcing.json"
+JUDGED = ("_BOM.csv", "_centroid.csv")
+RESOURCE = "run the review-sourcing review on the files in it, which stamps them again"
 
 
 def find_project(start: Path) -> Path | None:
@@ -250,8 +259,63 @@ def incomplete(
     return found
 
 
-def problems(root: Path) -> list[str]:
-    """Return one line per reason the order files or the checks are not current."""
+def sha256(path: Path) -> str:
+    """Return the sha256 of a file's bytes, as hex."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def read_stamp(text: str) -> dict[str, str]:
+    """Return ``{path below the project: sha256}`` from a sourcing.json's text.
+
+    Raise ValueError, KeyError, TypeError or AttributeError for text that is not a
+    stamp as ``stamp.py`` writes it.
+    """
+    files = json.loads(text)["files"]
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()):
+        raise TypeError("files is not a table of paths to hashes")
+    return dict(files)
+
+
+def unsourced(root: Path, folder: Path) -> list[str]:
+    """Return a line per BOM or centroid the sourcing review did not judge as it is.
+
+    A file that is missing or doubled is already a MISSING line, so it is passed over.
+    """
+    stamp = root / STAMP
+    where = folder.relative_to(root).as_posix()
+    if not stamp.is_file():
+        return [
+            f"UNREVIEWED: {STAMP} is missing, so no sourcing review judged {where}/: "
+            f"{RESOURCE}"
+        ]
+    try:
+        judged = read_stamp(stamp.read_text(encoding="utf-8"))
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return [f"UNREADABLE: {STAMP}: {RESOURCE}"]
+    found = []
+    for suffix in JUDGED:
+        files = sorted(folder.glob(f"*{suffix}")) if folder.is_dir() else []
+        if len(files) != 1:
+            continue
+        name = files[0].relative_to(root).as_posix()
+        if name not in judged:
+            found.append(
+                f"UNREVIEWED: {name} is not a file the sourcing review judged "
+                f"({STAMP} names {', '.join(sorted(judged)) or 'none'}): {RESOURCE}"
+            )
+        elif judged[name] != sha256(files[0]):
+            found.append(
+                f"UNREVIEWED: {name} changed after the sourcing review judged it "
+                f"(its sha256 differs from {STAMP}): {RESOURCE}"
+            )
+    return found
+
+
+def problems(root: Path, sourcing: bool = True) -> list[str]:
+    """Return one line per reason the order files or the checks are not current.
+
+    ``sourcing`` False leaves out whether the sourcing review judged the files.
+    """
     found = []
     latest = newest(source_files(root))
     when = latest.stat().st_mtime
@@ -272,6 +336,8 @@ def problems(root: Path) -> list[str]:
                 f"STALE: {files[0].relative_to(root)} is older than {where}: "
                 "run pcbkit build, route, promote and finalize"
             )
+    if sourcing:
+        found += unsourced(root, folder)
     results = root / "out" / "checks" / "results.json"
     if not results.is_file():
         found.append("MISSING: out/checks/results.json: run pcbkit check")
@@ -316,13 +382,17 @@ def partial(text: str) -> list[str]:
     ]
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
     """Print what is wrong with the project's order files; return the exit code."""
+    unknown = [arg for arg in argv if arg != "--before-sourcing"]
+    if unknown:
+        print(f"unknown argument {unknown[0]}: the one option is --before-sourcing")
+        return 2
     root = find_project(Path.cwd().resolve())
     if root is None:
         print("no pcbkit.toml here or above: run this inside a board project")
         return 2
-    found = problems(root)
+    found = problems(root, sourcing="--before-sourcing" not in argv)
     for line in found:
         print(line)
     if not found:
@@ -331,4 +401,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
