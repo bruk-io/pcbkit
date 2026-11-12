@@ -307,3 +307,216 @@ checks that too.
 - **ECAD models.** Mouser's KiCad symbols and footprints come from SamacSys and seem to need
   a separate sign-in, not the Search API key. If they can be fetched, they are a second
   independent source for the pinout cross-check.
+
+## Fold-in proposal: quote-verified extraction
+
+A proposal, not a decision: nothing below changes "Decisions so far". Written
+2026-11-12 on branch `wp14-parts-extract` (cut from main, so it has not seen the
+unpushed `wp14-parts`).
+
+The prototype is the `pcb-datasheet-review` skill in the pcb-review plugin, written
+without sight of pcbkit: a "part card" JSON schema, a mechanical verifier
+(`verify_part_card.py`), a Haiku extraction script (`extract_part_card.py`, never run
+for real: authentication failed in its sandbox) and a review procedure that judges a
+design against the cards. Its worked examples come from a real board and stay out of
+pcbkit.
+
+### What it has that the pipeline lacks
+
+- **A written quote rule.** The plan says "each quote appears on the page it cites";
+  the prototype says how: fold look-alike characters, ignore spacing, keep case, a
+  quote of at least 12 characters, within one page.
+- **The number rule.** Every number in a value must be in its quote. A real quote
+  with a wrong number is the error the plan's key eval measure counts ("wrong values
+  that pass `verify`"); this rule moves the commonest kind of it from the eval into
+  `verify`.
+- **Derived values.** A value worked out from the quote (an 8-bit address made 7-bit,
+  a unit conversion) says how, skips the number rule, and is listed for a person.
+- **Silence is recorded.** Each section is `listed` (at least one item),
+  `not_stated` (searched, the datasheet is silent) or `not_applicable`; a value can be
+  `not_stated` too. A missing key is a broken file. An empty `listed` section is
+  refused, because it cannot tell "searched" from "skipped".
+- **Figures listed.** `unreadable_content` names the graphs that matter but have no
+  text (derating, SOA, capacitance against bias), with page and why.
+- **One text feed.** The model is given the PDF's page-tagged text, not page images,
+  so its quotes are copied from the text `verify` checks. Images transcribe to text
+  that need not match.
+- **No tools for the model.** The extraction call runs with no tools, so text in a PDF
+  cannot make it act.
+- **Shape from a schema.** `claude -p --json-schema` makes the output schema-shaped;
+  `verify` then checks it is true.
+- **Facts a review needs, early.** Per pin, what it does when left floating and any
+  internal pull; every bus address including all-call and whether it answers at
+  reset; required external parts with both minimum and maximum (maximum output
+  capacitance); enable and UVLO thresholds; "do not" notes. The plan has some of these
+  under "Later".
+
+### What it duplicates
+
+| Prototype | pcbkit already has |
+|---|---|
+| pypdf for page text | pdftotext, via `datasheet_find.page_texts` |
+| hashing the PDF, `source.pdf_sha256` | the PDF cache keyed by SHA-256, and the hash in `<part>.datasheet.json` |
+| part number, maker, URL in the card | the same in the datasheet record |
+| PDF committed beside the board in `datasheets/` | the cache and the lockfile model under "Caching" |
+| argparse, exit codes 0 to 4 | click, closed reasons with a `next:` line |
+| a quote check | `datasheets.check_confirmation` (spaces collapsed, case ignored) |
+
+### Ported now: `pcbkit.citations`
+
+The verifier's deterministic core is in pcbkit as `pcbkit/citations.py`, pure
+functions on page texts, with no CLI (the part file it would read is not settled):
+`normalise`, `quote_on_page`, `pages_with`, `numbers`, `missing_numbers`,
+`check_citation` (page, length, quote, numbers) and `check_pin` (SHA-256). It reads no
+PDF and adds no dependency: text comes from pdftotext, as for `judge`.
+
+Porting it to pdftotext's text found three faults, each now a test:
+
+- pdftotext joins a word broken at a line end and drops the hyphen, "pull-" + "up"
+  becoming "pullup", so the prototype refused a correct "pull-up" quote. Now a hyphen
+  between two letters is dropped on both sides, with or without the line break; this
+  also matches `-layout` text and a quote that mixes both kinds.
+- It removed all white space, so a quote "-0.36 V" matched a page with "-0.3 6 V".
+  Now spacing between two digits is kept as one space. This is the same hazard as
+  `AO3401 Alpha` in `judge`.
+- It tested numbers as substrings without signs: "9" passed against "19 V", and "40"
+  against "-40". Now numbers are whole tokens, signed unless a digit or point comes
+  before the minus (`3.0-5.5` is a range).
+
+### One format
+
+The part file stays the source of truth and holds nothing KiCad-specific. The card
+becomes the shape of each value in it, and the card's own wrapper goes. Sketch (placeholders, not a real datasheet):
+
+```json
+{
+  "format": 1,
+  "mpn": "<MPN>",
+  "datasheet": {"sha256": "<as in <MPN>.datasheet.json>", "revision": "..."},
+  "absolute_maximum": {
+    "status": "listed",
+    "items": [
+      {
+        "parameter": "supply voltage",
+        "pins": ["VS"],
+        "min": null, "typ": null, "max": "6", "unit": "V",
+        "conditions": "none given",
+        "evidence": {"kind": "quote", "page": 4, "quote": "<the table row, as printed>"}
+      }
+    ]
+  },
+  "pins": {"status": "listed", "items": ["..."]}
+}
+```
+
+- **Numbers as printed.** `min`, `typ`, `max` are strings as the datasheet prints
+  them, the unit apart; code turns them into numbers. The number rule then checks each
+  one exactly, and the checks get numbers without parsing "-0.3 to 6 V".
+- **Evidence is a closed set.** `quote` (page and quote), `derived` (page, quote and
+  how), `figure` (page and figure name: the plan's "read from figure N", for a
+  person), or `not-stated` (where it looked). A value with no evidence is refused.
+- **Provenance by reference.** The file names the datasheet by its SHA-256, which must
+  be the hash in `<part>.datasheet.json` and of the cached PDF (`check_pin`). The
+  record must be VERIFIED or CONFIRMED, as the plan already says. Code writes
+  provenance, never the model.
+- **Section status** as in the card, for every section the schema version has.
+- **Pin types** use the plan's set. The card also has ground, analog, thermal pad and
+  other: ground is power in, the plan has exposed pad already, and analog needs a
+  decision (below).
+- **Per pin**, optional `floating` and `internal_pull`, each a value with evidence.
+
+### Adopt, adapt or drop
+
+| Idea | Verdict | Why |
+|---|---|---|
+| Quote, page and conditions on every value | adopt | Already the plan. |
+| Number rule | adapt (done) | Whole signed numbers, not substrings. |
+| Normalisation | adapt (done) | Tuned to pdftotext; three faults fixed. |
+| 12-character minimum quote | adopt (done) | Short quotes match by accident. |
+| SHA-256 pin | adapt (done) | Pins to the datasheet record and the cache, not a PDF beside the board. |
+| `derived` values | adopt | Honest about arithmetic; a person checks it. |
+| `listed` / `not_stated` / `not_applicable` | adopt | Lets the eval tell a silent miss from a stated absence. |
+| `unreadable_content` | adapt | Becomes `figure` evidence plus a list of figures per section. |
+| Page-tagged text, the same feed as `verify` | adopt | The model must quote the text the checks read. |
+| No tools in the extraction call | adopt | Datasheet text is data. |
+| Schema-shaped output (`--json-schema`) | adopt | Shape by guarantee, truth by `verify`. |
+| A rejected extraction kept apart, never used | adopt | As `<part>.rejected.json`, for a person or a retry. |
+| Spend cap per call | adopt | Bounds a runaway datasheet. |
+| Floating state, internal pull | adopt into the v1 pinout | Same pages as the pin table; a floating enable is a common, costly miss. |
+| Bus addresses (all-call, at reset), external parts with min and max | adapt into "Later", first | Review facts; a pcbkit check can use them (address collisions). |
+| One call for the whole datasheet | adapt | Keep as a baseline arm in the eval against per-section calls. |
+| Free-text `value` | adapt | Strings as printed in `min`/`typ`/`max`, plus `unit`. |
+| pypdf | drop | A second PDF library; pcbkit reads with pdftotext. |
+| PDF and card in the board's `datasheets/` | drop | The cache, `parts/` and vendoring with the hash already cover it. |
+| argparse script, exit codes | drop | Click and closed reasons with `next:`. |
+| Closest-text hint | drop for now | It showed text with spaces removed; "on page N instead" and "page has no text" stay. |
+| Worked examples | drop | From a real board. |
+| The review procedure | leave in pcb-review | It reads part files; it is not WP14. Its "promote repeats to pcbkit" (address collisions, absolute maximum against net voltage) is a later work package. |
+| "Citations cannot combine with structured outputs" | unverified | Check against the API docs before relying on it. |
+
+### How extraction should arrive
+
+Not ported. It arrives after the format, in the plan's order:
+
+1. The part file in code (`pcbkit/partfile.py` or similar), validated in plain code
+   like `pcbkit.toml`, using `pcbkit.citations` for each value: that is `pcbkit
+   datasheet verify`. Hand-written gold files exercise it first.
+2. A command that prints a datasheet's page-tagged text from the cache, so the model,
+   a person and `verify` read one text.
+3. The extraction prompt in one file (the plan's rule), with the prototype's prompt as
+   its first draft, rewritten for the part file and per-section calls.
+4. An extraction runner that calls the model for one section with its pages, no tools,
+   output held to the section's schema and a spend cap; code adds provenance; the
+   result goes through `verify` and is written only if it passes. Worth keeping from
+   the prototype: treat a result with `is_error` as failed even when its subtype says
+   success, and take the schema's provenance out before the model sees it.
+5. The gold set and both evals, in `tools/` like `tools/datasheet_sources/`. Their
+   results set the model per section before anything builds on them.
+
+### What the evals should measure, now that `verify` exists
+
+`verify` now catches made-up quotes, wrong pages and numbers not in the quote, so the
+eval should measure what it cannot:
+
+- **Wrong values that pass `verify`**, by kind: the wrong column (typical as maximum),
+  the wrong row of a multi-row quote, the wrong part variant or condition, absolute
+  maximum taken as an operating limit, the wrong unit. Sign errors and invented
+  numbers no longer belong here: `verify` refuses them.
+- **What `verify` itself misses.** Plant mistakes in the gold part files (change a
+  digit, swap min and max, move a page, swap columns) and count what passes. That
+  says which kinds the eval must score.
+- **False refusals.** Every gold value must pass `verify`. One that does not is a
+  normalisation fault (cells split by pdftotext, a quote across a page break), and it
+  costs a retry.
+- **Wrongly not stated.** A value marked `not-stated` that the gold set has. With
+  `verify`, a retrieval miss shows up here rather than as a wrong value, so retrieval
+  recall and this count go together.
+- **Verify pass on first try, and retries per section.** Cost and time include the
+  retries: Haiku with a retry against Sonnet once.
+- **Pinouts from drawings** separately, as the plan says: no quote is possible, so
+  scoring is against gold only.
+- **The text extractor.** `verify` is tuned to pdftotext. If the eval compares
+  extractors (open question above), the gold set must pass `verify` on each.
+
+### Bruk's to decide
+
+1. **How extraction runs.** The plan says a plugin agent with `model: haiku`. An agent
+   writing JSON has no shape guarantee; `claude -p --json-schema` or the API's
+   structured outputs do. Which? (`claude -p --bare` needs `ANTHROPIC_API_KEY`;
+   without it the nested call loads plugins and costs more.)
+2. **Value shape.** Strings as printed in `min`/`typ`/`max` with a unit, or one
+   free-text value?
+3. **Pin types.** Map ground to power in? Add analog, or call it passive or input?
+4. **Version 1 scope.** Floating state and internal pull in the v1 pinout? Bus
+   addresses and required external parts first among "Later"?
+5. **One quote matcher.** Move `datasheets.check_confirmation` onto
+   `citations.quote_on_page`? It would become case-sensitive and accept a quote
+   without its hyphens. Best done after `wp14-parts` lands.
+6. **One schema.** The model needs a JSON Schema; pcbkit validates in code. Write the
+   schema by hand and test the code against it, or generate one from the other?
+7. **CI and the PDF.** Does CI verify a board's vendored part files again (it needs
+   the PDFs, so the cache or the network), or trust them like a lockfile?
+8. **File name.** `parts/<part>.part.json` beside `<part>.datasheet.json`, or one
+   file per part?
+9. **The review skill.** Should pcb-review's datasheet review read pcbkit part files
+   once they exist, instead of its own cards?
