@@ -85,7 +85,7 @@ EXIT_NOT_ASKED = 2
 DEFAULT_MAX_AGE_HOURS = parts.STOCK_MAX_AGE.total_seconds() / 3600
 GAP_SECONDS = 3.0  # between two requests that are really sent, as datasheet find does
 
-_PRICE = re.compile(r"^\d+(\.\d+)?$|^\d{1,3}(,\d{3})+(\.\d+)?$")
+_PRICE = re.compile(r"^\d+(\.\d+)?$|^[1-9]\d{0,2}(,\d{3})+(\.\d+)?$")
 
 
 def _sleep(seconds: float) -> None:

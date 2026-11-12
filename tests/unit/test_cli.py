@@ -17,6 +17,7 @@ WORKFLOW = [
     "doctor",
     "setup",
     "datasheet",
+    "parts",
     "sch",
     "build",
     "route",
@@ -38,6 +39,7 @@ BUILT = {
     "new",
     "setup",
     "datasheet",
+    "parts",
     "doctor",
     "sch",
     "build",
@@ -120,12 +122,14 @@ def test_every_command_that_is_not_built_has_a_stub_test() -> None:
         ("finalize", ["--no-render"]),
         ("check", ["-k"]),
         ("datasheet", ["find", "confirm"]),
+        ("parts", ["stock"]),
+        ("parts stock", ["--qty", "--max-age", "--offline"]),
         ("quote", ["--assembled", "--fab-qty", "--self-solder-tht", "--notes"]),
     ],
 )
 def test_help_shows_each_option(name: str, options: list[str]) -> None:
     """List each option in the command's --help."""
-    output = invoke(name, "--help").output
+    output = invoke(*name.split(), "--help").output
     for option in options:
         assert option in output, (name, option)
 

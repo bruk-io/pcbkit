@@ -253,7 +253,9 @@ def command_problems(text: str) -> list[str]:
     Looks only in code (fences and backticks). A token that is ``pcbkit``, or ends in
     ``/pcbkit`` and is not a URL, is a call. The word after it must be a command of
     the CLI (or a ``<placeholder>``), and each ``-x`` or ``--xyz`` after that, up to
-    the next call, one of that command's options.
+    the next call, one of that command's options. A command that is a group
+    (`pcbkit parts stock`) is followed into its subcommand, and the options are that
+    subcommand's.
     """
     commands = cli.commands
     problems = []
@@ -273,11 +275,27 @@ def command_problems(text: str) -> list[str]:
             if name not in commands:
                 problems.append(f"`{span}`: pcbkit has no command {name!r}")
                 continue
-            known = options_of(commands[name])
-            for token in rest[1:]:
+            command, shown, words = commands[name], f"pcbkit {name}", rest[1:]
+            while isinstance(command, click.Group) and words:
+                word = words[0]
+                if word.startswith(("-", "<")):
+                    break  # an option of the group itself, or a placeholder
+                if word not in command.commands:
+                    problems.append(f"`{span}`: `{shown}` has no command {word!r}")
+                    command = None
+                    break
+                command, shown, words = (
+                    command.commands[word],
+                    f"{shown} {word}",
+                    words[1:],
+                )
+            if command is None:
+                continue
+            known = options_of(command)
+            for token in words:
                 option = token.split("=", 1)[0]
                 if option.startswith("-") and option not in known:
-                    problems.append(f"`{span}`: `pcbkit {name}` has no option {option}")
+                    problems.append(f"`{span}`: `{shown}` has no option {option}")
     return problems
 
 
@@ -1304,6 +1322,23 @@ def test_the_command_scan_catches_a_renamed_command_and_a_dropped_option() -> No
         "`pcbkit route --retries 3`: `pcbkit route` has no option --retries",
         "`.venv/bin/pcbkit shots --no-render --tries 2`: `pcbkit shots` has no "
         "option --tries",
+    ]
+
+
+def test_the_command_scan_follows_a_group_into_its_subcommand() -> None:
+    text = (
+        "Run `pcbkit parts stock --qty 10 --offline`, or\n"
+        "```\n"
+        "pcbkit datasheet find --url x INA226AIDGSR\n"
+        "pcbkit parts stock --retries 3\n"
+        "pcbkit parts stok --qty 2\n"
+        "pcbkit parts --help\n"
+        "```\n"
+    )
+    assert command_problems(text) == [
+        "`pcbkit parts stock --retries 3`: `pcbkit parts stock` has no option "
+        "--retries",
+        "`pcbkit parts stok --qty 2`: `pcbkit parts` has no command 'stok'",
     ]
 
 
