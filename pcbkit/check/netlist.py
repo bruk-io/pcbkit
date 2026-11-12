@@ -89,13 +89,15 @@ class Netlist:
         return self.pin_net.get((ref, str(pin)))
 
     def functions(self, ref: str) -> dict[str, str]:
-        """Return ``{pad: function}`` for the connected pads of ``ref``.
+        """Return ``{pad: function}`` for the pads of ``ref`` that are on a net.
 
-        The function is the pin name the symbol gives, with KiCad 10's ``_<pad>``
-        suffix removed ("VIN" for pad 3, not "VIN_3"). A pad with no pinfunction in the
-        netlist (a passive pin) maps to "", and KiCad 9's unnamed pin keeps its "~". A
-        pad on no net is missing, as it is from ``nets``, and a reference that is not
-        listed gives an empty dict.
+        A pin the schematic leaves unconnected is on a net KiCad names
+        ``unconnected-(...)``, so it is included. The function is the pin name the
+        symbol gives, with KiCad 10's ``_<pad>`` suffix removed ("VIN" for pad 3, not
+        "VIN_3"). A pad with no pinfunction in the netlist (a passive pin) maps to "",
+        and KiCad 9's unnamed pin keeps its "~". A pad that is on no net at all (not
+        even an ``unconnected-`` one) is missing, as it is from ``nets``, and a
+        reference that is not listed gives an empty dict.
         """
         return dict(self._functions.get(ref, {}))
 

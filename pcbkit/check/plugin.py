@@ -21,7 +21,9 @@ Fixtures (session scope unless noted):
   ``layout.py``. A name that is not defined, or a file that is missing, fails the check
   that asks for it with a message that names it; ``specs.get(name, default)`` and
   ``name in specs`` ask without failing. A table read with ``tables.read`` that has
-  the wrong shape fails the same way, as ``bad-table``.
+  the wrong shape fails the same way: while parametrising it fails the check as
+  ``bad-table``, and in a check's body it fails that check, with the paths and no
+  traceback.
 * ``nl``: the ``Netlist`` of a fresh kicad-cli export of the schematic.
 * ``board``: the pcbnew board, loaded from ``kicad/<stem>.kicad_pcb``.
 * ``record`` (per test): ``record(key, value)`` keeps a number for the results file.
@@ -364,6 +366,21 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     for value in callspec.params.values():
         if isinstance(value, MissingParam):
             pytest.fail(value.message, pytrace=False)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> Any:
+    """Fail a check whose body reads a table of the wrong shape, with the paths.
+
+    A ``tables.read`` in the body raises ``TableError``; left alone it is a plain
+    exception with a traceback. It becomes a failure of that one check, whose message
+    is the lines of the error (each starting with the path of the value), as for a
+    table read while parametrising.
+    """
+    try:
+        return (yield)
+    except TableError as err:
+        pytest.fail(str(err), pytrace=False)
 
 
 # --- parametrising from the project's data ----------------------------------------

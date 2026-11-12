@@ -14,6 +14,7 @@ whose checks read only the schematic.
 from __future__ import annotations
 
 import platform
+import traceback
 from pathlib import Path
 
 import click
@@ -384,6 +385,37 @@ def finalize_cmd(no_render: bool) -> None:
     flow.finalize(proj, render=not no_render)
 
 
+def _safe_text(err: BaseException) -> str:
+    """Return ``str(err)``, or the type's name when that raises."""
+    try:
+        return str(err)
+    except Exception:  # noqa: BLE001 - an exception of the project's own
+        return type(err).__name__
+
+
+def _specs_import_message(path: Path, err: Exception) -> str:
+    """Return the message for a specs.py that raised on import, with its line.
+
+    The line is a SyntaxError's own, or else the last frame of the traceback that is in
+    specs.py itself, so a failure inside a module it imports still points at the line
+    of specs.py that did the importing.
+    """
+    line = err.lineno if isinstance(err, SyntaxError) else None
+    if line is None:
+        here = [
+            frame.lineno
+            for frame in traceback.extract_tb(err.__traceback__)
+            if Path(frame.filename).resolve() == path.resolve()
+        ]
+        line = here[-1] if here else None
+    try:
+        shown = repr(err)
+    except Exception:  # noqa: BLE001 - an exception whose repr raises
+        shown = type(err).__name__
+    where = f" (specs.py line {line})" if line else ""
+    return f"specs.py could not be read: {shown}{where}"
+
+
 @cli.command("specs")
 def specs_cmd() -> None:
     """Check the shape of the tables in specs.py.
@@ -404,9 +436,21 @@ def specs_cmd() -> None:
         return
     try:
         module = import_optional_project_module(proj.root, "specs")
-        count, errors = tables.check_module(module)
+    except SystemExit as err:  # specs.py called sys.exit(): not an Exception
+        code = "" if err.code is None else repr(err.code)
+        raise click.ClickException(
+            f"specs.py could not be read: it called sys.exit({code}) while being "
+            "imported"
+        ) from err
     except Exception as err:  # the project's own code failed to import
-        raise click.ClickException(f"specs.py could not be read: {err!r}") from err
+        raise click.ClickException(_specs_import_message(path, err)) from err
+    try:
+        count, errors = tables.check_module(module)
+    except Exception as err:  # the registry or the validator: not specs.py's fault
+        raise click.ClickException(
+            "pcbkit failed while checking the tables (a bug in pcbkit, not a problem "
+            f"in specs.py): {type(err).__name__}: {_safe_text(err)}"
+        ) from err
     for line in errors:
         click.echo(line)
     if errors:
