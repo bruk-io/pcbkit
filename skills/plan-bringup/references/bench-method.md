@@ -50,7 +50,9 @@ readings polarity-dependent), and let the reading settle (bulk capacitance
 charges and the reading climbs). Also measure adjacent rails to each other to
 catch bridges between them.
 
-Order-of-magnitude expectations, to be refined from the schematic:
+The expected reading per rail is the one the readings check recorded (a DC solve:
+it misses paths through IC inputs, so the bench can read lower). The usual orders of
+magnitude, to sanity-check it:
 
 | Net | Usual reading | Stop if |
 |-----|---------------|---------|
@@ -66,16 +68,16 @@ cannot be checked with a two-wire meter; skip it.
 
 ## Choosing the current limit
 
-1. Sum the expected idle current of everything live in that step from the
-   datasheets' quiescent or typical supply currents, including LEDs, pull-ups,
-   dividers and bias resistors. For a regulator, refer its output load back to
-   its input: I_in = V_out x I_out / (V_in x efficiency).
+1. Take the stage's idle current from the readings check's record: its
+   `circuits.scenario` for the stage carries the datasheets' quiescent or typical
+   supply currents, LEDs, pull-ups, dividers and bias resistors, and a regulator's
+   output load referred to its input. Never add it up in the conversation.
 2. Set the limit at 2-3x that figure, at least 20 mA above it, and below the
    level at which the most fragile part in the path is damaged if a short sits
    behind it.
 3. Expect the supply to touch the limit briefly while bulk capacitors charge.
    Constant current that persists more than about a second is a stop condition.
-4. Write the arithmetic in the cell, for example "200 mA = 3 x ~60 mA idle".
+4. Write the reason in the cell, for example "200 mA = 3 x ~60 mA idle (recorded)".
 
 Microcontroller rule of thumb: a blank or minimal-firmware microcontroller with
 radios off draws tens of mA; enabling a radio adds hundreds of mA peak. The
@@ -83,11 +85,11 @@ bring-up firmware keeps radios off.
 
 ## Rail voltage tolerance
 
-Tolerance = reference accuracy + feedback divider tolerance (roughly twice the
-resistor tolerance in the worst case) + load regulation. For a 1% reference with
-1% resistors, state +/-3%. State the absolute value above which the most
-sensitive part on the rail is at risk and make that the stop condition, with
-"remove power immediately".
+The expected window is the rail's `SUPPLY_PINS` row, or the set-point row
+`review-derating` wrote in `SUPPLY_LIMITS` (reference accuracy, divider
+tolerance and load regulation together). State the absolute value above which
+the most sensitive part on the rail is at risk and make that the stop condition,
+with "remove power immediately".
 
 ## Isolation means
 

@@ -1,70 +1,78 @@
 # Worked example: my-board
 
-A generic board, made up to show how a plan runs. Test point names (`TP_*`) are what the
-plan asks for; on a real board use the names on the board and list every missing one in
-Part 1. Expected currents are estimates from typical datasheet figures.
+A generic battery-powered data logger, made up to show how a plan runs. Test point
+names (`TP_*`) are what the plan asks for; on a real board use the names on the board
+and list every missing one in Part 1. Expected readings are the ones the project check
+recorded, rounded; the numbers here are illustrative.
 
 ## Power tree and enable chain
 
 ```
-J1 24 V -> F1 -> Q1 (reverse-polarity FET) -> VIN
-  |- U2 buck -> VMOT 12 V -> U4 motor driver
-  |     EN: held low by a hold-down from VIN, released by U1 MOT_EN through the stop loop (J4)
-  |- U3 regulator -> +3V3 -> U1 controller, U6 temperature sensor (I2C), U7 current amplifier
-USB J2 VBUS -> D2 -+-> +3V3 input (D3 from U3's side)
+J1 USB-C VBUS -> U2 Li-ion charger -> VBAT <- J2 cell connector (2-pin)
+VBAT -> U3 buck-boost -> +3V3 -> U1 controller, U5 real-time clock (I2C)
++3V3 -> U4 load switch (EN: PWR_EN from U1) -> SD_3V3 -> J3 SD card
++3V3 -> U6 load switch (EN: PWR_EN from U1) -> SNS_3V3 -> U7, U8 sensors (I2C)
 ```
 
-The `i2c` record in `out/checks/results.json` lists U6 at 0x48 and nothing else on the
-bus: that is the expected scan.
+The `i2c` record in `out/checks/results.json` lists U5 at 0x68, U7 at 0x44 and U8 at
+0x5C on one bus. With `SNS_3V3` off, only 0x68 can answer.
 
 ## How the order falls out
 
-- `+3V3` runs from USB with no 24 V and no motor rail: lowest energy, so U1 and the bus
-  come first.
-- The input stage (F1, Q1) can be live with the hold-down keeping U2 off: second, and
-  the place to prove the hold-down and reverse polarity.
-- `VMOT` depends on U1, the stop loop and VIN: third, with no motor.
-- One motor last.
+- `+3V3` from a bench supply on the `VBAT` pads, cell connector empty, USB unplugged:
+  the controller and the clock with no charger and no loads.
+- The charger from USB with no cell, then with the bench supply standing in for a cell.
+- `SD_3V3` and `SNS_3V3` one at a time, which the draft cannot do: both switches hang
+  on one `PWR_EN`.
+- A real cell last.
+
+## Rows written, then checked
+
+```python
+# Proposed tables: project checks from add-check read them.
+TEST_POINTS = [("VBAT", 8.0), ("+3V3", 8.0), ("SD_3V3", 8.0), ("SNS_3V3", 8.0)]
+PROBE_KEEPAWAY = [("cell holder", 30, 2, 48, 20)]
+ENABLE_LINKS = {"PWR_EN": ["U4", "U6"]}
+I2C_EXPECTED = {"main": [0x44, 0x5C, 0x68]}
+```
+
+The first full run failed `TEST_POINTS` for `SD_3V3` and `SNS_3V3` (no test point),
+`PROBE_KEEPAWAY` for `TP_VBAT` (under the cell holder), and `ENABLE_LINKS` for
+`PWR_EN` (one net, no link per switch). The readings check recorded `+3V3` at about
+47 kohm to ground and stage 1 at about 0.4 mA.
 
 ## Part 1. Design findings
 
 | # | Kind | Where | Why the plan needs it | Suggested change |
 |---|---|---|---|---|
-| 1 | missing test point | VIN after Q1, Q1 gate | Step 2.2 tells "FET on" from "body diode only" by the VIN drop and the gate voltage | `TP_VIN`, `TP_GATE` |
-| 2 | missing test point | `VMOT`, `+3V3` | every rail step probes its rail | a labelled test point per rail, each with a ground pad within 10 mm |
-| 3 | missing test point | `MOT_EN` before and after the stop loop | steps 1.6 and 3.1 probe the enable chain at each end | `TP_EN_MCU`, `TP_EN_LOOP` |
-| 4 | unreachable probe point | anything between J10 and J13 | probing with the sensor plugs mated | move to the board edge, clear of the plugs' bodies |
-| 5 | cannot power alone | U3 output to `+3V3` | if stage 0 reads `+3V3` low, nothing separates U3 from its loads | a 0 ohm link between U3's output and the `+3V3` net |
+| 1 | missing test point | `SD_3V3`, `SNS_3V3` | steps 3.2 and 4.2 probe each switched rail | a labelled test point on each, a ground pad within 8 mm |
+| 2 | unreachable probe point | `TP_VBAT` | the cell holder covers it once a cell is fitted, and stage 5 probes it | move it beside J2, outside the holder |
+| 3 | missing isolation | U4, U6 on `PWR_EN` | stages 3 and 4 bring the SD card and the sensors up apart | a 0 ohm link from `PWR_EN` to each switch's enable |
+| 4 | cannot power alone | U3 output to `+3V3` | if stage 0 reads `+3V3` low, nothing separates U3 from its loads | a 0 ohm link between U3's output and the `+3V3` net |
 
-Hand-offs: `walk-fault-states`: on stop release, should `VMOT` return while `MOT_EN` is
-still high, or wait for firmware? `review-derating`: the input capacitors' rating
-against 28 V with hot-plug ringing.
+Hand-offs: `walk-fault-states`: with U1 in reset, does `PWR_EN` float, and do the loads
+come up? `review-misplug`: J2 takes third-party cell leads, which arrive reversed.
 
 ## Part 2. Bring-up plan (stages 0 to 2 shown)
 
-Initial state: J1 and J2 unplugged, stop switch fitted and released, no motor, the 0 ohm
-link of finding 5 fitted. Bench supply off, 0 V.
+Initial state: J1 and J2 empty, no SD card, both `PWR_EN` links open, the link of
+finding 4 fitted. Bench supply off, 0 V.
 
 | Step | Action | Probe point | Expected | Limit | Stop if |
 |---|---|---|---|---|---|
-| 0.1 | Inspect orientation of D2, D3, Q1, U1-U7 and J1's polarity mark against the assembly drawing; loupe on U2's pins | - | matches the drawing | no power | any part reversed or missing, any bridge |
-| 0.2 | Ohms VIN to GND, both polarities, let settle | `TP_VIN` | climbs past 10 kohm | no power | under 1 kohm |
-| 0.3 | Ohms `+3V3` to GND | `TP_3V3` | hundreds of ohm to tens of kohm; compare boards | no power | under 50 ohm, or ten times below a sibling board |
-| 1.1 | Bench supply into USB VBUS through a breakout, ramp 0 to 5.0 V | supply readout | 20-50 mA settled | 5.0 V, 120 mA = ~2.5 x 50 mA | constant current over 1 s; over 80 mA settled |
-| 1.2 | Probe `+3V3` | `TP_3V3` | 3.30 V +/-3 % | 5.0 V, 120 mA | over 3.45 V: power off now |
-| 1.3 | Probe VIN | `TP_VIN` | under 0.3 V | 5.0 V, 120 mA | over 0.5 V: USB is back-feeding the input side |
-| 1.4 | Flash heartbeat firmware, radios off | serial console | steady for 5 min, power-on reset reason | USB port | any brownout reset |
-| 1.5 | I2C scan | serial console | exactly 0x48 | USB port | missing or extra address |
-| 1.6 | Drive `MOT_EN` high, stop released, then pressed | `TP_EN_MCU`, `TP_EN_LOOP` | loop side high when released, low when pressed | USB port | loop side high with the stop pressed |
-| 2.1 | USB off. Bench supply into J1, ramp 0 to 24.0 V | supply readout | under 5 mA settled (regulators held off) | 24.0 V, 50 mA | constant current over 1 s |
-| 2.2 | Probe VIN and the gate | `TP_VIN`, `TP_GATE` | VIN within 0.1 V of the input, gate above VIN | 24.0 V, 50 mA | VIN 0.5-0.7 V low: only Q1's body diode conducts |
-| 2.3 | Probe `VMOT` with U1 unpowered | `TP_VMOT` | under 0.3 V | 24.0 V, 50 mA | over 0.5 V: the hold-down is not holding; do not go on |
-| 2.4 | Reverse polarity: supply off, pigtail reversed, 12.0 V | supply readout | under 1 mA | 12.0 V reversed, 50 mA | the supply hits its limit |
+| 0.1 | Inspect orientation of U2-U8 and J2's polarity mark against the assembly drawing; loupe on U3's pins | - | matches the drawing | no power | any part reversed or missing, any bridge |
+| 0.2 | Ohms `+3V3` to GND, both polarities, let settle | `TP_3V3` | about 47 kohm (recorded), lower through IC inputs; compare boards | no power | under 50 ohm, or ten times below a sibling board |
+| 1.1 | Bench supply on the `VBAT` pads, ramp 0 to 3.7 V | supply readout | about 0.4 mA settled (recorded) | 3.7 V, 20 mA | constant current over 1 s; over 5 mA settled |
+| 1.2 | Probe `+3V3` | `TP_3V3` | 3.30 V, within the `SUPPLY_PINS` window | 3.7 V, 20 mA | over 3.45 V: power off now |
+| 1.3 | Flash heartbeat firmware | serial console | steady for 5 min, reset reason | 3.7 V, 100 mA | any brownout reset |
+| 1.4 | I2C scan, `SNS_3V3` off | serial console | exactly 0x68 | 3.7 V, 100 mA | missing or extra address |
+| 2.1 | Bench supply off. USB into J1, no cell | `TP_VBAT` | the charger's no-cell behaviour from its datasheet | USB port | `VBAT` above the charger's float voltage |
+| 2.2 | Reverse polarity on J2: bench supply reversed through a pigtail, 1.0 V | supply readout | under 1 mA | 1.0 V reversed, 20 mA | the supply hits its limit |
 
-Stage 3 brings up `VMOT` with no motor (step by step through the stop loop, then a reset
-with the scope on `MOT_EN`), and stage 4 adds one motor, then the over-current alert.
+Stage 3 closes the `SD_3V3` link and fits a card; stage 4 closes the `SNS_3V3` link,
+then scans for exactly 0x44, 0x5C and 0x68; stage 5 fits a cell.
 
 ## Written to specs.py
 
-`TEST_POINTS = [("VIN", 10.0), ("VMOT", 10.0), ("+3V3", 10.0), ("MOT_EN", 10.0)]` and
-`I2C_EXPECTED = {"main": [0x48]}`, both proposed tables handed to `add-check`.
+The four tables above, each handed to `add-check`, and `SHOTS` regions for the probe
+points of stages 1 and 2.

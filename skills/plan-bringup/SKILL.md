@@ -2,22 +2,23 @@
 description: >-
   Write the step-by-step bring-up plan for the first assembled pcbkit board and use the
   writing as a design review - every probe point the plan needs and the layout lacks,
-  and every section that cannot be powered alone, is a finding to fix before ordering -
-  and record the test points, isolation links and expected readings as check tables.
-  Load it before ordering boards, before writing or reviewing a bring-up or first-power
-  plan, and when boards arrive and need a bench checklist, even for a small board.
-  Without it Claude starts on a battery instead of a current-limited supply, brings
-  every rail up at once, gives no expected idle current or stop condition per step,
-  works out bus addresses the checks already record, and assumes test points and
-  isolation jumpers the layout does not have.
+  and every section that cannot be powered alone, is a finding - and record the test
+  points, isolation links and expected readings as check tables. Load it before
+  writing or reviewing a bring-up, first-power or bench plan, when asked whether a
+  board can be tested section by section or has the test points it needs, and when
+  boards arrive and need a bench checklist, even for a small board. Without it Claude
+  starts on a battery instead of a current-limited supply, brings every rail up at
+  once, gives no expected idle current or stop condition per step, works out bus
+  addresses and expected readings by hand that the checks record, and assumes test
+  points and isolation jumpers the layout does not have.
 ---
 
 # Bring-up plan
 
-Gate: before ordering, after `pcbkit finalize` and a full `pcbkit check`. The plan
-written here is the bench checklist when boards arrive, so write it to be carried out,
-not read. A step that cannot be carried out is a design defect you can still fix: no
-test point to probe, no link to isolate a section, no way to power a section alone.
+Gate: after `pcbkit finalize`, before an order (`board-workflow` sequences it). The plan
+is the bench checklist when boards arrive. A step that cannot be carried out is a design
+defect you can still fix: no test point, no link to isolate a section, no way to power
+a section alone.
 
 ## Safety rules (never relax)
 
@@ -30,51 +31,66 @@ test point to probe, no link to isolate a section, no way to power a section alo
 
 ## 1. Start from what the checks decide
 
-Read `out/checks/results.json` from a full run (`selection.complete` true):
+Everything exists at this gate, so every group applies: run `.venv/bin/pcbkit check`
+with no `-k` and read `out/checks/results.json` (`selection.complete` true).
 
 - The expected bus scan: the `i2c` table `test_i2c_addresses_unique_per_bus` records
-  per bus. All-call and general-call addresses count if `circuits.i2c_devices` lists
-  them. Copy it; never work an address out again.
+  per bus. Copy it; never work an address out again.
 - Expected rail voltages: `SUPPLY_PINS` and `test_supply_pins_in_range`.
 - Default-off states: a project check reading `FAULT_STATES`, if `walk-fault-states`
   wrote one. The plan tests those states on the bench; it does not re-derive them.
 - A check that failed or was skipped is a step that cannot pass on the bench: list it
-  under Part 1 and stop there until it is fixed.
+  in Part 1 and stop there until it is fixed.
 
-## 2. Gather the inputs
+## 2. Settle the power tree and the bench
 
-design.py and the schematic PDF in `out/docs/` for the power tree (every source,
-protection part, regulator and rail, and what feeds what) and the enable chain (what
-holds each regulator off, what releases it, its state with the controller unpowered,
-in reset or blank); layout.py and `pcbkit shots` for where each probe point is and what
-covers it when assembled; the assembly drawing in `out/docs/`. From the user: the bench
-(supply voltage and current, a scope or not) and what is mated during testing.
+From design.py and the schematic PDF in `out/docs/`: the power tree (every source,
+protection part, regulator and rail, and what feeds what) and the enable chain. From the
+user: the bench (supply voltage and current, a scope or not) and what is mated during
+testing. Order the stages: the lowest-energy section that runs alone first (usually the
+controller from USB or a logic rail), then the input stage alone, then each rail in
+dependency order, then loads. A rail that cannot come up without another one also coming
+up is a finding.
 
-## 3. Write it
+## 3. Write the rows, then let the checks decide
 
-1. **Order from the power tree and the enable chain.** The lowest-energy section that
-   runs alone goes first (usually the controller from USB or a logic rail), then the
-   input stage alone, then each rail in dependency order, then loads. A rail that cannot
-   come up without another one also coming up is a finding.
-2. **For every step: what does the probe touch, and can it reach it assembled**
-   (connectors mated, modules fitted)? A probe point that does not exist, is under a
-   part or is blocked by a mated plug is a finding. Each needs a ground pad close
-   enough for a scope spring tip.
-3. **For every section: how is it isolated** so a fault in it does not take out the
-   rest? Zero-ohm links, solder jumpers, parts left `dnp=True`, enables held off by
-   default. A section with none is a finding.
-4. **State expectations as numbers you derived**: resistance order of magnitude, idle
-   current from quiescent currents, rail voltage and tolerance. Show the arithmetic in
-   the cell, briefly.
-5. **Firmware ladder**: programming, then one bus or peripheral at a time.
-6. **Exercise every protection** on purpose: stop input, reverse polarity at low voltage
-   and current, over-current through a monitor's alert, not a dead short.
-7. **Mark scope steps** with "(scope)"; everything else needs only a meter and the
-   supply readout.
+The tables are proposed: no built-in check reads them yet. Their shapes are in
+"Proposed tables" in `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`.
 
-Stages, resistance expectations, current limits and protection tests:
-[references/bench-method.md](references/bench-method.md). A plan for a generic board:
-[references/example.md](references/example.md); read it before a first plan.
+- `TEST_POINTS`: every net a step probes, with the ground distance a scope spring tip
+  needs. `PROBE_KEEPAWAY`: the boxes mated plugs and fitted modules cover.
+- `ENABLE_LINKS`: each enable net several regulators share, so each can be isolated.
+- `I2C_EXPECTED`: the exact scan per bus, from the recorded `i2c` table.
+- Expected readings, never arithmetic in the conversation: `add-check` writes a project
+  check that solves with `pcbkit.check.dc` and records each `TEST_POINTS` net's
+  resistance to ground, rails unpowered (a test current from `Circuit.inject`), and each
+  stage's input current from a `circuits.scenario` with datasheet quiescent currents as
+  loads. The model sees only resistors, diodes and FETs: a bench reading can be lower.
+
+Hand each table to `add-check`, then run `pcbkit check` in full again. A failed
+`TEST_POINTS`, `PROBE_KEEPAWAY` or `ENABLE_LINKS` row is a Part 1 finding.
+
+## 4. Write the plan
+
+Steps by stage from [references/bench-method.md](references/bench-method.md): inspection
+and resistance first, then each stage with its limit (2 to 3 times the recorded idle
+current), the firmware ladder one bus at a time, every protection exercised on purpose
+(stop input, reverse polarity at low voltage and current, over-current through a
+monitor's alert, not a dead short), scope steps marked "(scope)". Each expectation is a
+recorded number or a `SUPPLY_PINS` window, named. A plan for a generic board, for the
+shape of both parts: [references/example.md](references/example.md).
+
+## 5. Write the rest down
+
+- `SUPPLY_PINS` for any rail whose expected window the plan relied on and no row held.
+- design.py: `dnp=True` for parts left off for first power; layout.py: a `SHOTS`
+  region per stage's probe points.
+
+## Lane and hand-offs
+
+Default states go to `walk-fault-states`, ratings to `review-derating`, return paths to
+`review-current-paths`, plugs to `review-misplug`, a spec question to
+`review-spec-drift`.
 
 ## Output - fixed format
 
@@ -102,19 +118,3 @@ that does not exist yet gets the name it should have and a Part 1 row. Limit is 
 supply voltage and current limit in force. Stop if is a concrete reading ("supply in
 constant current over 1 s", "address 0x48 missing"), never "looks wrong". Do not change
 the columns: the user records the measured value per step on the bench.
-
-## 4. Write it down
-
-- `TEST_POINTS` and `PROBE_KEEPAWAY` (proposed): the nets that need a test point, the
-  ground distance, and the boxes mated plugs and modules cover. `ENABLE_LINKS`
-  (proposed): which regulators on a shared enable need their own link. `I2C_EXPECTED`
-  (proposed): the exact scan per bus. Hand each to `add-check`.
-- `SUPPLY_PINS` for any rail whose expected window the plan relied on and no row held.
-- design.py: `dnp=True` for parts left off for first power; layout.py: a `SHOTS`
-  region per stage's probe points.
-
-## Lane and hand-offs
-
-Default states go to `walk-fault-states`, ratings to `review-derating`, return paths to
-`review-current-paths`, plugs to `review-misplug`, a spec question to
-`review-spec-drift`. A finding seen on a second board becomes a check (`add-check`).
