@@ -20,7 +20,8 @@ Fixtures (session scope unless noted):
 * ``specs``, ``circuits``, ``layout``: the project's ``specs.py``, ``circuits.py`` and
   ``layout.py``. A name that is not defined, or a file that is missing, fails the check
   that asks for it with a message that names it; ``specs.get(name, default)`` and
-  ``name in specs`` ask without failing.
+  ``name in specs`` ask without failing. A table read with ``tables.read`` that has
+  the wrong shape fails the same way, as ``bad-table``.
 * ``nl``: the ``Netlist`` of a fresh kicad-cli export of the schematic.
 * ``board``: the pcbnew board, loaded from ``kicad/<stem>.kicad_pcb``.
 * ``record`` (per test): ``record(key, value)`` keeps a number for the results file.
@@ -69,6 +70,7 @@ from pcbkit.check.results import (
     gate_of,
     results_dir,
 )
+from pcbkit.check.tables import TableError
 from pcbkit.project import (
     Project,
     ProjectError,
@@ -97,10 +99,11 @@ class MissingParam:
     """
 
     message: str
+    kind: str = "missing-spec"
 
     def __repr__(self) -> str:
         """Return a short form, so it reads well in a test id."""
-        return "missing-spec"
+        return self.kind
 
 
 class ProjectModule:
@@ -387,10 +390,13 @@ def spec_params(
     specs = state_of(metafunc.config).module("specs")
     try:
         found = list(values(specs))
-    except MissingSpec as err:
-        missing = MissingParam(str(err))
+    except (MissingSpec, TableError) as err:
+        # a table of the wrong shape (``tables.read``) fails the check by name, as a
+        # missing one does, and its id says which it was
+        kind = "bad-table" if isinstance(err, TableError) else "missing-spec"
+        missing = MissingParam(str(err), kind)
         metafunc.parametrize(
-            argnames, [pytest.param(*([missing] * len(names)), id="missing-spec")]
+            argnames, [pytest.param(*([missing] * len(names)), id=kind)]
         )
         return
     metafunc.parametrize(

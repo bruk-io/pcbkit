@@ -7,7 +7,8 @@ One function per command, in workflow order. Command functions are called
 Tier 2 commands (build, route, promote, finalize, check, mutants, compare) need
 pcbnew. Each calls ``pcbkit.kicad.env.require_pcbnew()`` first, so a missing pcbnew is a
 message rather than a traceback. ``shots`` is tier 1: it needs only kicad-cli and
-rsvg-convert. So is ``check --gate sch``, whose checks read only the schematic.
+rsvg-convert. So is ``specs`` (it only reads specs.py), and so is ``check --gate sch``,
+whose checks read only the schematic.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import click
 from pcbkit import __version__, doctor, sch
 from pcbkit.check.results import GATES
 from pcbkit.kicad import env
-from pcbkit.project import load_project
+from pcbkit.project import import_optional_project_module, load_project
 
 
 class _WorkflowGroup(click.Group):
@@ -381,6 +382,37 @@ def finalize_cmd(no_render: bool) -> None:
     from pcbkit.route import flow
 
     flow.finalize(proj, render=not no_render)
+
+
+@cli.command("specs")
+def specs_cmd() -> None:
+    """Check the shape of the tables in specs.py.
+
+    Imports specs.py and checks every table pcbkit knows a shape for (the ones the
+    built-in checks read, and the proposed ones whose checks are not written yet),
+    printing one line per problem, each starting with the path of the value, for
+    example `specs.FAULT_STATES["c"]["pins"][1]: expected ...`. Exits 1 if there is
+    any. Needs neither pcbnew nor kicad-cli. Names pcbkit has no shape for are left
+    alone.
+    """
+    proj = load_project()
+    from pcbkit.check import tables
+
+    path = proj.root / "specs.py"
+    if not path.is_file():
+        click.echo("No specs.py: nothing to check.")
+        return
+    try:
+        module = import_optional_project_module(proj.root, "specs")
+        count, errors = tables.check_module(module)
+    except Exception as err:  # the project's own code failed to import
+        raise click.ClickException(f"specs.py could not be read: {err!r}") from err
+    for line in errors:
+        click.echo(line)
+    if errors:
+        click.echo(f"specs.py: {len(errors)} problem(s) in {count} table(s) checked.")
+        click.get_current_context().exit(1)
+    click.echo(f"specs.py: {count} table(s) checked, no problems.")
 
 
 @cli.command("check")

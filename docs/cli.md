@@ -74,6 +74,12 @@ when its control run does not pass, `compare` exits 2 when a file is not a board
 
 ::: mkdocs-click
     :module: pcbkit.cli
+    :command: specs_cmd
+    :prog_name: pcbkit specs
+    :depth: 1
+
+::: mkdocs-click
+    :module: pcbkit.cli
     :command: check_cmd
     :prog_name: pcbkit check
     :depth: 1
