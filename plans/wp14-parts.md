@@ -365,23 +365,43 @@ pcbkit.
 ### Ported now: `pcbkit.citations`
 
 The verifier's deterministic core is in pcbkit as `pcbkit/citations.py`, pure
-functions on page texts, with no CLI (the part file it would read is not settled):
-`normalise`, `quote_on_page`, `pages_with`, `numbers`, `missing_numbers`,
-`check_citation` (page, length, quote, numbers) and `check_pin` (SHA-256). It reads no
-PDF and adds no dependency: text comes from pdftotext, as for `judge`.
+functions on page texts, with no CLI (the part file it would read is not settled). Its
+public surface is `quote_on_page`, `check_citation` (page, length, quote, value),
+`check_pin` (SHA-256), `Rule`, `Problem` and `MIN_QUOTE_CHARS`. It reads no PDF and adds
+no dependency: text comes from pdftotext, as for `judge`.
 
-Porting it to pdftotext's text found three faults, each now a test:
+Porting it to pdftotext's text found faults, each now a test, and three reviews found
+more. The design that came out of them:
 
-- pdftotext joins a word broken at a line end and drops the hyphen, "pull-" + "up"
-  becoming "pullup", so the prototype refused a correct "pull-up" quote. Now a hyphen
-  between two letters is dropped on both sides, with or without the line break; this
-  also matches `-layout` text and a quote that mixes both kinds.
-- It removed all white space, so a quote "-0.36 V" matched a page with "-0.3 6 V".
-  Now spacing between two digits is kept as one space. This is the same hazard as
-  `AO3401 Alpha` in `judge`.
-- It tested numbers as substrings without signs: "9" passed against "19 V", and "40"
-  against "-40". Now numbers are whole tokens, signed unless a digit or point comes
-  before the minus (`3.0-5.5` is a range).
+- **Refuse by default.** One reader, with a small written grammar, reads the page and
+  the value alike: decimals with a unit from a closed list, hex, exponents, caret
+  powers, and codes ("2N7002", "3V3", "1F", "12h") that back only themselves. A
+  number backs a value only when it and everything touching it are inside the
+  grammar; anything else is unknown and backs nothing, and a value with any part the
+  grammar cannot read is refused. Refusing a right value costs a retry; accepting a
+  wrong one costs a board.
+- **Signs only where certain.** A minus is a sign at the start, after an opener ("=",
+  ":", "(") or after a function word ("to", "from"); a range dash only glued between
+  ascending decimals not starting at 10. After a symbol ("VIN –0.3"), after a number
+  and a space ("2.7 –3.6") or standing alone, its role is unknown, and so is the
+  number. This refuses negative minimums in symbol-column tables: they are marked
+  derived for a person until a better rule is proved.
+- **Spacing as evidence.** White-space kinds stay distinct until read: a no-break or
+  thin space between digits, or a plain space before a three-digit group, may group
+  one number, so both halves are unknown. Spacing between two digits is kept as one
+  space in the quote, so "-0.36 V" never matches "-0.3 6 V" (the `AO3401 Alpha`
+  hazard of `judge`); other spacing is ignored, and a hyphen between two letters goes
+  on both sides, so "pull-up", "pullup" and `-layout`'s "pull-\nup" are one.
+- **The span rule.** A quote is looked for in the page's normalised text and may not
+  start or end inside a number of the page, or start on a range dash; the numbers
+  that back a value are the page's own, inside the quote, with the page's context.
+  Where the quote occurs more than once, every occurrence must back the value.
+- **Text values.** A value with no number is refused unless marked text only; its
+  words must then be whole words of every occurrence, in order.
+
+What it checks, what it refuses as unknown (right values included) and what no text
+check can detect are listed in the module docstring ("What is checked, refused and
+blind"); keep that list and this section in step.
 
 ### One format
 
@@ -486,9 +506,12 @@ eval should measure what it cannot:
   says which kinds the eval must score. Sign errors and invented numbers stay here
   too: `verify` refuses most of them, but not a wrong unit or SI prefix, or a value
   made of numbers that are all in the quote but in the wrong roles.
-- **False refusals.** Every gold value must pass `verify`. One that does not is a
-  normalisation fault (cells split by pdftotext, a quote across a page break), and it
-  costs a retry.
+- **False refusals.** Every gold value must pass `verify` or be one the grammar
+  refuses on purpose (the docstring's list: a negative after a symbol, a spaced-dash
+  range, a grouped number), marked derived. Count both: an unplanned refusal is a
+  normalisation fault (cells split by pdftotext, a quote across a page break); a
+  planned one is the price of the fail-safe rule, and its rate says whether a
+  widening is worth proving.
 - **Wrongly not stated.** A value marked `not-stated` that the gold set has. With
   `verify`, a retrieval miss shows up here rather than as a wrong value, so retrieval
   recall and this count go together.
