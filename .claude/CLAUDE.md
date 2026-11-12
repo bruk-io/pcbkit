@@ -97,6 +97,8 @@ pcbkit/parts.py       Mouser's answers through the cache
 pcbkit/datasheets.py  judge: is this PDF the part's (whole number + maker), and confirmations
 pcbkit/datasheet_find.py  `pcbkit datasheet find`/`confirm`: sources, PDF cache, KiCad symbol
                       index, records in parts/<part>.datasheet.json
+pcbkit/citations.py   is a value's quote on its page, with the value's numbers; the
+                      PDF's SHA-256 pin (pure; no CLI yet)
 tools/datasheet_sources/  measurements of datasheet sources (parts.csv, measure.py, rejudge.py)
 plans/                work package plans (wp14-parts.md: datasheets and part files)
 docs/                 project-interface.md
