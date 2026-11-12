@@ -295,3 +295,37 @@ def test_extended_still_takes_new_parts_and_unnamed_elements() -> None:
     c.fets.append({"ref": "U3", "kind": "n", "g": "A", "d": "B", "s": "GND"})
     with pytest.raises(ValueError, match="U1 is already modelled"):
         c.R("A", "GND", 100.0, "U1")
+
+
+def test_an_extended_circuit_can_be_deep_copied_and_keeps_its_guard() -> None:
+    """The fault-state check copies every circuit for its smaller-leak solve."""
+    import copy
+
+    from pcbkit.check import faults
+
+    c = build(netlist(new_symbols()), extended=True)
+    c.fix("G3", 5.0).fix("S3", 0.0)
+    twin = copy.deepcopy(c)
+    assert twin.fets == c.fets and twin.fets is not c.fets
+    assert faults.low_leak_solution(c)["G3"] == 5.0
+    with pytest.raises(ValueError, match="Q3 is already modelled"):
+        twin.fets.append({"ref": "Q3", "kind": "n", "g": "G", "d": "D", "s": "S"})
+    twin.D("X", "Y", 0.7, ref="NEW")
+    assert "NEW" not in c._added
+
+
+def test_extended_lists_the_parts_it_models_without_breakdown() -> None:
+    """Zeners and TVSs, forward only or open: ``forward_only``; nothing by default."""
+    nl = netlist(new_symbols())
+    assert build(nl).forward_only == set()
+    assert build(nl, extended=True).forward_only == {"D3", "D4", "D5"}
+
+
+def test_extended_takes_one_breakdown_element_for_a_forward_only_part() -> None:
+    """``D3.breakdown`` is a declared addition, not a second model; twice is refused."""
+    c = build(netlist(new_symbols()), extended=True)
+    c.D("K3", "A3", 5.1, ref="D3.breakdown")
+    with pytest.raises(ValueError, match=r"D3\.breakdown is already modelled"):
+        c.D("K3", "A3", 5.1, ref="D3.breakdown")
+    with pytest.raises(ValueError, match="D1 is already modelled"):
+        c.D("K1", "A1", 5.1, ref="D1.breakdown")

@@ -19,14 +19,17 @@ forward only (no breakdown; a TVS whose pins are A1 and A2 is held as an open el
 ``<ref>.open``); the generic ``Device:Q_NMOS_*`` and ``Q_PMOS_*`` FETs, their gate,
 drain and source read from the pin names; and a body diode for every FET
 (``<ref>.body``, source to drain for an N-FET, drain to source for a P-FET). In extended
-mode a part ``build`` models cannot be added to the circuit again, and no ref can be
-added twice: ``Circuit.R``, ``Circuit.D`` and ``Circuit.fets`` raise ValueError naming
-the part, so a scenario that also models a part by hand is told instead of doubling it.
-Without ``extended`` nothing about this changes.
+mode a part ``build`` models cannot be added to the circuit again (except one
+``<ref>.breakdown`` element for a Zener or TVS, which ``forward_only`` lists because it
+is held without breakdown), and no ref can be added twice: ``Circuit.R``, ``Circuit.D``
+and ``Circuit.fets`` raise ValueError naming the part, so a scenario that also models a
+part by hand is told instead of doubling it. Without ``extended`` nothing about this
+changes.
 """
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import numpy as np
@@ -55,6 +58,8 @@ EXTENDED_DIODES = {
     "Device:D_TVS": (0.7, 0.05),
     "Device:D_TVS_Small": (0.7, 0.05),
 }
+# The ref a scenario gives the breakdown it adds to a part extended holds forward only.
+BREAKDOWN_SUFFIX = ".breakdown"
 BODY_VF = 0.7
 BODY_RON = 0.05
 GENERIC_FET_RON = 0.05
@@ -88,6 +93,14 @@ class _GuardedFets(list):  # type: ignore[type-arg]
         self.circuit._claim(str(item.get("ref", "")))
         super().insert(index, item)
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> _GuardedFets:
+        """Copy the FETs and the circuit they belong to, without checking them again."""
+        twin = _GuardedFets.__new__(_GuardedFets)
+        memo[id(self)] = twin
+        list.extend(twin, copy.deepcopy(list(self), memo))
+        twin.circuit = copy.deepcopy(self.circuit, memo)
+        return twin
+
     def __iadd__(self, items: Any) -> _GuardedFets:
         """Check and add each FET (``fets += [...]``)."""
         self.extend(items)
@@ -110,6 +123,9 @@ class Circuit:
         # extended mode only: the parts build modelled, and the refs added since
         self._built: set[str] | None = None
         self._added: set[str] = set()
+        # parts modelled without breakdown (extended Zeners and TVSs): a check that
+        # sees reverse voltage across one cannot know whether it conducts
+        self.forward_only: set[str] = set()
 
     def _guard(self) -> None:
         """Start refusing a second model of a part (``build(nl, extended=True)``)."""
@@ -123,7 +139,8 @@ class Circuit:
         if self._built is None or not ref:
             return
         part = _part_of(ref)
-        if part in self._built:
+        breakdown = ref == part + BREAKDOWN_SUFFIX and part in self.forward_only
+        if part in self._built and not breakdown:
             raise ValueError(
                 f"{part} is already modelled by dc.build(extended=True): remove the "
                 "hand model from circuits.scenario, or build without extended"
@@ -418,6 +435,8 @@ def _build_extended(
     """Add the extended model of one part, if ``kind`` has one."""
     if kind in EXTENDED_DIODES:
         vf, ron = EXTENDED_DIODES[kind]
+        if kind.startswith(("Device:D_Zener", "Device:D_TVS")):
+            c.forward_only.add(ref)
         ak = _pads_by_name(nl, ref, ("A", "K"))
         if ak is not None:
             c.D(ak["A"], ak["K"], vf, ron, ref)
