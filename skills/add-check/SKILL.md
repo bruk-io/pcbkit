@@ -30,9 +30,9 @@ A review skill (`walk-fault-states`, `review-derating`, `review-current-paths`,
 `review-misplug`, `plan-bringup`, `review-sourcing`, `review-spec-drift`) hands over the
 rows it wrote to a specs.py table. If a built-in group reads that table, switch the group
 on. If the table is a proposed one with no built-in check yet (such as `FAULT_STATES`,
-`PIN_NETS` or `CONTACT_RATINGS`; `${CLAUDE_PLUGIN_ROOT}/plans/wp16-review-skills.md` lists
-them), write the project check that reads it, parametrised from the table, and prove it
-fails.
+`MATING` or `CONTACT_RATINGS`; "Proposed tables" in
+`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md` gives each one's shape), write the
+project check that reads it, parametrised from the table, and prove it fails.
 
 ## 2. Pin down the rule and its source
 

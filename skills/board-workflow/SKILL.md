@@ -5,9 +5,10 @@ description: >-
   or export a board, fix DRC or ERC findings, unconnected pads or clearance errors, run
   pcbkit check or mutants and understand a failing result, choose between an eco and a
   full route, or asks which file to change for something (circuit, positions, routing,
-  labels, stackup) in a folder that has a pcbkit.toml. Also the skill to use when the user
-  asks to order boards: ordering is something the user starts with /pcbkit:order-pcbway,
-  so point them to it. Writing a new check is add-check; starting a board is new-board.
+  labels, stackup) in a folder that has a pcbkit.toml. Also the one skill for a request
+  to order boards or get them ready to order: it runs the order-gate reviews in
+  sequence, then points the user to /pcbkit:order-pcbway, which only the user starts.
+  Writing a new check is add-check; starting a board is new-board.
 ---
 
 # Working a pcbkit board
@@ -38,16 +39,17 @@ result.
 `pcbkit check -k EXPR` runs only the checks it matches and replaces out/checks/results.json
 with them, so run `pcbkit check` with no `-k` before an order.
 
-The review skills run at gates in this loop. Each reads the check results first and
-ends by writing what it settled into specs.py, so the next run is a check:
+The review skills run at gates in this loop. Each runs only the checks whose inputs
+exist at its gate (it gives the `-k` selection), and ends by writing what it settled
+into specs.py, so the next run is a check:
 
 - After `sch` is ERC-clean: `walk-fault-states` (any board that drives a load) and
   `review-derating`.
 - After `build`, before routing is final: `review-current-paths` and `review-misplug`.
 - After `route`, before `promote`: `review-board`.
-- After `finalize` and a full `check`, before an order: `plan-bringup` and
-  `review-sourcing`, then the user's `/pcbkit:order-pcbway`.
-- At every gate, and whenever the spec or the design changes: `review-spec-drift`.
+- After `finalize`, before an order: see Boundaries.
+- At each gate where the board has a written spec: `review-spec-drift`.
+
 `pcbkit report` writes the validation report from the last `check` run. `pcbkit compare
 OLD NEW` shows what a re-route moved. `pcbkit shots` writes pictures of the board to
 out/shots/ (see review-board). `pcbkit quote` prints the fab order numbers.
@@ -87,7 +89,11 @@ then `finalize`.
   information; fix the design, or use add-check if the limit itself is wrong.
 - Ordering from a fab house is started by the user with `/pcbkit:order-pcbway`, never by
   Claude. If asked to order, say so and point them to it: it begins by checking that the
-  fab files and the check results are current.
+  fab files and the check results are current. In the same reply, name the order-gate
+  reviews that have not run on these files, and run them before the user starts it, in
+  this order: `review-derating` again if parts changed since it ran, `plan-bringup`,
+  `review-sourcing` (it writes `sourcing.md`, which the order reads), `review-spec-drift`
+  if there is a written spec, then a full `pcbkit check`.
 
 ## References
 
