@@ -4,6 +4,13 @@ All notable changes to pcbkit. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and pcbkit uses
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `pcbkit report` now shortens any recorded value with more than eight entries,
+  including existing ones.
+
 ## [0.1.1] - 2026-10-07
 
 ### Added

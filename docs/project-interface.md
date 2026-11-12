@@ -953,9 +953,10 @@ netlist, at the `sch` gate:
 
 `test_port_pins_carry_their_nets[ref]` (one per key) fails naming each pad that carries
 another net than its row, each listed pad the part does not have, and each wired pad of a
-connector the row leaves out; it records `pins`, `{pad: net or None}` for the listed pads
-(`None` for a pad the part does not have), before it fails, also when the part is not in
-the design.
+connector the row leaves out. Before it fails it records `pins`, `{pad: net or None}` for
+the listed pads the part has (`None`: the pad is unwired), and `not pads`, the listed pads
+the part does not have, when there are any; for a part that is not in the design it
+records `pins` as `null`.
 `test_every_connector_is_in_the_port_map` fails naming each connector that is not a key;
 it records `port map`, every connector of the design as `{ref: {pad: net or None}}`,
 before it fails. A pad the schematic leaves unwired (KiCad's `unconnected-(...)` net, or
@@ -1015,9 +1016,13 @@ name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_device
 
 `test_i2c_bus_answers_exactly_the_expected_addresses[bus]` (one per key) fails naming the
 addresses that are missing and those that are extra (with the devices that answer
-there). It records `expected`, `found`, `missing` and `extra`, each a list of `0x3c` text
-and lowest first, before it fails. Two devices at one address are the business of
-`test_i2c_addresses_unique_per_bus` (`circuit`).
+there). It also fails, naming them, when two devices or more answer at one address,
+whether or not the `circuit` group is on (its `test_i2c_addresses_unique_per_bus` says the
+same thing there). Two devices that both answer an all-call or general-call address, and
+are reported there as the scan needs, are such a clash, so the check fails at that
+address too. It records `expected`, `found`, `missing` and `extra`, each a list of `0x3c`
+text and lowest first, and `devices`, `{"0x3c": [device names]}`, before it fails (only
+`expected` when a device list cannot be read).
 
 ### Table shapes
 
