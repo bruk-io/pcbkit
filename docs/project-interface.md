@@ -761,11 +761,11 @@ A run leaves `out/checks/results.json` (a run that selects nothing leaves an emp
  "selection": {"keyword": "", "markexpr": "", "deselected": 0, "gated_out": 0,
                "complete": true},
  "checks": {"pcbkit.check.builtin.test_kicad::test_erc_clean":
-              {"group": "kicad", "gate": "sch", "outcome": "passed",
-               "numbers": {"erc": "..."}},
+              {"group": "kicad", "outcome": "passed", "numbers": {"erc": "..."},
+               "gate": "sch"},
             "checks/test_power.py::test_rail":
-              {"group": "project", "gate": "sch", "outcome": "failed", "numbers": {},
-               "message": "AssertionError: ..."}}}
+              {"group": "project", "outcome": "failed", "numbers": {},
+               "message": "AssertionError: ...", "gate": "sch"}}}
 ```
 
 A check's id is `pcbkit.check.builtin.<module>::<name>[param]` for a built-in one and its

@@ -7,7 +7,9 @@ until its row here is changed, and a gate is a decision somebody made, not whate
 fixtures happened to give. The same trees are used to work out the gate from the
 fixtures, which holds ``FROZEN`` to the rule, and the plugin test in
 ``tests/integration/test_check_plugin.py`` holds the plugin to it with a real
-collection.
+collection. The syntax-tree reader follows only fixtures defined in the same module, so
+the fixtures the plugin supplies (``nl``, ``board``, ...) are covered by that real
+collection test alone.
 """
 
 from __future__ import annotations

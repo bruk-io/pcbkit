@@ -10,9 +10,9 @@ else that only reads the results can import this without pytest.
      "gate": null, "waiting": {},
      "selection": {"keyword": "", "markexpr": "", "deselected": 0, "gated_out": 0,
                    "complete": true},
-     "checks": {"<check id>": {"group": "kicad" or "project", "gate": "sch",
-                               "outcome": "passed", "numbers": {...},
-                               "reason": "...", "message": "..."}}}
+     "checks": {"<check id>": {"group": "kicad" or "project", "outcome": "passed",
+                               "numbers": {...}, "reason": "...", "message": "...",
+                               "gate": "sch"}}}
 
 A check's id is ``pcbkit.check.builtin.<module>::<name>[param]`` for a built-in check
 and ``<path relative to the project>::<name>[param]`` for the project's own. ``reason``
