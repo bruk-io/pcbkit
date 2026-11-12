@@ -137,7 +137,7 @@ class Problem:
     message: str
 
 
-def fold(text: str) -> str:
+def _fold(text: str) -> str:
     """Return ``text`` with look-alike characters folded and NFKC applied.
 
     A run of superscripts becomes "^" and the plain characters ("10⁻⁶" is "10^-6")
@@ -166,7 +166,7 @@ def _join(match: re.Match[str]) -> str:
 
 def normalise(text: str) -> str:
     """Return the form of ``text`` that quotes and pages are compared in."""
-    return _SPACE.sub(_join, _LETTER_HYPHEN.sub("", fold(text)))
+    return _SPACE.sub(_join, _LETTER_HYPHEN.sub("", _fold(text)))
 
 
 def _starts_inside_number(page: str, start: int) -> bool:
@@ -225,7 +225,7 @@ def numbers(text: str) -> list[str]:
     ("2N7002", "4k7") has no number in it.
     """
     found = []
-    for match in _TOKEN.finditer(fold(text)):
+    for match in _TOKEN.finditer(_fold(text)):
         if match["code"]:
             continue
         digits = match["prefixed"] or match["suffixed"]
