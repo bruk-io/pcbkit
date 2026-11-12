@@ -406,13 +406,11 @@ class _Token:
 
     @property
     def key(self) -> tuple[_Kind, str]:
-        """Return what two known tokens are compared by, apart from a "+" or "±"."""
+        """Return what two known tokens are compared by, apart from sign and unit."""
         if self.kind is _Kind.HEX:
             match = _HEX.fullmatch(self.number)
             assert match is not None
             return self.kind, f"0x{int(match[1] or match[2], 16):x}"
-        if self.kind in _SIGNABLE and self.sign == "-":
-            return self.kind, "-" + self.number
         return self.kind, self.number
 
 
@@ -427,7 +425,11 @@ _SIGN_BACKED_BY = {
 
 
 def _backs(page: _Token, value: _Token) -> bool:
-    """Say whether a known page token backs a known value token."""
+    """Say whether a known page token backs a known value token.
+
+    The number (``key``), the sign (``_SIGN_BACKED_BY``) and, where both state one,
+    the unit must agree. This is the only place signs and units are compared.
+    """
     return (
         page.key == value.key
         and page.sign in _SIGN_BACKED_BY[value.sign if value.kind in _SIGNABLE else ""]
