@@ -184,9 +184,9 @@ maximum output capacitance is a `SUPPLY_LIMITS` row. It writes `PINOUT`, `SUPPLY
 ## Steps
 
 1. This plan and the triage. Done.
-2. The seven skills, one commit each, with generic worked examples. Next.
-3. The existing skills hand off by name; `board-workflow` names the gates. Next.
-4. `docs/claude-plugin.md`, the README line, and the plugin test's list of skills. Next.
+2. The seven skills, one commit each, with generic worked examples. Done.
+3. The existing skills hand off by name; `board-workflow` names the gates. Done.
+4. `docs/claude-plugin.md`, the README line, and the plugin test's list of skills. Done.
 5. Build the checks above, A to G first, with `add-check` and `check-writer`. Not started.
 6. Eval cases for the reviews (`evals/`): at least that `walk-fault-states` loads for "is
    this fail-safe" and that a review reads results.json instead of re-measuring. Not
