@@ -8,8 +8,8 @@ A *link* is a two-pad part that is
 
 * a resistor (reference letters ``R``, from any library) whose value reads as 0
   (``0``, ``0R``, ``0R0``, ``0E``, ``R0``, ``0 ohm``) or is a not-fitted mark alone
-  (``DNP``, ``DNF``, ``NF``, ``NP``, ``NC``: the footprint is there to fit at
-  bring-up), or
+  (``DNP``, ``DNF``, ``DNI``, ``NF``, ``NP``, ``NC``, ``NM``, ``NL``, ``NOPOP``: the
+  footprint is there to fit at bring-up), or
 * a jumper: a part from a library whose name starts with ``Jumper`` (two pads, read
   from the symbol name, ``SolderJumper_2_Open``, when it gives one), or any two-pad
   part with reference letters ``JP`` (a header with a shunt).
@@ -44,11 +44,12 @@ enable or the enable driving the target).
 Ties: between the enable and that link, and on any net tied to those, nothing may tie
 a net to a supply, or the link controls nothing. Everything walked with two pads ties
 unless it is a resistor with a real value above 0 ohm, a thermistor or other
-resistive sensor, a diode, a switch (a person operates it, so the link still controls
-the regulator while it is open), or not fitted (a not-fitted value alone, or a jumper
-whose symbol name has ``_Open`` or ``_NO``). With
-three or more pads only a fitted jumper (``_Bridged12``: on the pads its name gives)
-and a 0 ohm element of a known pack tie.
+resistive sensor, a diode (TVS and ESD parts included), a switch (a person operates
+it, so the link still controls the regulator while it is open), a ``JP`` header from a
+``Connector`` library (a person fits its shunt), or not fitted (a not-fitted value
+alone, or a jumper whose symbol name has ``_Open`` or ``_NO``). With three or more
+pads only a fitted jumper (``_Bridged12``: on the pads its name gives) and a 0 ohm
+element of a known pack tie. A tie to a rail missing from ``SUPPLY_NETS`` is not seen.
 
 ``ENABLE_LINKS`` is ``{enable net: [(regulator ref, enable pad)]}``, pads as the
 netlist writes them; ``SUPPLY_NETS`` is ``[net]``. The functions here compare them with
@@ -76,7 +77,7 @@ TABLES: dict[str, Shape] = {
 
 
 # A value that says "not fitted": the link's footprint is still there.
-NOT_FITTED = ("dnp", "dnf", "nf", "np", "nc")
+NOT_FITTED = ("dnp", "dnf", "dni", "nf", "np", "nc", "nm", "nl", "nopop")
 # Writing a zero with the R, E or ohm sign as the decimal point: 0R0, R0, 0E, 0 ohm.
 ZERO_FORMS = re.compile(r"(\d*)(?:[reΩΩ]|ohms?)(\d*)", re.IGNORECASE)
 # Resistor packs whose pinout is known: pad n with pad N+1-n, or adjacent pads.
@@ -311,9 +312,16 @@ def joined_by_default(nl: Netlist, ref: str) -> bool:
 
 
 def _is_diode(nl: Netlist, ref: str) -> bool:
-    """Return True for a two-pad diode: letters ``D`` or ``LED``, or pins A and K."""
+    """Return True for a two-pad diode, for the tie rule.
+
+    Reference letters starting ``D`` or ``LED``, or exactly ``TVS`` or ``ESD``; or
+    pins named ``A`` and ``K``, or ``A1`` and ``A2`` (a bidirectional TVS).
+    """
     names = sorted(f.upper() for f in nl.functions(ref).values())
-    return letters(ref).startswith(("D", "LED")) or names == ["A", "K"]
+    found = letters(ref)
+    if found.startswith(("D", "LED")) or found in ("TVS", "ESD"):
+        return True
+    return names in (["A", "K"], ["A1", "A2"])
 
 
 def _is_switch(nl: Netlist, ref: str) -> bool:
@@ -331,15 +339,19 @@ def _is_resistive_sensor(nl: Netlist, ref: str) -> bool:
 
 
 def _real_resistance(value: str) -> bool:
-    """Return True for a value that reads as a resistance above 0 ohm."""
+    """Return True for a value that reads as a resistance above 0 ohm.
+
+    Its first word is not a zero form, starts with a digit (or with ``R`` or ``E`` as
+    the decimal point, ``R47``) and has a digit other than 0: ``10K``, ``4K7``,
+    ``10kohm`` and ``100K_0402`` are real; ``x``, ``R`` and ``0K`` are not.
+    """
     words = value.split()
     if not words or is_zero(value):
         return False
-    try:
-        return parse_value(words[0]) > 0
-    except ValueError:
-        found = ZERO_FORMS.fullmatch(words[0])
-        return bool(found and (found.group(1) or found.group(2)))
+    word = words[0]
+    if not (word[0].isdigit() or word[0] in "RrEe"):
+        return False
+    return any(c in "123456789" for c in word)
 
 
 def tie_pairs(nl: Netlist, ref: str) -> list[tuple[str, str]]:
@@ -363,13 +375,16 @@ def tie_pairs(nl: Netlist, ref: str) -> list[tuple[str, str]]:
     pads = sorted(nl.functions(ref), key=natkey)
     if _jumper_like(nl, ref) and ("_Open" in name or "_NO" in name):
         return []
+    # a JP header from a Connector library takes a shunt a person fits, like a switch
+    if letters(ref) == "JP" and str(part["lib"]).startswith("Connector"):
+        return []
     if len(pads) == 2:
         if not arcs(nl, ref) or _is_diode(nl, ref):
             return []
         # a person opens a switch, and a sensor is a real resistance: neither ties
         if _is_switch(nl, ref) or _is_resistive_sensor(nl, ref):
             return []
-        if letters(ref).startswith("R") and _real_resistance(value):
+        if letters(ref) == "R" and _real_resistance(value):
             return []
         return _all_pairs(pads)
     if _jumper_like(nl, ref):
@@ -501,6 +516,18 @@ def _either(nets: list[str]) -> tuple[str, str]:
     return f"any of {', '.join(nets)}", "they are signals"
 
 
+def _connector_note(nl: Netlist, ref: str) -> str:
+    """Return a note for a walked part that looks like a connector, else ""."""
+    part = nl.parts[ref]
+    text = f"{part['lib']}:{part['part']}".lower()
+    if _jumper_like(nl, ref) or not ("conn" in text or "header" in text):
+        return ""
+    return (
+        f" ({ref} is walked: only a part from a Connector library or with reference "
+        "letters J is a connector)"
+    )
+
+
 def _notes(nl: Netlist, path: Path, enables: set[str]) -> str:
     """Return the notes a failing path ends with, each in brackets.
 
@@ -519,14 +546,7 @@ def _notes(nl: Netlist, path: Path, enables: set[str]) -> str:
             f" ({ref} has {NUMBER_WORDS.get(count, count)} pads and is joined on all "
             "of them because its pinout is not known)"
         )
-    for ref in parts:
-        part = nl.parts[ref]
-        text = f"{part['lib']}:{part['part']}".lower()
-        if "conn" in text or "header" in text:
-            notes.append(
-                f" ({ref} is walked: only a part from a Connector library or with "
-                "reference letters J is a connector)"
-            )
+    notes += [_connector_note(nl, ref) for ref in parts]
     if default:
         return "".join(notes)
     between = [n for n in path[2:-1:2] if n not in enables]
@@ -576,7 +596,7 @@ def _ties(
                     line = (
                         f"{what}: {ref} ({nl.parts[ref]['value']}) ties {net} to "
                         f"{there}, a net in specs.SUPPLY_NETS, so the link {link} "
-                        "controls nothing"
+                        "controls nothing" + _connector_note(nl, ref)
                     )
                     if line not in problems:
                         problems.append(line)

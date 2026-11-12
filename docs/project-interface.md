@@ -968,7 +968,7 @@ the `sch` gate:
 
 | Name | Shape | Holds |
 |---|---|---|
-| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `NF`, `NP`, `NC`: the footprint is there to fit at bring-up), or a two-pad jumper: a part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one), or any two-pad part with reference letters `JP`, such as a header with a shunt. It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
+| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `DNI`, `NF`, `NP`, `NC`, `NM`, `NL`, `NOPOP`, in any case: the footprint is there to fit at bring-up), or a two-pad jumper: a part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one), or any two-pad part with reference letters `JP`, such as a header with a shunt. It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
 | `SUPPLY_NETS` | `[supply or ground net]` | The supply and ground nets, by name as the netlist writes them (no leading slash). The enable-link walk never crosses one, nor the ground net (`GROUND_NET`, or `"GND"` when that is not defined and the design has a `GND` net), so a pull-up or pull-down through a resistor is fine. pcbkit does not guess supplies from net or pin names: a supply you leave out is walked like a signal. List only real rails: a signal listed here hides every path through it, so a real bridge between two enables can pass. Each net must be in the design. Needed whenever `power` is on (`[]` says none). |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
@@ -984,18 +984,24 @@ EN_U2 still reaches the shared net EN_ALL (EN_U2 - R9 - MID - R10 - EN_ALL)`).
 It also fails when a part ties the enable to a supply, so the link controls nothing.
 The nets checked are those between the enable and its link, and any net tied to one of
 them. Everything walked with two pads ties a net to a net in `SUPPLY_NETS`, unless it
-is: a resistor (reference letters `R`) with a real value above 0 ohm, so a pull-up or
-pull-down is fine (an `R` whose value cannot be read and is not a not-fitted mark is not
-one, and ties); a thermistor or other resistive sensor (reference letters `TH`, `RT`,
+is: a resistor (reference letters exactly `R`) with a real value above 0 ohm, so a
+pull-up or pull-down is fine (a real value's first word is not a zero form, starts with a
+digit, or with `R` or `E` as the decimal point, and has a digit other than 0: `10K`,
+`4K7`, `10kohm`, `R47`; an `R` whose value has no such word, such as `x`, ties); a thermistor or other resistive sensor (reference letters `TH`, `RT`,
 `NTC`, `PTC`, `RV` or `VR`, or a `Device` symbol whose name starts with `Thermistor`,
-`Varistor` or `R_Photo`), whatever its value; a diode, so a clamp is fine; a switch
+`Varistor` or `R_Photo`), whatever its value; a diode, so a clamp is fine (a diode is a
+part whose reference letters start with `D` or `LED` or are `TVS` or `ESD`, or whose two
+pins are named `A` and `K`, or `A1` and `A2`); a switch
 (reference letters `SW`, `S` or `BTN`, or a library whose name starts with `Switch`),
 because a person operates it and the link still controls the regulator whenever the
-switch is open; or a part that is not fitted, which is a
-value that is a not-fitted mark alone (`DNP`, `NC`...) or a jumper whose symbol name has
-`_Open` or `_NO` (`SolderJumper_2_Open`, `Jumper_NO_Small`). So a 0 ohm resistor, a
+switch is open; a header with reference letters `JP` from a `Connector` library, whose
+shunt a person fits (a `Jumper` library part keeps the `_Open`, `_NO` and `_Bridged`
+rules); or a part that is not fitted, which is a value that is a not-fitted mark alone
+(`DNP`, `NC`...) or a jumper whose symbol name has `_Open` or `_NO`
+(`SolderJumper_2_Open`, `Jumper_NO_Small`). So a 0 ohm resistor, a
 ferrite bead, an inductor, a fuse, a net tie, a bridged jumper or an unknown part from
-the enable to a supply fails, from any library. A part that is not walked (a capacitor,
+the enable to a supply fails, from any library. A tie to a rail missing from
+`SUPPLY_NETS` is not seen, so declare every rail. A part that is not walked (a capacitor,
 a connector, a test point, an IC) ties nothing. With three or more pads only a fitted
 jumper ties (a `_Bridged` one on the pads its name gives, `SolderJumper_3_Bridged12`:
 pads 1 and 2; one that is neither open nor bridged on all its pads), and a 0 ohm element

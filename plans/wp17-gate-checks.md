@@ -721,3 +721,29 @@ only (the walk is unchanged, so a switch between two enables still fails):
   with `Thermistor`, `Varistor` or `R_Photo`, whatever its value.
 - An `R` whose value cannot be read and is not a not-fitted mark keeps today's rule: it
   is no real resistance, so it ties.
+
+## Narrow review of enable links: accepted with follow-ups (2026-11-12)
+
+The narrow review accepted the check: the engine holds, B1 and every earlier item are
+fixed, and it found no blocker. Its follow-ups are done:
+
+- **S1:** a pull-up written `10K`, `4K7`, `10kohm` or `100K_0402` failed as a tie,
+  because `netlist.parse_value` has no `K` and the value counted as unreadable. A real
+  resistance is now any value whose first word is not a zero form, starts with a digit
+  (or `R`/`E` as the decimal point) and has a digit other than 0. `x`, `x1` and values
+  with no such digit still tie. `netlist.py` is untouched.
+- **S2:** the docs say a tie to a rail missing from `SUPPLY_NETS` is not seen, so every
+  rail must be declared.
+- **F1:** the resistor exception needs letters exactly `R` (`RFC9`, an inductor, ties).
+- **F2:** the tie rule's diode is letters starting `D` or `LED`, or `TVS`/`ESD`, or pins
+  named `A`/`K` or `A1`/`A2`; the docs say so.
+- **F3:** a `JP` part from a `Connector` library is not fitted for the tie rule (a person
+  fits the shunt); a `Jumper` library part keeps the `_Open`/`_NO`/`_Bridged` rules.
+- **F4:** `DNI`, `NM`, `NL` and `NOPOP` are not-fitted marks.
+- **F5:** a tie through a walked custom-library header carries the connector note.
+
+Two of the reviewer's plants stay green, and neither matters: applying the tie
+exceptions to multi-pad parts changes nothing, because multi-pad parts tie only as
+fitted jumpers or 0 ohm pack elements, which no exception covers; and reversing every
+two-pad diode is an equivalent mutant, because a path counts in either direction of
+current, so a reversed diode gives the same verdict.

@@ -1634,3 +1634,100 @@ def test_a_switch_between_two_enables_is_still_a_path(ref: str, kind: str) -> No
     toy = board()
     toy.add(ref, "SW", kind, {"1": ("EN_U2", "1"), "2": ("EN_U3", "2")})
     assert any(f"(EN_U2 - {ref} - EN_U3)" in p for p in check(toy).problems)
+
+
+# ----------------------------------------------------------- narrow review follow-ups
+@pytest.mark.parametrize("value", ["10K", "4K7", "10kohm", "100K_0402", "R47", "1M"])
+def test_a_pull_up_written_any_usual_way_is_no_tie(value: str) -> None:
+    """S1: pass R20 from EN_U2 to VIN whatever case or suffix its value has."""
+    toy = board()
+    check_toy.resistor(toy, "R20", value, "EN_U2", "VIN")
+    assert check(toy).problems == []
+
+
+@pytest.mark.parametrize(
+    "value", ["x", "R", "RES", "0K", "0R0", "0", "E", "x1", "TBD2"]
+)
+def test_a_resistor_with_no_non_zero_digit_still_ties(value: str) -> None:
+    """S1: keep an unreadable or zero value from EN_U2 to VIN a tie."""
+    toy = board()
+    check_toy.resistor(toy, "R20", value, "EN_U2", "VIN")
+    assert check(toy).problems == [
+        f"U2 pad 3: R20 ({value}) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so "
+        "the link R7 controls nothing"
+    ]
+
+
+def test_a_part_whose_letters_only_start_with_r_is_not_a_resistor() -> None:
+    """F1: fail RFC9 (an inductor, 10uH) from EN_U2 to VIN as a tie."""
+    toy = board()
+    toy.add("RFC9", "10uH", "Device:L", {"1": ("EN_U2", "1"), "2": ("VIN", "2")})
+    assert check(toy).problems == [
+        "U2 pad 3: RFC9 (10uH) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so the "
+        "link R7 controls nothing"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ref", "kind", "names"),
+    [
+        ("TVS9", "Device:D_TVS", ("A1", "A2")),
+        ("ESD9", "Power_Protection:ESD", ("1", "2")),
+        ("X9", "MyLib:Bidir", ("A1", "A2")),
+    ],
+)
+def test_a_tvs_or_esd_diode_from_an_enable_to_ground_is_no_tie(
+    ref: str, kind: str, names: tuple[str, str]
+) -> None:
+    """F2: pass a TVS or ESD part by its letters or its A1/A2 pins."""
+    toy = board()
+    toy.add(ref, "TVS", kind, {"1": ("EN_U2", names[0]), "2": ("GND", names[1])})
+    assert check(toy).problems == []
+
+
+def test_a_jp_header_and_shunt_from_an_enable_to_ground_is_no_tie() -> None:
+    """F3: pass JP9 (Connector_Generic) to GND: a person fits the shunt."""
+    toy = board()
+    toy.add(
+        "JP9",
+        "Shunt",
+        "Connector_Generic:Conn_01x02",
+        {"1": ("EN_U2", "1"), "2": ("GND", "2")},
+    )
+    assert check(toy).problems == []
+
+
+def test_a_bridged_jumper_library_jp_still_ties() -> None:
+    """F3: keep a Jumper-library JP9 (bridged) from EN_U2 to GND a tie."""
+    toy = board()
+    toy.add(
+        "JP9",
+        "J",
+        "Jumper:SolderJumper_2_Bridged",
+        {"1": ("EN_U2", "A"), "2": ("GND", "B")},
+    )
+    assert check(toy).problems != []
+
+
+@pytest.mark.parametrize("value", ["DNI", "NM", "nl", "NOPOP"])
+def test_more_not_fitted_marks_are_read(value: str) -> None:
+    """F4: read DNI, NM, NL and NOPOP as not fitted: a link, and no tie."""
+    toy = board()
+    toy.set_value("R7", value)
+    assert links.is_link(netlist(toy), "R7")
+    toy = board()
+    check_toy.resistor(toy, "R9", value, "EN_U2", "VIN")
+    assert check(toy).problems == []
+
+
+def test_a_tie_through_a_custom_library_header_gives_the_connector_note() -> None:
+    """F5: say why CN9 is walked when it ties EN_U2 to VIN."""
+    toy = board()
+    toy.add(
+        "CN9", "Hdr", "MyConn:Header_1x02", {"1": ("EN_U2", "1"), "2": ("VIN", "2")}
+    )
+    assert check(toy).problems == [
+        "U2 pad 3: CN9 (Hdr) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so the "
+        "link R7 controls nothing (CN9 is walked: only a part from a Connector "
+        "library or with reference letters J is a connector)"
+    ]
