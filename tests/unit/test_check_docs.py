@@ -148,6 +148,7 @@ TABLE_GROUP = {
     "CAP_DERATE": "circuit",
     "PIN_NETS": "ports",
     "ENABLE_LINKS": "power",
+    "SUPPLY_NETS": "power",
     "I2C_EXPECTED": "bringup",
 }
 

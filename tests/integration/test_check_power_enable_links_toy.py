@@ -19,7 +19,8 @@ from tests.check_toy import SPECS, Toy
 from tests.integration.test_check_plugin import Run, run
 
 CHECK = "test_each_regulator_on_a_shared_enable_has_its_own_link"
-TABLE = '\nENABLE_LINKS = {"EN_ALL": [("U2", 3), ("U3", 3)]}\n'
+SUPPLIES = '\nSUPPLY_NETS = ["GND", "VIN", "+3V3"]\n'
+TABLE = '\nENABLE_LINKS = {"EN_ALL": [("U2", 3), ("U3", 3)]}\n' + SUPPLIES
 
 
 def regulator(toy: Toy, ref: str, enable_net: str) -> None:
@@ -187,7 +188,7 @@ def test_pulls_and_other_link_kinds_on_a_right_design_still_pass(
 
 def test_a_shared_net_that_is_not_in_the_design_fails_by_name(tmp_path: Path) -> None:
     """Name the net the table has and the schematic does not."""
-    specs = SPECS + '\nENABLE_LINKS = {"EN_TYPO": [("U2", 3)]}\n'
+    specs = SPECS + '\nENABLE_LINKS = {"EN_TYPO": [("U2", 3)]}\n' + SUPPLIES
     entry = go(tmp_path, "typo", board(), specs).entry(CHECK)
     assert entry["outcome"] == "failed"
     assert "net EN_TYPO is not in the design" in entry["message"]
@@ -195,7 +196,7 @@ def test_a_shared_net_that_is_not_in_the_design_fails_by_name(tmp_path: Path) ->
 
 def test_a_missing_table_fails_by_name(tmp_path: Path) -> None:
     """Fail once as ``missing-spec``, naming the table and the file."""
-    result = go(tmp_path, "missing", board(), SPECS)
+    result = go(tmp_path, "missing", board(), SPECS + SUPPLIES)
     entry = result.entry(f"{CHECK}[missing-spec]")
     assert entry["outcome"] == "failed"
     assert "specs.ENABLE_LINKS is not defined in" in entry["message"]
@@ -203,7 +204,7 @@ def test_a_missing_table_fails_by_name(tmp_path: Path) -> None:
 
 def test_an_empty_table_says_no_enable_is_shared(tmp_path: Path) -> None:
     """Skip, saying there is no row to run over, and exit 0."""
-    result = go(tmp_path, "none", board(), SPECS + "\nENABLE_LINKS = {}\n")
+    result = go(tmp_path, "none", board(), SPECS + "\nENABLE_LINKS = {}\n" + SUPPLIES)
     assert result.done.returncode == 0, result.done.stdout
     entry = result.entry(CHECK)
     assert entry["outcome"] == "skipped"
@@ -212,7 +213,7 @@ def test_an_empty_table_says_no_enable_is_shared(tmp_path: Path) -> None:
 
 def test_a_malformed_table_fails_by_name_with_its_path(tmp_path: Path) -> None:
     """Report the wrong row's path, with no traceback."""
-    specs = SPECS + '\nENABLE_LINKS = {"EN_ALL": [("U2",)]}\n'
+    specs = SPECS + '\nENABLE_LINKS = {"EN_ALL": [("U2",)]}\n' + SUPPLIES
     entry = go(tmp_path, "malformed", board(), specs).entry(f"{CHECK}[bad-table]")
     assert entry["outcome"] == "failed"
     assert (
@@ -231,3 +232,149 @@ def test_a_board_that_has_not_switched_the_group_on_is_untouched(
     result = run(root)
     assert not [k for k in result.checks if "test_enable_links" in k]
     assert "power" not in result.results["groups"]
+
+
+# ---------------------------------------------------- the second review's plants
+def plant_bridge_through_vbus_en(toy: Toy) -> None:
+    """B1: join the enables through a net named like a supply, not declared one."""
+    check_toy.resistor(toy, "R9", "0", "EN_U2", "VBUS_EN")
+    check_toy.resistor(toy, "R10", "0", "VBUS_EN", "EN_U3")
+
+
+def plant_parallel_through_vcc_en_bus(toy: Toy) -> None:
+    """B1: a bypass beside the link through a net named like a supply."""
+    check_toy.resistor(toy, "R9", "0", "EN_U2", "VCC_EN_BUS")
+    check_toy.resistor(toy, "R10", "0", "VCC_EN_BUS", "EN_ALL")
+
+
+def plant_tie_to_vin(toy: Toy) -> None:
+    """S4: tie U2's enable to VIN with a 0 ohm: the link controls nothing."""
+    check_toy.resistor(toy, "R9", "0", "EN_U2", "VIN")
+
+
+def plant_sip_element_across_the_link(toy: Toy) -> None:
+    """S3: an R_Pack04_SIP element (pads 1-2) beside the link."""
+    pads = {str(n): (f"A{n}", "~") for n in range(3, 9)}
+    pads.update({"1": ("EN_U2", "~"), "2": ("EN_ALL", "~")})
+    toy.add("RN1", "4x10k", "Device:R_Pack04_SIP", pads)
+
+
+def plant_three_pad_jumper_link(toy: Toy) -> None:
+    """S5: a three-pad jumper in place of R7."""
+    del toy.parts["R7"], toy.pins["R7"]
+    toy.add(
+        "JP1",
+        "J",
+        "Jumper:SolderJumper_3_Bridged12",
+        {"1": ("EN_U2", "A"), "2": ("EN_ALL", "C"), "3": ("GND", "B")},
+    )
+
+
+def plant_undeclared_rail_pull_ups(toy: Toy) -> None:
+    """S1, the other way: pull-ups to a rail SUPPLY_NETS does not list."""
+    check_toy.resistor(toy, "R20", "100k", "EN_U2", "3V3")
+    check_toy.resistor(toy, "R21", "100k", "EN_U3", "3V3")
+
+
+@pytest.mark.parametrize(
+    ("plant", "message"),
+    [
+        (
+            plant_bridge_through_vbus_en,
+            "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the "
+            "enable net EN_U3 of U3 (EN_U2 - R9 - VBUS_EN - R10 - EN_U3); if VBUS_EN "
+            "is a supply, add it to specs.SUPPLY_NETS",
+        ),
+        (
+            plant_parallel_through_vcc_en_bus,
+            "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the "
+            "shared net EN_ALL (EN_U2 - R9 - VCC_EN_BUS - R10 - EN_ALL)",
+        ),
+        (
+            plant_tie_to_vin,
+            "U2 pad 3: R9 (0) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so the "
+            "link R7 controls nothing",
+        ),
+        (
+            plant_sip_element_across_the_link,
+            "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the "
+            "shared net EN_ALL (EN_U2 - RN1 - EN_ALL)",
+        ),
+        (
+            plant_three_pad_jumper_link,
+            "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL (EN_U2 - JP1 "
+            "- EN_ALL joins them, with no link on it; JP1 has three pads: a link must "
+            "have two)",
+        ),
+        (
+            plant_undeclared_rail_pull_ups,
+            "(EN_U2 - R20 - 3V3 - R21 - EN_U3); if 3V3 is a supply, add it to "
+            "specs.SUPPLY_NETS",
+        ),
+    ],
+)
+def test_each_planted_mistake_of_the_second_review_fails(
+    tmp_path: Path, plant: Callable[[Toy], None], message: str
+) -> None:
+    """Fail each plant with the message that says what is wrong and where."""
+    toy = board()
+    plant(toy)
+    entry = go(tmp_path, "plant", toy).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert message in entry["message"], entry["message"]
+
+
+def test_a_bridge_to_a_regulator_of_another_row_fails_both_rows(
+    tmp_path: Path,
+) -> None:
+    """B2: fail EN_ALL and EN_B when R9 joins U2's enable to U4's."""
+    toy = board()
+    regulator(toy, "U4", "EN_U4")
+    regulator(toy, "U5", "EN_U5")
+    check_toy.resistor(toy, "R11", "0", "EN_U4", "EN_B")
+    check_toy.resistor(toy, "R12", "0", "EN_U5", "EN_B")
+    check_toy.resistor(toy, "R9", "0", "EN_U2", "EN_U4")
+    table = (
+        '\nENABLE_LINKS = {"EN_ALL": [("U2", 3), ("U3", 3)], '
+        '"EN_B": [("U4", 3), ("U5", 3)]}\n'
+    )
+    result = go(tmp_path, "rows", toy, SPECS + table + SUPPLIES)
+    assert result.entry(f"{CHECK}[EN_ALL]")["outcome"] == "failed"
+    assert "(EN_U2 - R9 - EN_U4)" in result.entry(f"{CHECK}[EN_ALL]")["message"]
+    assert result.entry(f"{CHECK}[EN_B]")["outcome"] == "failed"
+    assert "(EN_U4 - R9 - EN_U2)" in result.entry(f"{CHECK}[EN_B]")["message"]
+
+
+def test_right_designs_the_old_rule_failed_now_pass(tmp_path: Path) -> None:
+    """S1, S2, L1: pull-ups to a declared 3V3, a link then an RC, a diode-OR."""
+    toy = board()
+    check_toy.resistor(toy, "R20", "100k", "EN_U2", "3V3")
+    check_toy.resistor(toy, "R21", "100k", "EN_U3", "3V3")
+    del toy.parts["R7"], toy.pins["R7"]
+    check_toy.resistor(toy, "R7", "0", "EN_ALL", "EN_U2D")
+    check_toy.resistor(toy, "R9", "10k", "EN_U2D", "EN_U2")
+    toy.add("C9", "1u", "Device:C", {"1": ("EN_U2", "~"), "2": ("GND", "~")})
+    toy.add("D9", "D", "Device:D", {"1": ("ANY_ON", "K"), "2": ("EN_U2", "A")})
+    toy.add("D10", "D", "Device:D", {"1": ("ANY_ON", "K"), "2": ("EN_U3", "A")})
+    specs = SPECS + TABLE.replace('"+3V3"]', '"+3V3", "3V3"]')
+    result = go(tmp_path, "right2", toy, specs)
+    assert result.outcome(CHECK) == "passed", result.entry(CHECK)
+    assert result.entry(CHECK)["numbers"]["enable links"] == {
+        "EN_ALL": {"U2": "R7", "U3": "R8"}
+    }
+
+
+def test_a_missing_supply_table_fails_by_name(tmp_path: Path) -> None:
+    """Fail once as ``missing-spec``, naming SUPPLY_NETS, when only it is missing."""
+    result = go(tmp_path, "no-supplies", board(), SPECS + TABLE.replace(SUPPLIES, ""))
+    entry = result.entry(f"{CHECK}[missing-spec]")
+    assert entry["outcome"] == "failed"
+    assert "specs.SUPPLY_NETS is not defined in" in entry["message"]
+
+
+def test_a_supply_net_that_is_not_in_the_design_fails_by_name(tmp_path: Path) -> None:
+    """Name the declared supply the schematic does not have."""
+    specs = SPECS + TABLE.replace('"+3V3"]', '"+3V3", "VDD_TYPO"]')
+    entry = go(tmp_path, "supply-typo", board(), specs).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert "specs.SUPPLY_NETS: VDD_TYPO is not in the design" in entry["message"]
