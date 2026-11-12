@@ -6,7 +6,9 @@ evidence against the PDF's own text, with no model and no judgement:
 
 - the page is one of the PDF's pages, counted from 1 in the file's own order;
 - the quote is at least ``MIN_QUOTE_CHARS`` long, counting each run of white space
-  between words as one character (W3), so that "6 V" cannot match by accident. Why
+  between words as one character (W3), so that "6 V" cannot match by accident. The
+  spaces counted are the page's, at the shortest place the quote is on the cited
+  page, never the quote's own ("a b c d e f 5" against a page "abcdef 5" is 8). Why
   counting spaces is safe: the minimum plays no part in checking the value, only in
   how likely a quote is to be found by chance, and a space between two words is as
   much a part of a phrase as a letter. It also stops the rule pushing an extractor
@@ -1141,13 +1143,28 @@ def quote_on_page(quote: str, page_text: str) -> bool:
     return bool(_occurrences(quote, _read_page(page_text)))
 
 
-def _quote_length(quote: str) -> int:
-    """Return a quote's length for ``MIN_QUOTE_CHARS``: each white-space run is one.
+def _span_length(read: str) -> int:
+    """Return the length of read text with each white-space run counted as one.
 
     Invisible characters count nothing, and white space at the ends nothing (W3).
     """
-    read = _INVISIBLE_RUN.sub("", _read_text(quote))
-    return len(_SPACE.sub(" ", read).strip())
+    return len(_SPACE.sub(" ", _INVISIBLE_RUN.sub("", read)).strip())
+
+
+def _quote_length(quote: str, page_text: str) -> int:
+    """Return a quote's length for ``MIN_QUOTE_CHARS``, counted on the page (W3).
+
+    Each place the quote is on the page is counted with the page's own spacing, and
+    the shortest counts: a quote may not lengthen itself with spaces the page does
+    not have. A quote that is not on the page is counted with its own spacing.
+    """
+    if len(_normalise(quote)) >= MIN_QUOTE_CHARS:
+        return len(_normalise(quote))  # a lower bound: spaces can only add to it
+    page = _read_page(page_text)
+    places = _occurrences(quote, page)
+    if not places:
+        return _span_length(_read_text(quote))
+    return min(_span_length(page.reading.text[start:end]) for start, end in places)
 
 
 def _pages_with(quote: str, pages: Sequence[str]) -> list[int]:
@@ -1245,7 +1262,7 @@ def check_citation(
             f"page {page} is not a page of the PDF: it has pages 1 to {len(pages)}, "
             "counted in the file's own order, not the numbers printed on them",
         )
-    if _quote_length(quote) < MIN_QUOTE_CHARS:
+    if _quote_length(quote, pages[page - 1]) < MIN_QUOTE_CHARS:
         return Problem(
             Rule.SHORT,
             f"the quote {quote!r} is under {MIN_QUOTE_CHARS} characters, counting "

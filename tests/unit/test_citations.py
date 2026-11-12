@@ -1157,6 +1157,29 @@ def test_widenings_still_refuse_the_wrong_readings(value: str, quote: str) -> No
     assert check_citation(value, quote, 1, [quote]) is not None
 
 
+@pytest.mark.parametrize(
+    "value, quote, page",
+    [
+        # Follow-up 3 of the fifth review: the quote's own spaces counted.
+        ("5", "a b c d e f 5", "abcdef 5"),
+        ("4.5 V", "V I N 4 . 5 V", "VIN4.5V supply"),
+        ("28 V", "VIN  4.5  28  V", "VIN4.5 28V supply"),
+    ],
+)
+def test_w3_counts_the_page_spacing_not_the_quotes(
+    value: str, quote: str, page: str
+) -> None:
+    """Refuse a quote whose length comes from spaces the page does not have."""
+    assert rule(check_citation(value, quote, 1, [page])) is Rule.SHORT
+
+
+def test_w3_counts_the_shortest_place_the_quote_is() -> None:
+    """Refuse when any occurrence of the quote is short on the page."""
+    page = "VIN 4.5 28 V max\nVIN4.5 28V max"
+    assert rule(check_citation("28 V", "VIN 4.5 28 V", 1, [page])) is Rule.SHORT
+    assert check_citation("28 V", "VIN 4.5 28 V", 1, ["VIN 4.5 28 V max"]) is None
+
+
 # W1: a dash glued to a number, after a symbol or label word and a table-cell gap of
 # -layout text (two or more spaces, a tab, or a blank line), is a sign.
 
