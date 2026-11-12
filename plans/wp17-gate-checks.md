@@ -647,3 +647,38 @@ No name rule fixes that, so names are no longer guessed.
 - **For the power-paths slice (B):** `POWER_PATHS["nets"]` and `SUPPLY_NETS` describe
   overlapping things (the board's rails). Reconcile them there: one declared list of
   supplies that both checks read, or a documented reason they differ.
+
+## Enable links after the third review (2026-11-12)
+
+The third review found the engine held but rejected it because passive parts with three
+or more pads were invisible to the walk (a BAT54C, a DIP switch, a custom-library resistor
+array, a coupled inductor, a feedthrough capacitor). Same root as the first two
+rejections: the walk listed what conducts, so anything not on the list was skipped.
+
+- **Walk everything by default:** any part with two or more pads joins all its pads,
+  from any library. Not walked, a closed list and the documented limit: reference
+  letters `U`, `IC` or `Q`; a capacitor (letters `C`) with two pads; a connector as the
+  port map defines it; a test point. Walked by pinout: the `Device` resistor packs, and
+  diodes keyed by pad (each `A`/`A<n>` pad to each `K`/`K<n>` pad, in the direction of
+  current). The phrase "active part" is no longer the rule.
+- **Links:** a two-pad part with reference letters `R` from any library whose value
+  reads as 0 or not fitted, or a two-pad jumper (pad count from the symbol name). The
+  message says why a two-pad part that joins the nets is not a link.
+- **Fitted for the tie rule:** a jumper with `_Open` in its name (or a not-fitted value)
+  is not fitted; `_Bridged` is fitted on the pads its name gives; other jumpers are
+  fitted; a 0 ohm element of a known pack ties its pads. Ties are looked for on the nets
+  between the enable and its link and on nets held to those by fitted 0 ohm parts, so a
+  pull-up with a 0 ohm option beyond the resistor passes.
+- **`GROUND_NET`:** the docs give it a default of `"GND"`; the check now uses that
+  default when `GROUND_NET` is not defined and the design has a `GND` net.
+- **Performance:** link candidates come only from the path found to the shared net, and
+  each search stops at the first target. A 30x30 mesh of 0 ohm parts with ten
+  regulators and a 3,000-part board with an undeclared rail are held to a step count.
+- **Known false failures under the new default** (the owner may want them on the closed
+  list or modelled by pinout later): a DIP switch (`Switch:SW_DIP_x<n>`) is joined on
+  all pads, so per-enable switches fail although their pinout is as regular as a
+  resistor pack's; a resistor array from a custom library fails when two of its
+  elements pull up two enables; a module whose reference letters are not `U` (`A1`,
+  `M1`) joins every pad, so GPIOs from one module to two enables fail.
+- The "Not done" changelog line in the follow-ups note above is done: it is in the root
+  `CHANGELOG.md` under Unreleased.
