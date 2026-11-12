@@ -92,11 +92,11 @@ class Stackup:
         index = self.layers.index(self.layer(name))
         options = []
         if index > 0:
-            options.append((self.gaps_mm[index - 1], self.layers[index - 1].name))
+            options.append((self.gaps_mm[index - 1], index - 1))
         if index < len(self.layers) - 1:
-            options.append((self.gaps_mm[index], self.layers[index + 1].name))
-        gap, other = min(options)  # on a tie the upper layer wins
-        return other, gap
+            options.append((self.gaps_mm[index], index + 1))
+        gap, other = min(options)  # on a tie the layer nearer the top wins
+        return self.layers[other].name, gap
 
 
 def core_mm(config: StackupConfig) -> float:

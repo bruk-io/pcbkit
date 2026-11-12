@@ -100,6 +100,15 @@ def test_an_inner_layer_refers_to_the_nearer_outer_layer() -> None:
     )
 
 
+def test_equally_near_layers_tie_toward_the_top_of_the_stack() -> None:
+    """Pick the upper layer when both neighbours are 0.2 mm away, whatever the names."""
+    even = StackupConfig(4, 0.74, 0.035, 0.035, 0.2, FOUR.inner)
+    stack = build_stackup(even)
+    assert stack.gaps_mm == (0.2, 0.2, 0.2)
+    assert stack.reference_layer("in1") == "top"
+    assert stack.reference_layer("in2") == "in1"  # "bottom" sorts first by name
+
+
 def test_span_runs_from_the_outer_face_of_one_layer_to_the_other() -> None:
     """Measure a via's barrel: top to bottom is the board, in1 to in2 spans the core."""
     stack = build_stackup(FOUR)
