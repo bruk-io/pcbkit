@@ -108,6 +108,7 @@ SKILL_NAMES = [
     "review-misplug",
     "plan-bringup",
     "review-sourcing",
+    "review-spec-drift",
 ]
 AGENT_NAMES = ["parts-researcher", "check-writer"]
 
