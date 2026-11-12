@@ -18,15 +18,22 @@ into `specs.py`, so the next run of the same question is a check, not a review.
 - **In pcbkit, not a plugin of their own.** The reviews read pcbkit's files and write
   its tables; a separate plugin would have to describe pcbkit from outside.
 - **Validation logic is code.** A review never asks a model to decide what the netlist or
-  the geometry decides. Each skill opens with what the checks already decide and tells
-  Claude to read `out/checks/results.json` for it. When the same finding turns up on two
-  boards it becomes a check (`add-check`) and leaves the skill.
+  the geometry decides. Each skill opens with the checks that apply at its gate (a
+  `pcbkit check -k` selection until WP17 adds a gate option) and tells Claude to read
+  `out/checks/results.json` for them. Inside the review, decidable work comes first as
+  table rows a check reads; the judgement (fit, consequence, remedy) follows the run.
+- **Maintainer note: findings that recur.** When the same kind of finding turns up on a
+  second board, the maintainers add a built-in check for it and take it out of the
+  skill. The skill bodies do not say this: a session in a user's board project cannot
+  edit the installed plugin.
 - **Every review ends in `specs.py`.** The intent a review settles (which net is the
   victim, which loop is hot, what each enable must do with the controller dead, what a
   connector carries) goes into the tables the built-in checks read. Where no table
   exists yet, the review writes rows into a proposed table (marked so in a comment) and
   hands it to `add-check`, which writes a project check that reads it; the built-in
-  check that replaces it is in "Checks to build" below.
+  check that replaces it is in "Checks to build" below. Every proposed table's row
+  shape is in "Proposed tables" in `docs/project-interface.md`, which the skills point
+  at; this plan is not read at run time.
 - **Names.** Verb first and no `pcb-` prefix, like the skills already there:
   `walk-fault-states`, `review-derating`, `review-current-paths`, `review-misplug`,
   `plan-bringup`, `review-sourcing`, `review-spec-drift`, and later `review-datasheets`.
@@ -41,8 +48,12 @@ into `specs.py`, so the next run of the same question is a check, not a review.
   | Schematic | `pcbkit sch` is ERC-clean | `walk-fault-states`, `review-derating`, `review-datasheets` (later) |
   | Placement | `pcbkit build`, before routing is final | `review-current-paths`, `review-misplug` |
   | Route | `pcbkit route`, before `promote` | `review-board` (as before) |
-  | Order | `finalize` and a full `pcbkit check` | `plan-bringup`, `review-sourcing`, then the user's `/pcbkit:order-pcbway` |
-  | Every gate | | `review-spec-drift` |
+  | Order | `finalize` | `board-workflow` runs, in turn: `review-derating` if parts changed, `plan-bringup`, `review-sourcing`, `review-spec-drift`, a full `pcbkit check`; then the user's `/pcbkit:order-pcbway` |
+  | Each gate with a written spec | | `review-spec-drift` |
+
+  `board-workflow` alone owns the order intent; each review triggers on its own
+  question. `review-sourcing` writes `sourcing.md` with the timestamps of the exports it
+  read, and `order-pcbway` reads it.
 
 - **Existing skills.** All five are kept; none is superseded.
 
@@ -51,7 +62,7 @@ into `specs.py`, so the next run of the same question is a check, not a review.
   | `board-workflow` | keep | The loop. It now says at which step each review runs. |
   | `new-board` | keep | Starting a board is not a review. It now hands the first build to the schematic-gate reviews. |
   | `add-check` | keep | Where every review sends a rule it found. It now says that a review hands over table rows, and that proposed tables are read by a project check until the built-in one exists. |
-  | `review-board` | keep | A forked look at the routed copper from pictures, needing no intent: slivers, islands, signals under switchers. `review-current-paths` sets the intent (victims, hot loops, segments) the copper checks then measure; the two do different jobs. Its reply now names `review-current-paths` for a coupling no check measures and `add-check` for a finding a check could decide. |
+  | `review-board` | keep | A forked look at the routed copper from pictures, needing no intent: slivers, islands, signals under switchers, and a fast track over a gap in its reference pour (candidate 17, until check I). `review-current-paths` sets the intent (victims, hot loops, segments) the copper checks then measure; the two do different jobs. Its reply now names `review-current-paths` for a coupling no check measures and `add-check` for a finding a check could decide. |
   | `order-pcbway` | keep | Fills in the order. It now says that `review-sourcing` is what judges whether the parts can be bought. |
 
   The agents are kept as they are: the reviews dispatch `parts-researcher` for every
@@ -85,7 +96,7 @@ check decide it. **Missing**: no check can; the letter is its entry in "Checks t
 | 14 | current paths | Region kept clear of copper (antenna, under an inductor) | Built | `copper`: `test_reserved_copper_stays_clear` (`RESERVED_COPPER`, plus the keep-out in routing.py) |
 | 15 | current paths | Load return current lifting a sensor's ground | Expressible | `COPPER_SEGMENTS` row on `GND`, `heating` False, terminals at the load return and the sensor's ground pad; `SUPPLY_REGULATION` |
 | 16 | current paths | Regulator hot-loop area | Missing | H (four-layer) |
-| 17 | current paths | Fast net crossing a gap in its reference plane | Missing | I (four-layer) |
+| 17 | current paths | Fast net crossing a gap in its reference plane | Missing | I; `review-board` judges it by eye until then |
 | 18 | current paths | Heat source beside a temperature-sensitive part | Missing | J |
 | 19 | current paths | Connector return contacts as capable as its supply contacts | Missing | E |
 | 20 | derating | Capacitor voltage under 80 % of rating, transients included | Built | `circuit`: `test_capacitor_voltage_derated` (`CAP_VRATED`, a transient is a `STRESS_SCENARIOS` row) |
@@ -115,7 +126,7 @@ check decide it. **Missing**: no check can; the letter is its entry in "Checks t
 | 44 | bring-up | Unsafe default state | Missing | A |
 | 45 | sourcing | Every BOM line has an orderable part number | Built | `outputs`: `test_bom_complete` |
 | 46 | sourcing | BOM, centroid and DNP agree with the board and schematic | Built | `outputs`: `test_bom_matches_schematic`, `test_centroid_matches_board` |
-| 47 | sourcing | THT count, SMD placements, fine-pitch packages, unique lines | Built | `pcbkit quote` |
+| 47 | sourcing | THT count, SMD placements, fine-pitch packages, unique lines | Built | `pcbkit quote`; it counts BGA, QFP and QFN by footprint name, not pitch, so DFN, LGA and wafer-level parts are listed from the BOM |
 | 48 | sourcing | Fab parameters against the fab's limits | Built | `fab`: `test_annular_rings_and_drills_meet_pcbway`, `test_design_rules_cover_fab_limits` (`PCBWAY`); `outputs`: `test_job_file_stackup`; `pcbkit quote` |
 | 49 | sourcing | Polarity or pin-1 mark visible outside the part body | Missing | K |
 | 50 | sourcing | Fiducials | Missing | M |
@@ -147,13 +158,13 @@ that reads them. Ordered by what a miss costs.
 |---|---|---|---|---|
 | A | Each listed pin holds its window in each named condition | `FAULT_STATES = {condition: {"scenario": {kwargs for circuits.scenario}, "pins": [(ref, pin, (min V, max V))]}}` | 3, 38, 44 | A DC solve per condition, like `SUPPLY_PINS` but one scenario per condition. Covers missing pulls, pulls to an absent rail and unplugged inputs. |
 | B | No DC path from one supply net to another except through the parts named as the way | `POWER_PATHS = [(from net, to net, (allowed refs))]` | 5, 64 | A graph walk over the netlist; diodes and FETs pass in their forward direction. Back-feed through an unpowered IC's ESD diodes needs a model of the part: later. |
-| C | The net on each listed pad, and every connector listed | `PIN_NETS = {ref: {pad: net}}` | 56, 57 | The port map. D reads it too. |
-| D | Reversed, offset and wrong-port mating lands nothing harmful | `MATING = {plug: {"pins": [net or None], "fits": [refs], "keyed": bool}}` with `PIN_NETS` | 32, 33, 34 | Pin by pin: supply onto ground or a signal, a higher rail onto a lower-rated pin, a safety loop closed. Pad adjacency from the footprint for tool shorts. |
-| E | Current per contact against the derated contact rating | `CONTACT_RATINGS = {ref: {"amps": A per contact, "derate": fraction}}` with currents from `COPPER_SEGMENTS` terminals or a table | 19, 23 | Counts the contacts on each net; return contacts judged like supply ones. |
+| C | The net on each listed pad, and every connector listed | `PIN_NETS = {ref: {pad: net}}` | 56, 57 | The port map as the spec states it, compared with the netlist. |
+| D | Reversed, offset and wrong-port mating lands nothing harmful | `MATING = {plug: {"pins": [net or None], "fits": [refs], "keyed": bool}}`; socket pad nets from the netlist | 32, 33, 34 | Pin by pin: supply onto ground or a signal, a higher rail onto a lower-rated pin, a safety loop closed. Pad adjacency from the footprint for tool shorts. |
+| E | Current per contact against the derated contact rating | `CONTACT_RATINGS = {ref: {"amps": A per contact, "derate": fraction, "nets": {net: A}}}` | 19, 23 | Counts the contacts on each net from the netlist; return contacts judged like supply ones. |
 | F | FET and diode voltage under 80 % of rating | `SEMI_VRATED = {mpn: {"vds" or "vrrm": V, "vgs": V}}` | 21 | The capacitor check's twin, on the same `STRESS_SCENARIOS`. |
 | G | Each listed net has a test point, a ground pad within reach, outside the keep-away boxes | `TEST_POINTS = [(net, max ground mm)]`, `PROBE_KEEPAWAY = [(name, x0, y0, x1, y1)]` | 39 | Boxes are mated plug bodies and modules, in layout mm. |
 | H | Regulator hot-loop area under a limit | `HOT_LOOPS = [{"name", "refs", "pads", "max_mm2"}]` | 16 | Waits on four-layer support (the loop closes through an inner plane). |
-| I | A fast net never crosses a gap in its reference plane | `REFERENCE_PLANES = {net: layer}` | 17 | Waits on four-layer support. On two layers the bottom pour is the reference and `review-board` judges it by eye. |
+| I | A fast net never crosses a gap in its reference plane | `REFERENCE_PLANES = {net: layer}` | 17 | Buildable now: on two layers it is a top-layer track over the filled bottom `GND` zone, the gap a bottom track or slot. `review-board` judges it by eye until then. |
 | J | Minimum distance between two parts | `PART_SPACING = [(ref, ref, min mm)]` | 18 | Heat sources from sensitive parts. |
 | K | Polarity or pin-1 mark outside the part body | `POLARITY_MARKS = [refs]` | 49 | Generalises `WIRE_PADS`. |
 | L | Every connector has a `CONN_LABELS` entry in silk.py | silk.py | 36 | |
@@ -187,8 +198,32 @@ maximum output capacitance is a `SUPPLY_LIMITS` row. It writes `PINOUT`, `SUPPLY
 2. The seven skills, one commit each, with generic worked examples. Done.
 3. The existing skills hand off by name; `board-workflow` names the gates. Done.
 4. `docs/claude-plugin.md`, the README line, and the plugin test's list of skills. Done.
-5. Build the checks above, A to G first, with `add-check` and `check-writer`. Not started.
+5. Build the checks above, A to G first, with `add-check` and `check-writer`. Not
+   started; the gate-scoped run and the rest move to WP17 (below).
+5a. Audit fixes. Done: examples rebuilt around other products, gate-scoped `-k`
+   selections in each review, decidable work before judgement, the proposed tables in
+   `docs/project-interface.md`, one owner per trigger, `sourcing.md` for the order.
 6. Eval cases for the reviews (`evals/`): at least that `walk-fault-states` loads for "is
    this fail-safe" and that a review reads results.json instead of re-measuring. Not
    started; the plugin test pins four cases today.
 7. `review-datasheets`, after WP14.
+
+## Left for WP17
+
+What the skills work around today and WP17's pcbkit code replaces; each skill marks the
+place with "WP17".
+
+- `pcbkit check --gate sch|place|route|order`: replaces the `-k` selections in every
+  review. Today: schematic `test_circuit or test_esp32s3 or test_erc_clean`; placement
+  adds `test_decoupling_caps_are_close`, `test_power_footprints_match_datasheet` and
+  `test_filter_caps_sit_by_the_adc_pin`; route `not test_outputs`; order, no `-k`.
+- Built-in checks for the proposed tables, starting with A to G.
+- Every part's stress at every `STRESS_SCENARIOS` row in results.json (today the
+  capacitor and resistor checks record the top four, `test_supply_pins_in_range`
+  nothing), and supply-pin windows at the envelope corners. `review-derating` solves
+  the rest in a script meanwhile.
+- A per-part derating factor, so a tantalum's 50 % target is a check, not a finding.
+- A parts-stock command over `pcbkit/parts.py`, replacing `parts-researcher` for
+  Mouser stock in `review-sourcing`.
+- A ground-lift record per zero-share terminal in `test_copper_segment` (today only the
+  segment's largest drop is recorded; `review-current-paths` asks `add-check` for it).
