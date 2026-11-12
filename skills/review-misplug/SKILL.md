@@ -6,7 +6,7 @@ description: >-
   cable routing, labels and pull-out loads - and write each plug and the sockets it
   fits into specs.py so a check lands every plug on the netlist. Run it after
   placement; load it before reviewing, planning or advising on connector choice,
-  pinouts, port layout or enclosure cut-outs, even for one connector. Without it Claude
+  connector pinouts, port layout or enclosure cut-outs, even for one connector. Without it Claude
   checks only the intended mating, trusts family or pin count to stop a wrong-port mate,
   misses a narrower plug seated offset in a wider socket, works out pin landings by
   hand instead of by a check, and reaches for protection parts or labels before
@@ -22,20 +22,21 @@ does X", hand X to `walk-fault-states` and record the hand-off.
 
 ## 1. Start from the checks that apply at this gate
 
-A placed board exists, but of the built-in checks only the netlist ones apply to plugs
-now: the `circuit` group, `test_erc_clean`, and on an ESP32-S3 DevKit board the
-`esp32s3` group (a GPIO's source current and absolute maximum in each `GPIO_SCENARIOS`
-row, which is how a signal pin that becomes a plug's ground return is judged). Run them,
-adding `or test_<topic>` for a previous run's mating check:
+A placed board exists, but of the built-in checks only the netlist ones bear on plugs
+now: the `kicad` and `circuit` groups, and `esp32s3` on an ESP32-S3 DevKit board. Switch
+on in `[checks] groups` of pcbkit.toml any group the first line says is off:
 
 ```
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
 .venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"
 ```
 
-`test_wire_pads_have_polarity_marks` (`WIRE_PADS`) needs the silkscreen `pcbkit route`
-adds, and DRC a routed board: a check whose inputs do not exist yet is not a finding. A
-`-k` run leaves partial results; the order gate runs all. A gate option (WP17, --gate
-place) will replace this selection.
+Add `or test_<topic>` for a previous run's mating check. `esp32s3` holds each GPIO
+under the powered chip's 3.6 V in each `GPIO_SCENARIOS` row; it does not judge the
+current through a pin that becomes a plug's ground return, nor a plug that drives an
+unpowered board: those are step 4's. `test_wire_pads_have_polarity_marks` needs the
+silkscreen `pcbkit route` adds, and DRC a routed board: a check whose inputs do not
+exist yet is not a finding. A `-k` run is partial; the order gate runs all.
 
 ## 2. Gather the inputs and the fit
 
@@ -54,15 +55,21 @@ Ask for what is missing; never guess a pinout.
 
 ## 3. Write the plugs down, then let a check land them
 
-- `MATING`: each plug's wires (`pins`, net or None per position), every socket it
-  `fits` or can be `forced` into, and whether it is `keyed`. A proposed table no
-  built-in check reads yet (shape in "Proposed tables",
-  `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`).
-- Hand it to `add-check`. Its project check reads each socket's pad nets from the
-  netlist, lands every plug as intended, reversed (unless keyed) and offset by one in
-  each socket it fits, fails a supply on ground or a signal, a higher rail on a
-  lower-rated pin, or a loop closed by the wrong device, and lists adjacent pads at
-  different voltages (tool shorts). Run it; its failures are the pin-by-pin hazards.
+Proposed tables, which no built-in check reads yet; their shapes and the check's rule
+are in "Proposed tables" in `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`.
+
+- `PIN_NETS` for each socket a plug fits: the pad set the check lands plugs on.
+- `MATING`: each plug meant for this board, the board net its wire at each position is
+  meant to meet, every socket it seats in (`fits` or `forced` cells), `keyed`, `rows`.
+  A cable meant for another device stays in the fit matrix: it has no intended landing.
+- `NET_LIMITS` for each input a wire could overdrive, its absolute maximum, sourced.
+- Hand them to `add-check`. Its project check lands each plug straight, reversed and
+  offset, fails a source fight or an over-voltage, and records adjacent pads at
+  different voltages. Its failures are the pin-by-pin hazards. It cannot see wires a
+  plug joins inside itself (a switch contact across two wires): judge those.
+- `WIRE_PADS` for every bare pad that takes a wire; `GPIO_SCENARIOS` (ESP32-S3) for a
+  landing that puts a voltage on a GPIO of the powered board; in silk.py a
+  `CONN_LABELS` entry for every connector, named by function.
 
 ## 4. Judge consequence and remedy
 
@@ -75,16 +82,8 @@ Ask for what is missing; never guess a pinout.
   programming are reachable, and something other than solder joints takes a yank.
 - **Remedy in this order.** Design it out (another family or pin count per function,
   keying, a pin order where reversal or offset is harmless), then protection parts
-  (series resistor, fuse, diode, TVS), then labels.
-
-For the shape of the fit matrix and of `MATING`, when unclear: a finished review of a
-generic board, [references/example.md](references/example.md).
-
-## 5. Write the rest down
-
-- `WIRE_PADS` for every bare pad that takes a wire; `GPIO_SCENARIOS` (ESP32-S3): a row
-  per plug whose reversal puts current through a GPIO, so a check holds the resistor.
-- silk.py: a `CONN_LABELS` entry for every connector, named by function.
+  (series resistor, fuse, diode, TVS), then labels. A finished review of a generic
+  board, for the shape of the fit matrix and the rows: [references/example.md](references/example.md).
 
 ## Lane and hand-offs
 

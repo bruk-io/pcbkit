@@ -14,8 +14,8 @@ VBAT -> U3 buck-boost -> +3V3 -> U1 controller, U5 real-time clock (I2C)
 +3V3 -> U6 load switch (EN: PWR_EN from U1) -> SNS_3V3 -> U7, U8 sensors (I2C)
 ```
 
-The `i2c` record in `out/checks/results.json` lists U5 at 0x68, U7 at 0x44 and U8 at
-0x5C on one bus. With `SNS_3V3` off, only 0x68 can answer.
+The spec lists the clock and the two sensors on one bus: U5 at 0x68, U7 at 0x44 and U8
+at 0x5C, which the user confirmed. With `SNS_3V3` off, only 0x68 can answer.
 
 ## How the order falls out
 
@@ -32,14 +32,27 @@ The `i2c` record in `out/checks/results.json` lists U5 at 0x68, U7 at 0x44 and U
 # Proposed tables: project checks from add-check read them.
 TEST_POINTS = [("VBAT", 8.0), ("+3V3", 8.0), ("SD_3V3", 8.0), ("SNS_3V3", 8.0)]
 PROBE_KEEPAWAY = [("cell holder", 30, 2, 48, 20)]
-ENABLE_LINKS = {"PWR_EN": ["U4", "U6"]}
-I2C_EXPECTED = {"main": [0x44, 0x5C, 0x68]}
+ENABLE_LINKS = {"PWR_EN": [("U4", "4"), ("U6", "4")]}  # EN is pad 4 (datasheets)
+I2C_EXPECTED = {"main": [0x44, 0x5C, 0x68]}  # the spec's part list, user-confirmed
+BRINGUP_STAGES = {
+    "1 controller": {
+        "scenario": {"vbat": 3.7, "usb": False},
+        "supply": "VBAT",
+        "limit_ma": 20,
+    },
+    "2 charger": {
+        "scenario": {"vbus": 5.0, "cell": False},
+        "supply": "VBUS",
+        "limit_ma": 100,
+    },
+}
 ```
 
 The first full run failed `TEST_POINTS` for `SD_3V3` and `SNS_3V3` (no test point),
 `PROBE_KEEPAWAY` for `TP_VBAT` (under the cell holder), and `ENABLE_LINKS` for
-`PWR_EN` (one net, no link per switch). The readings check recorded `+3V3` at about
-47 kohm to ground and stage 1 at about 0.4 mA.
+`PWR_EN` (both enable pads on the one net, no link each). `I2C_EXPECTED` passed: the
+design answers the spec's three addresses. The readings check recorded `+3V3` at about
+47 kohm to ground and stage 1 at about 0.4 mA, under its 20 mA limit.
 
 ## Part 1. Design findings
 
@@ -74,5 +87,5 @@ then scans for exactly 0x44, 0x5C and 0x68; stage 5 fits a cell.
 
 ## Written to specs.py
 
-The four tables above, each handed to `add-check`, and `SHOTS` regions for the probe
+The five tables above, each handed to `add-check`, and `SHOTS` regions for the probe
 points of stages 1 and 2.

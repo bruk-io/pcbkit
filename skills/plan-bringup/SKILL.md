@@ -15,15 +15,15 @@ description: >-
 
 # Bring-up plan
 
-Gate: after `pcbkit finalize`, before an order (`board-workflow` sequences it). The plan
+Gate: after `pcbkit finalize`, before an order (`board-workflow` runs it). The plan
 is the bench checklist when boards arrive. A step that cannot be carried out is a design
 defect you can still fix: no test point, no link to isolate a section, no way to power
 a section alone.
 
 ## Safety rules (never relax)
 
-- First power is always a current-limited bench supply, never a battery. A battery or
-  pack appears only after every bench step has passed.
+- First power is always a current-limited bench supply, never a battery. The product's
+  own supply (an adapter, a battery) appears only after every bench step has passed.
 - Ramp the supply up from 0 V while watching the current.
 - Every step states a current limit with its reason and a stop condition.
 - One section live at a time. Loads come last, smallest first.
@@ -31,11 +31,17 @@ a section alone.
 
 ## 1. Start from what the checks decide
 
-Everything exists at this gate, so every group applies: run `.venv/bin/pcbkit check`
-with no `-k` and read `out/checks/results.json` (`selection.complete` true).
+Everything exists at this gate, so every group applies; the readings below need
+`circuit` on. Switch on in `[checks] groups` of pcbkit.toml any group the first line
+says is off, then run the checks in full and read `out/checks/results.json`:
 
-- The expected bus scan: the `i2c` table `test_i2c_addresses_unique_per_bus` records
-  per bus. Copy it; never work an address out again.
+```
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
+.venv/bin/pcbkit check
+```
+
+- What the design answers on each bus: the `i2c` table that
+  `test_i2c_addresses_unique_per_bus` records. Never work an address out again.
 - Expected rail voltages: `SUPPLY_PINS` and `test_supply_pins_in_range`.
 - Default-off states: a project check reading `FAULT_STATES`, if `walk-fault-states`
   wrote one. The plan tests those states on the bench; it does not re-derive them.
@@ -44,13 +50,11 @@ with no `-k` and read `out/checks/results.json` (`selection.complete` true).
 
 ## 2. Settle the power tree and the bench
 
-From design.py and the schematic PDF in `out/docs/`: the power tree (every source,
-protection part, regulator and rail, and what feeds what) and the enable chain. From the
-user: the bench (supply voltage and current, a scope or not) and what is mated during
-testing. Order the stages: the lowest-energy section that runs alone first (usually the
-controller from USB or a logic rail), then the input stage alone, then each rail in
-dependency order, then loads. A rail that cannot come up without another one also coming
-up is a finding.
+From design.py and the schematic PDF in `out/docs/`: the power tree (sources, protection,
+regulators, rails, what feeds what) and the enable chain; from the user, the bench
+(supply, scope) and what is mated during testing. Stages: the lowest-energy section that
+runs alone first, then the input stage alone, each rail in dependency order, then loads.
+A rail that cannot come up without another one coming up too is a finding.
 
 ## 3. Write the rows, then let the checks decide
 
@@ -59,38 +63,34 @@ The tables are proposed: no built-in check reads them yet. Their shapes are in
 
 - `TEST_POINTS`: every net a step probes, with the ground distance a scope spring tip
   needs. `PROBE_KEEPAWAY`: the boxes mated plugs and fitted modules cover.
-- `ENABLE_LINKS`: each enable net several regulators share, so each can be isolated.
-- `I2C_EXPECTED`: the exact scan per bus, from the recorded `i2c` table.
-- Expected readings, never arithmetic in the conversation: `add-check` writes a project
-  check that solves with `pcbkit.check.dc` and records each `TEST_POINTS` net's
-  resistance to ground, rails unpowered (a test current from `Circuit.inject`), and each
-  stage's input current from a `circuits.scenario` with datasheet quiescent currents as
-  loads. The model sees only resistors, diodes and FETs: a bench reading can be lower.
+- `ENABLE_LINKS`: each enable net several regulators share, with each regulator's
+  enable pad, so each can be isolated.
+- `I2C_EXPECTED`: the exact scan per bus, from the user or the spec, never from the
+  recorded `i2c` table (that would compare the design with itself).
+- `BRINGUP_STAGES`: each stage's scenario, supply net and current limit. Its readings
+  check records each stage's input current and each test point's resistance to ground:
+  the expected readings, never arithmetic in the conversation. The model sees only
+  resistors, diodes and FETs, so a bench reading can be lower.
+- `SUPPLY_PINS` for any rail whose window the plan relies on and no row holds;
+  design.py `dnp=True` for parts left off for first power; a layout.py `SHOTS` region
+  per stage's probe points.
 
-Hand each table to `add-check`, then run `pcbkit check` in full again. A failed
-`TEST_POINTS`, `PROBE_KEEPAWAY` or `ENABLE_LINKS` row is a Part 1 finding.
+Hand each table to `add-check`, then run `pcbkit check` in full again. A failed row is
+a Part 1 finding.
 
 ## 4. Write the plan
 
 Steps by stage from [references/bench-method.md](references/bench-method.md): inspection
-and resistance first, then each stage with its limit (2 to 3 times the recorded idle
-current), the firmware ladder one bus at a time, every protection exercised on purpose
-(stop input, reverse polarity at low voltage and current, over-current through a
-monitor's alert, not a dead short), scope steps marked "(scope)". Each expectation is a
-recorded number or a `SUPPLY_PINS` window, named. A plan for a generic board, for the
-shape of both parts: [references/example.md](references/example.md).
-
-## 5. Write the rest down
-
-- `SUPPLY_PINS` for any rail whose expected window the plan relied on and no row held.
-- design.py: `dnp=True` for parts left off for first power; layout.py: a `SHOTS`
-  region per stage's probe points.
+and resistance first, then each stage with its limit (the `BRINGUP_STAGES` row), the
+firmware ladder one bus at a time, each protection the board has exercised on purpose
+on the bench supply, scope steps marked "(scope)". Each expectation is a recorded number
+or a `SUPPLY_PINS` window, named. A plan for a generic board, for the shape of both
+parts: [references/example.md](references/example.md).
 
 ## Lane and hand-offs
 
 Default states go to `walk-fault-states`, ratings to `review-derating`, return paths to
-`review-current-paths`, plugs to `review-misplug`, a spec question to
-`review-spec-drift`.
+`review-current-paths`, plugs to `review-misplug`, the spec to `review-spec-drift`.
 
 ## Output - fixed format
 

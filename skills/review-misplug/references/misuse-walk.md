@@ -43,9 +43,10 @@ read with the netlist's pad nets) and this review starts from its answer.
   latch on one face, or nothing.
 - If possible: the mating check gives the pin-by-pin result. Name what the
   plugged device does with the voltage that reaches each wire.
-- The harmless reversal: a symmetric pinout where the power pin sits in the
-  middle and reversal only swaps signal and ground. Ask what current flows
-  through the signal driver when it becomes the device's ground return.
+- A reversal that lands each wire on a pin of the same kind (a symmetric
+  pinout, such as a differential pair with a ground at each end) is harmless.
+  Where reversal puts a device's ground on a signal pin, ask what current flows
+  through that pin's driver as the device's return.
 - The harmful reversal: supply and ground swap. Ask whether the device or the
   board survives reverse supply, and for how long.
 
@@ -54,17 +55,16 @@ read with the netlist's pad nets) and this review starts from its answer.
 - For each `fits` or `forced` cell the mating check lands the plug pin by pin;
   judge what drives what. Look for
   supply onto an output, a higher voltage onto a lower-voltage input, two
-  outputs fighting, and a safety loop closed by something that is not the
-  safety device.
+  outputs fighting, and an interlock loop closed by something that is not the
+  interlock.
 - A swap that is electrically harmless but functionally wrong still counts when
-  it defeats a safety function (a stop input that no longer stops) or when it
+  it defeats a safety function (a lid interlock that no longer interlocks) or when it
   fails silently (a sensor reads nothing and the firmware acts on it).
 
 ## Offset by one
 
 - Unshrouded headers only (and wide shrouds holding narrow plugs). Shift the
-  plug one pin each way along its row; then, on a pin field, lay it along the
-  row of same-function pins of neighbouring channels.
+  plug one pin each way along its row; on a 2-row header, also one row across.
 - A pin hanging off the end of a header is a floating wire on the device side.
 - Ask which shift puts supply on the device's ground or signal pin.
 
@@ -78,16 +78,16 @@ read with the netlist's pad nets) and this review starts from its answer.
   pin's driver and protection diodes. Series resistance limits it.
 - Supply into a device with bulk capacitance: inrush sags the shared rail.
   Does anything else on that rail reset or brown out?
-- Battery connectors: arc on mating, and inrush into the board's bulk
-  capacitance. Is there a soft-start or a switch so the battery is never mated
-  live into a hard load?
+- Power inputs (a DC jack, a 24 V terminal block, a USB port feeding a large
+  bulk capacitor): inrush on mating, and the arc it draws. Is there a
+  soft-start or a load switch so the input never mates into a hard load?
 - Latch-up: a powered signal line into an unpowered CMOS device, or the reverse,
   through its protection diodes. Is there a series resistor or a buffer?
 
 ## Left unplugged
 
 - What does each input read with nothing connected? A pull resistor or nothing.
-- Is that state safe? A stop input must read "stopped" when unplugged; a
+- Is that state safe? An interlock input must read "open" when unplugged; a
   power-switch input must read "off".
 - If the answer depends on firmware or on what the circuit does next, record it
   and hand it to `walk-fault-states`, which writes the unplugged state as a
@@ -97,8 +97,8 @@ read with the netlist's pad nets) and this review starts from its answer.
 
 - Adjacent pins at different voltages on any user-reachable connector, header or
   test point. A screwdriver or a stray strand of wire bridges 2.54mm easily.
-- Worst pairs: battery next to anything, supply next to a logic pin, supply next
-  to ground with no current limit.
+- Worst pairs: an unfused supply next to anything, a supply next to a logic pin,
+  a supply next to ground with no current limit.
 - Also bridges between neighbouring connectors on a dense edge, not only within
   one connector.
 
@@ -131,7 +131,8 @@ read with the netlist's pad nets) and this review starts from its answer.
 - Reset and boot reachable with the case closed: through a hole, a light pipe or
   a flexure button printed into the case.
 - Programming port reachable with the case closed and the board mounted.
-- Test points needed during bring-up reachable without removing the upper board.
+- Test points needed during bring-up reachable without removing a cover, a
+  shield or a plug-in module.
 - Can a button be pressed by accident when gripping the case or mating a nearby
   connector?
 
@@ -140,8 +141,8 @@ read with the netlist's pad nets) and this review starts from its answer.
 - For each cable: what takes the force first? Solder joints and SMD pads are the
   wrong answer. Through-hole pins, hold-down tabs, a housing locked into the case
   wall, or a cable anchor in the case are right.
-- Heavy or stiff cables (battery leads, power) need an anchor in the case so the
-  connector never carries their weight.
+- Heavy or stiff cables (mains leads, thick power leads) need an anchor in the
+  case so the connector never carries their weight.
 - Does a yank pull the plug out cleanly (fine) or rip the socket off the board
   (not fine)?
 
@@ -149,15 +150,16 @@ read with the netlist's pad nets) and this review starts from its answer.
 
 1. Design-out:
    - One family or pin count per function, so nothing else fits.
-   - A safety loop across non-adjacent pins (pins 1 and 3 of a 3-pin socket),
-     so no smaller plug sitting offset can close it.
-   - Pin order where reversal swaps only signal and ground, power in the middle.
+   - Pins that must never meet at opposite ends of the connector, so no
+     offset or narrower plug can bridge them.
+   - A presence pin that mates last (shorter, as in card-edge and USB-C
+     connectors), so the board sees the plug only when it is fully seated.
    - Shrouded or polarised sockets instead of bare headers.
    - Different pin counts for functions that share a family.
 2. Protection parts:
    - Series resistor on each signal that leaves the board, sized for the
      current when the signal becomes someone's ground return.
    - Polyfuse or current limit on supply pins of user ports.
-   - Reverse-polarity protection on power inputs.
-   - Soft-start or anti-spark on battery inputs.
+   - A current-limited switch on supply pins a user hot-plugs (a USB host
+     port, a sensor port).
 3. Labels: silkscreen and case, matching, saying which way round.
