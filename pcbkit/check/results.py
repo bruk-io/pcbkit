@@ -56,6 +56,7 @@ BUILTIN_GROUPS = {
     "test_ports": "ports",
     "test_enable_links": "power",
     "test_faults": "power",
+    "test_semis": "power",
     "test_i2c_expected": "bringup",
 }
 

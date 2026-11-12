@@ -971,6 +971,7 @@ and on `circuits.scenario` for the fault states, at the `sch` gate:
 | `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `DNI`, `NF`, `NP`, `NC`, `NM`, `NL`, `NOPOP`, in any case: the footprint is there to fit at bring-up), or a two-pad jumper: a part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one), or any two-pad part with reference letters `JP`, such as a header with a shunt. It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
 | `SUPPLY_NETS` | `[supply or ground net]` | The supply and ground nets, by name as the netlist writes them (no leading slash). The enable-link walk never crosses one, nor the ground net (`GROUND_NET`, or `"GND"` when that is not defined and the design has a `GND` net), so a pull-up or pull-down through a resistor is fine. pcbkit does not guess supplies from net or pin names: a supply you leave out is walked like a signal. List only real rails: a signal listed here hides every path through it, so a real bridge between two enables can pass. Each net must be in the design. Needed whenever `power` is on (`[]` says none). |
 | `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | The level each listed pin must hold in a fault condition ("controller absent", "input supply off"). `scenario` is the keyword arguments of `circuits.scenario` that make the condition: what the scenario fixes is driven, what it leaves free is not, so "controller absent, so +5V is off" is written into the scenario by hand (`circuit.fix("+5V", 0)`). The window is the datasheet's (an enable's VIL for "off": `(0, 0.4)`). Pads are pad numbers as the netlist writes them, never pin names. `{}` says there is no fault state to check. |
+| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | The voltage ratings of the FETs and diodes, by MPN: a FET row gives VDS and VGS, a diode row VRRM (for a TVS or zener, the reverse voltage it may hold without conducting). `derate` is the share of the rating allowed, 0.8 when left out and never more, so the row can only tighten. `pins` gives the pads, as the netlist numbers them, when the symbol's pin names do not read as one FET (G, D, S) or one diode (A, K); a bipolar transistor is written as a FET row, `vds` its VCEO, `vgs` its VEBO, `pins` `{"g": base, "d": collector, "s": emitter}`. A row describes one element, so a part with two diodes or two FETs in it cannot be judged. `{}` says there is nothing to rate. It also reads `STRESS_SCENARIOS` (as in `circuit`). |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
 looks at the whole table) fails naming each regulator whose enable pad is wired straight
@@ -1117,6 +1118,56 @@ pin held only by one fails as floating. Consequences are not chased: "enable low
 output is off, so the next enable is low" must be written into the scenario as fixed
 nets. A listed pad is taken at its word to draw nothing.
 
+`test_semiconductor_voltage_derated` solves every row of `STRESS_SCENARIOS` and holds,
+at the worst of them, each FET's `|V(D) - V(S)|` under `derate` times `vds` and `|V(G) -
+V(S)|` under `derate` times `vgs`, and each diode's `|V(K) - V(A)|` under `derate` times
+`vrrm` (the voltage either way: a forward drop is small, and a bidirectional TVS is held
+both ways). It is the capacitor rule's twin. The parts it judges are any of these:
+
+- a part whose pins read as one FET or one diode: every pad on a net (not KiCad's
+  `unconnected-(...)` one) has a pin name, and the names are exactly G, D and S (or
+  GATE, DRAIN, SOURCE) or exactly A and K (or ANODE, CATHODE), case ignored, each
+  name's pads on one net (a FET's tab named D beside its D pin is fine);
+- a part whose pins are all named for one family's terminals (a FET's, a diode's, or a
+  bipolar transistor's B, C and E, with or without a number: G1, A2) but do not read as
+  one FET or diode, and a part from a library whose name starts with `Diode` or
+  `Transistor`, or a `Device` symbol named `D`, `LED` or starting `D_`, `LED_` or `Q_`;
+  these are judged on their row's `pins`, and fail by name without them;
+- a part whose MPN has a row;
+- a part `circuits.scenario` holds a diode or FET element for (by its reference).
+
+So every LED needs a row too (its reverse rating). A judged part fails, by name, when:
+it has no MPN or its MPN has no row (it still records its voltages); its pins cannot be
+read and its row gives none (the message gives the way to write a bipolar transistor);
+its row is of the other kind than its pins; its row's `pins` name a pad on no net or
+leave out pads of the part on other nets (a second element); the circuit of a scenario
+holds no element of the part on the net of each judged pad (`dc.build` models only
+`Device:LED`, `Device:D_Schottky` and the three FETs it names, so a `Device:D`, a zener
+or a generic FET must be added in `circuits.scenario` with its reference as the
+element's ref: `circuit.D(anode net, cathode net, vf, ref="D4")`, or a `circuit.fets`
+entry); a judged pad's net is floating in a scenario (nothing the model holds joins it
+to a net the scenario fixes, so its 0 V is the solver's leak: fix the net that drives
+it in that scenario, or give it a pull); a scenario cannot be solved (named by its
+index), or none is solved at all (an empty `STRESS_SCENARIOS` judges nothing, so it
+fails while there is a part to judge); or a voltage is over its limit.
+
+It records `semiconductor voltage`, `{ref: {"kind", "mpn", "target", <quantity>: {"v",
+"rated", "limit_v", "scenario"}}}` for each judged part whose pins were read (`vds` and
+`vgs` for a FET, `vr` for a diode; `rated` and `limit_v` null without a row, `v` null
+when no scenario gave a reading, `scenario` the index into `STRESS_SCENARIOS` of the
+worst case), `not judged`, `{ref: reason}`, and `unsolved scenarios`, before it fails.
+
+What it proves, and what it does not. It proves that at the operating points
+`STRESS_SCENARIOS` describes, as `dc` solves them, every part it judges stays under the
+share of its rating its row allows. It is static: no switching transients, no ringing,
+no inductive kick (a transient is a `STRESS_SCENARIOS` row with the net fixed at its
+peak). A part the scenario models only roughly (a FET as a switch with one threshold)
+gives voltages only as good as that model. A part whose pins mix families (an
+optocoupler's A, K, C and E) or have no names, that is not from a `Diode` or
+`Transistor` library or one of the `Device` symbols above, and has neither a row nor an
+element in the circuit, is not found. A part that conducts but is left out of the model
+elsewhere on the board can move the voltages of the parts judged, and is not looked for.
+
 **`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
 name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the
 `sch` gate:
@@ -1174,7 +1225,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 | `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count; the nets a path names should be members of `nets` (the check says so, this shape does not) |
 | `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": True or False, "rows": 1 or 2 (optional, default 1)}}` | mis-plug (`ports`) |
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
-| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
 | `TEST_POINTS` | `[(net, max ground mm)]` | test points (later) |
 | `PROBE_KEEPAWAY` | `[(name, x0, y0, x1, y1)]` | test points, in layout mm (later) |
 | `REFERENCE_PLANES` | `{net: "top" or "bottom" or ("top" or "bottom", max unreferenced mm)}` | two-layer reference planes (later) |

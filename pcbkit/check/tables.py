@@ -1011,9 +1011,6 @@ EXISTING: dict[str, Shape] = {
 # --- the shapes of the tables whose checks are not written yet --------------------
 
 _SIDE = Choice("top", "bottom")
-# a transistor's pads go with its vds and vgs, a diode's with its vrrm
-_SEMI_FET_PINS = Record(required={"g": Pad(), "d": Pad(), "s": Pad()})
-_SEMI_DIODE_PINS = Record(required={"a": Pad(), "k": Pad()})
 
 PROPOSED: dict[str, Shape] = {
     "POWER_PATHS": Record(
@@ -1040,19 +1037,6 @@ PROPOSED: dict[str, Shape] = {
         ),
     ),
     "NET_LIMITS": DictOf(Net(), Volts("max V")),
-    "SEMI_VRATED": DictOf(
-        Text("mpn"),
-        OneOf(
-            Record(
-                required={"vds": Volts(), "vgs": Volts()},
-                optional={"derate": Fraction(hi=0.8), "pins": _SEMI_FET_PINS},
-            ),
-            Record(
-                required={"vrrm": Volts()},
-                optional={"derate": Fraction(hi=0.8), "pins": _SEMI_DIODE_PINS},
-            ),
-        ),
-    ),
     "TEST_POINTS": ListOf(Tuple(Net(), Mm("max ground mm", nonneg=True))),
     "PROBE_KEEPAWAY": ListOf(Box(Text("name"))),
     "REFERENCE_PLANES": DictOf(

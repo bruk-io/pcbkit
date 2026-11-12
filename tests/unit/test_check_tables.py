@@ -1172,7 +1172,7 @@ def test_one_table_that_cannot_be_checked_hides_no_other_table() -> None:
 
 def test_a_semi_vrated_row_with_one_bad_key_names_that_key() -> None:
     """Report the closest alternative's error, not a description of both."""
-    shape = tables.PROPOSED["SEMI_VRATED"]
+    shape = tables.registry()["SEMI_VRATED"]
     assert errors(shape, {"Q-1": {"vds": 20}}, "S") == [
         'specs.S["Q-1"]: missing key "vgs"'
     ]
@@ -1341,7 +1341,7 @@ def test_mating_rows_default_to_one_and_read_in() -> None:
 
 def test_semi_vrated_pins_go_with_the_rating_they_belong_to() -> None:
     """Accept g/d/s with vds and vgs, a/k with vrrm; refuse them crossed."""
-    shape = tables.PROPOSED["SEMI_VRATED"]
+    shape = tables.registry()["SEMI_VRATED"]
     fet = {"vds": 20, "vgs": 8}
     diode = {"vrrm": 40}
     assert errors(shape, {"Q": {**fet, "pins": {"g": 1, "d": 3, "s": 2}}}, "S") == []

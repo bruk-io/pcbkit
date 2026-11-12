@@ -83,6 +83,7 @@ def test_the_modules_are_found() -> None:
         "test_kicad.py",
         "test_outputs.py",
         "test_ports.py",
+        "test_semis.py",
         "esp32s3.py",
     ]
 
@@ -150,6 +151,7 @@ TABLE_GROUP = {
     "PIN_NETS": "ports",
     "ENABLE_LINKS": "power",
     "FAULT_STATES": "power",
+    "SEMI_VRATED": "power",
     "SUPPLY_NETS": "power",
     "I2C_EXPECTED": "bringup",
 }
