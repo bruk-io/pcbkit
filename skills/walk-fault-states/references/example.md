@@ -1,81 +1,75 @@
 # Worked example: my-board
 
-A generic board, made up to show the walk. A 24 V input on J1 feeds U2, a buck
-regulator making the 12 V motor rail `VMOT`, and U3, a regulator making `+3V3` for the
-controller U1. USB on J2 also feeds `+3V3`. U4 is a two-channel motor driver on `VMOT`
-with an active-high enable, `DRV_EN`. A normally-closed stop switch plugs into J3. A
-host computer talks to U1 over a UART on J5 and has its own supply.
+A generic heater controller, made up to show the walk. A 24 V input on J1 feeds a
+heater on J2 through Q1, a low-side N-channel FET. Q1's gate is driven by U3, a gate
+driver powered from `+12V`, which U4, a linear regulator, makes from the input. U3 has
+an input `HEAT_PWM` from U1, the controller, and an enable pin `DRV_EN`. U2 makes `+3V3`
+for U1; USB on J3 also feeds `+3V3` through D1. A thermistor on J4 is read by U1 and by
+U5, a comparator that pulls `DRV_EN` low above a set temperature. A debug probe with its
+own supply plugs into J5.
 
-Assumed at the top of the review, as a real one would say it: intent is that the motors
-are off whenever U1 is not actively in control. U2's datasheet says its EN pin has an
-internal pull-up and the regulator runs when EN floats (many bucks do: check yours).
+Intent, as the user gave it: the heater is off whenever U1 is not actively in control,
+and the over-temperature trip works with no firmware at all.
 
-## First pass: the schematic as drawn
+## Facts gathered (parts-researcher, cited in the real review)
 
-U2 EN is driven straight from a U1 GPIO, `DRV_EN` is tied to `+3V3` through 10 kohm,
-and USB VBUS is joined to the 24 V input side through a diode.
+- U3: `DRV_EN` has an internal pull-up, so the driver is enabled when it floats; its
+  output follows `HEAT_PWM`; below its UVLO on `+12V` the output is held low.
+- U1: every GPIO is an input with no pull from reset until firmware sets it.
+- U5 runs from `+3V3` in the first draft.
 
-| Condition | U2 EN (VMOT) | U4 outputs | +3V3 |
-|---|---|---|---|
-| 1. Main supply, idle | on [a] | undefined [b] | on |
-| 2. Logic rail absent | on [a] | off [c] | off |
-| 3. Reset or bootloader | on [a] | undefined [b] | on |
-| 5. USB only | depends [d] | undefined [b] | on |
-
-- [a] EN floats while the GPIO is unpowered, in reset or not yet set, and the internal
-  pull-up turns U2 on: `VMOT` comes up the instant J1 is connected.
-- [b] `DRV_EN` is held on, so the outputs follow whatever U4's inputs float to until U1
-  drives them.
-- [c] With `+3V3` at 0 V the 10 kohm pull-up pulls down: off, by luck rather than design.
-- [d] VBUS reaches U2's input through the diode; whether `VMOT` rises depends on U2's
-  UVLO at 5 V.
-
-Findings: (1) rows 1 to 3, U2: the motor rail is up before U1 boots and stays up with
-the logic dead; a pull-down to `+3V3` does not fix row 2. Fix: a hold-down powered from
-the 24 V side that U1 releases. (2) rows 1 and 3, U4: pull `DRV_EN` down, so firmware
-enables U4 only after setting its inputs. (3) row 5: USB must not reach the 24 V side;
-feed `+3V3` from USB and from U3 through an OR-ing diode pair instead.
-
-## Second pass: after the fixes
-
-| Condition | U2 EN (VMOT) | U4 outputs | +3V3 |
-|---|---|---|---|
-| 1. Main supply, idle | off | off | on |
-| 2. Logic rail absent | off | off | off |
-| 3. Reset or bootloader | off | off | on |
-| 4. Firmware hung | depends [e] | depends [e] | on |
-| 5. USB only | off [f] | off | on |
-| 7. Stop open | off | depends [g] | on |
-| 8. Host powered, board not | off | off | undefined [h] |
-
-- [e] A crash that resets U1 drops the release and the hold-down wins: off with no
-  firmware involved. A hang without a reset leaves the release on. It depends on
-  whether firmware configures the watchdog.
-- [f] No 24 V means no input to U2; EN does not matter.
-- [g] The stop loop sits in the release path, so `VMOT` drops in hardware; U4's inputs
-  may still be driven, into a dead rail.
-- [h] The host's UART TX drives U1's RX pin through its ESD diode into `+3V3`.
-
-Findings on the second pass: (1) row 4: safety on a hang rests on a firmware setting;
-make the release need a toggling signal. (2) row 8: a 1 kohm series resistor on J5's TX
-line keeps the injected current under U1's limit (`parts-researcher` for the figure).
-
-## Written to specs.py
+## Rows written, then checked
 
 ```python
-# Proposed table: checks/test_fault_states.py (from add-check) reads it.
-# U2 EN: below 0.4 V is off (U2 datasheet, EN threshold table).
+# Proposed tables: checks/test_fault_states.py and checks/test_power_paths.py
+# (from add-check) read them. U3 pin 3 is EN (net DRV_EN), pin 2 is IN (net
+# HEAT_PWM): below 0.8 V each reads low (U3 datasheet, input thresholds).
 FAULT_STATES = {
-    "logic_absent": {
-        "scenario": {"vin": 24.0, "logic": False},
-        "pins": [("U2", "EN", (0.0, 0.4)), ("U4", "EN", (0.0, 0.8))],
-    },
     "controller_in_reset": {
         "scenario": {"vin": 24.0, "u1_pins_floating": True},
-        "pins": [("U2", "EN", (0.0, 0.4)), ("U4", "EN", (0.0, 0.8))],
+        "pins": [("U3", "3", (0.0, 0.8)), ("U3", "2", (0.0, 0.8))],
+    },
+    "logic_absent": {
+        "scenario": {"vin": 24.0, "logic": False},
+        "pins": [("U3", "3", (0.0, 0.8)), ("U3", "2", (0.0, 0.8))],
     },
 }
+POWER_PATHS = [("VBUS", "+3V3", ("D1",)), ("VBUS", "VIN", ())]
 ```
 
-`scenario` in circuits.py gains the `logic` and `u1_pins_floating` keywords, and
-mutants.py gains "hold-down pull-down missing", which the new check must catch.
+`scenario` in circuits.py gained the `u1_pins_floating` and `logic` keywords: the first
+leaves U1's pins unfixed with no pull, the second also sets `+3V3` to 0 V and adds U3's
+internal pull-up on `DRV_EN` to `+12V`. On the first draft both conditions fail on both
+pins: `DRV_EN` sits at the pull-up and `HEAT_PWM` floats. `POWER_PATHS` passes.
+
+## State table, first draft
+
+| Condition | U3 output (heater) | U5 trip | +3V3 |
+|---|---|---|---|
+| 1. Main supply, idle | undefined [a] | works | on |
+| 2. Logic rail absent | undefined [a] | dead [b] | off |
+| 3. Reset or bootloader | undefined [a] | works | on |
+| 4. Firmware hung | depends [c] | works | on |
+| 5. USB only | off [d] | works | on |
+| 8. Probe powered, board not | off | dead | undefined [e] |
+
+- [a] `test_fault_states`: `DRV_EN` at the pull-up and `HEAT_PWM` floating; the heater
+  follows whatever the gate driver's input floats to.
+- [b] U5 runs from the rail whose loss it should cover: a judgement, not a solve.
+- [c] A hung CPU leaves the PWM peripheral running at its last duty; only U5 limits it.
+- [d] No 24 V, so no heater supply; `POWER_PATHS` confirms USB stops at `+3V3`.
+- [e] The probe drives U1's pins through their ESD diodes into `+3V3`.
+
+## Findings
+
+1. Rows 1 to 3, U3: the heater can turn on before U1 boots and with U1 dead, and a
+   heater left on is a fire. Fix: a pull-down on `DRV_EN` stronger than the internal
+   pull-up, and one on `HEAT_PWM`, so U1 must drive both to heat. Hardware holds it.
+2. Row 2, U5: power the comparator from `+12V`, so the trip outlives the logic rail.
+3. Row 4: the trip is the only limit on a hang; add a watchdog that U1 must service to
+   keep `DRV_EN` high.
+4. Row 8: a series resistor on each probe line keeps the injected current under U1's
+   limit (`parts-researcher` for the figure).
+
+After the fixes `test_fault_states` passes both conditions, and `mutants.py` gained
+"DRV_EN pull-down missing", which the check catches.

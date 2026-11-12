@@ -2,8 +2,9 @@
 
 Every board gets all ten rows. Add the board's own rows after them. For each condition:
 which rails are present, what the controller is doing, and where the trace usually goes
-wrong. Each row becomes a set of keyword arguments for `circuits.scenario` when the
-intent is written to `FAULT_STATES`.
+wrong. A row a DC solve can show becomes keyword arguments for `circuits.scenario` in
+`FAULT_STATES`; a row about which source reaches which rail becomes `POWER_PATHS`; a row
+that turns on timing or order stays judgement.
 
 ## 1. Main supply connected, everything else idle
 
@@ -45,9 +46,9 @@ intent is written to `FAULT_STATES`.
 
 - Rails: whatever USB can reach. The main supply absent.
 - Controller: running, often on a bench with the mechanism attached.
-- Trace: which rails USB can reach and through what. If USB reaches a load rail, the
-  actuators can move on bench power and the port can be overloaded. Check that firmware
-  cannot tell the difference and command motion anyway.
+- Trace: which rails USB can reach and through what: a `POWER_PATHS` row, decided by
+  its check. If USB reaches a load rail, the actuators can move on bench power and the
+  port can be overloaded. Judge whether firmware can tell the difference.
 
 ## 6. Brownout during a load spike
 

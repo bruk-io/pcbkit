@@ -10,12 +10,12 @@ with a transistor powered from the side that is always present, and have the con
 release the hold-down rather than assert the enable. Every failure of the controller or
 the logic rail then leaves the hold-down in place.
 
-## Stop loop in the enable chain
+## Safety input in the enable chain
 
-Route the controller's enable signal through the normally-closed stop loop before it
-reaches the release transistor. An open stop, a cut wire or an unplugged connector then
-removes the enable in hardware. Firmware may read the stop too, but safety does not
-depend on that read.
+Put the safety input (an interlock, a lid switch, an over-temperature trip, an
+emergency stop) in the hardware path of the enable, so that tripping it, a cut wire or
+an unplugged connector removes the enable with no firmware involved. Firmware may read
+the input too, but safety does not depend on that read.
 
 ## Output-enable held inactive by default
 
