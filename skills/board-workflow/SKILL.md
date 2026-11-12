@@ -37,6 +37,17 @@ result.
 
 `pcbkit check -k EXPR` runs only the checks it matches and replaces out/checks/results.json
 with them, so run `pcbkit check` with no `-k` before an order.
+
+The review skills run at gates in this loop. Each reads the check results first and
+ends by writing what it settled into specs.py, so the next run is a check:
+
+- After `sch` is ERC-clean: `walk-fault-states` (any board that drives a load) and
+  `review-derating`.
+- After `build`, before routing is final: `review-current-paths` and `review-misplug`.
+- After `route`, before `promote`: `review-board`.
+- After `finalize` and a full `check`, before an order: `plan-bringup` and
+  `review-sourcing`, then the user's `/pcbkit:order-pcbway`.
+- At every gate, and whenever the spec or the design changes: `review-spec-drift`.
 `pcbkit report` writes the validation report from the last `check` run. `pcbkit compare
 OLD NEW` shows what a re-route moved. `pcbkit shots` writes pictures of the board to
 out/shots/ (see review-board). `pcbkit quote` prints the fab order numbers.

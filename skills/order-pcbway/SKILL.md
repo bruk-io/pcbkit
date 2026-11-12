@@ -12,6 +12,8 @@ arguments: [make, assemble]
 # Ordering from PCBWay
 
 Boards to make: "$make". Boards to assemble: "$assemble". If either is empty, ask.
+Whether the parts can be bought is `review-sourcing`'s question, not this skill's: if it
+has not been run on these files, say so before the browser.
 Assembling fewer boards than you make is normal and allowed.
 
 ## Before the browser

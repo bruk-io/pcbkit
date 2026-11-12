@@ -39,5 +39,7 @@ user named a focus (region names, or a concern), it is here: $ARGUMENTS
    `${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/references/kicad10-quirks.md` says by how
    much), what you saw, which picture shows it, why it matters, and which file would
    change it (layout.py for a position, routing.py for a hand route or keep-out). If you
-   find nothing, say what you looked at. Do not paste image data or report listings into
+   find nothing, say what you looked at. For a coupling, loop or current path no check
+   measures, say that `review-current-paths` should write it into specs.py; for a
+   finding a check could decide from the board, name `add-check`. Do not paste image data or report listings into
    the reply.
