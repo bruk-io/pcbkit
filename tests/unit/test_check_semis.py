@@ -151,7 +151,7 @@ def test_ics_resistors_and_jumpers_are_not_judged() -> None:
         "JP1",
         "Open",
         "Jumper:SolderJumper_2_Open",
-        {"1": ("GPIO", "A"), "2": ("GATE", "B")},
+        {"1": ("GPIO", "A"), "2": ("JP_OUT", "B")},
     )
     report = judge(toy)
     assert report.problems == []
@@ -205,7 +205,8 @@ def test_a_diode_dc_does_not_model_fails_until_the_scenario_models_it() -> None:
     assert report.problems == [
         "D4 (Device:D) is not modelled on pad 2 (A) on GND, pad 1 (K) on +5V in "
         "STRESS_SCENARIOS[0]: dc.build does not model this symbol, so the voltage "
-        "across it is not the board's; add it in circuits.scenario with ref 'D4' "
+        "across it is not the board's; build with dc.build(nl, extended=True), which "
+        "models more symbols, or add it in circuits.scenario with ref 'D4' "
         "(circuit.D(anode net, cathode net, vf, ref='D4') for a diode, a "
         "circuit.fets entry for a FET)"
     ]
@@ -264,7 +265,7 @@ def test_a_bipolar_transistor_fails_with_the_way_to_write_it() -> None:
         "Q2",
         "BC847",
         "Device:Q_NPN_BCE",
-        {"1": ("GATE", "B"), "2": ("LOAD", "C"), "3": ("GND", "E")},
+        {"1": ("B2", "B"), "2": ("C2", "C"), "3": ("GND", "E")},
         MPN="BJT-1",
     )
     report = judge(toy, {**TABLE, "BJT-1": {"vds": 45.0, "vgs": 6.0}})
@@ -319,11 +320,11 @@ def test_a_dual_fet_with_one_element_in_its_row_cannot_be_judged() -> None:
         "MyLib:DualFET",
         {
             "1": ("GND", "S1"),
-            "2": ("GATE", "G1"),
-            "3": ("LOAD", "D1"),
+            "2": ("G1N", "G1"),
+            "3": ("D1N", "D1"),
             "4": ("GND", "S2"),
-            "5": ("GPIO", "G2"),
-            "6": ("+5V", "D2"),
+            "5": ("G2N", "G2"),
+            "6": ("D2N", "D2"),
         },
         MPN="DUAL-1",
     )
@@ -334,8 +335,7 @@ def test_a_dual_fet_with_one_element_in_its_row_cannot_be_judged() -> None:
     report = judge(toy, read)
     assert report.problems == [
         "Q3 (MyLib:DualFET) cannot be judged: its row's pins leave out pads 5, 6, on "
-        "other nets: a row describes one element, so a part with a second diode or "
-        "FET cannot be judged"
+        'other nets: list every diode or FET of the part in its row\'s "elements"'
     ]
 
 
@@ -346,7 +346,7 @@ def test_a_dual_fet_with_no_row_pins_is_found_by_its_names() -> None:
         "Q3",
         "DUAL",
         "MyLib:DualFET",
-        {"1": ("GND", "S1"), "2": ("GATE", "G1"), "3": ("LOAD", "D1")},
+        {"1": ("GND", "S1"), "2": ("G1N", "G1"), "3": ("D1N", "D1")},
     )
     report = judge(toy)
     assert (
@@ -444,23 +444,6 @@ def test_named_like_a_semiconductor(names: dict[str, str], expected: bool) -> No
     assert semis.named_like_a_semiconductor(netlist(toy), "X1") is expected
 
 
-def test_a_diode_is_held_to_its_rating_either_way() -> None:
-    """A bidirectional part written with its pins one way round sees -5 V: 5 V."""
-    toy = board()
-    toy.add("D7", "TVS", "MyLib:TVS", {"1": ("+5V", "~"), "2": ("GND", "~")}, MPN="T")
-
-    def model(c: Circuit, _index: int) -> None:
-        c.D("GND", "+5V", 0.7, ref="D7")
-
-    row = {"vrrm": 5.0, "pins": {"a": "1", "k": "2"}}
-    report = judge(toy, {**TABLE, "T": row}, model)
-    assert report.parts["D7"]["vr"]["v"] == 5.0
-    assert report.problems == [
-        "D7 |V(K) - V(A)| reaches 5.00 V in STRESS_SCENARIOS[0], over 0.8 of its 5 V "
-        "rating (4.00 V)"
-    ]
-
-
 def test_no_stress_scenario_at_all_fails_rather_than_judging_nothing() -> None:
     """An empty ``STRESS_SCENARIOS`` with a FET on the board is no pass."""
     report = semis.judge(netlist(board()), TABLE, [])
@@ -476,3 +459,419 @@ def test_no_stress_scenario_and_no_semiconductor_passes() -> None:
     toy = Toy()
     check_toy.resistor(toy, "R1", "1k", "A", "B")
     assert semis.judge(netlist(toy), {}, []).problems == []
+
+
+# --- review findings ---------------------------------------------------------------
+
+
+def external_rail() -> Toy:
+    """F-B1: +24V_EXT on connector J5, sensed by a divider, switched by a P-FET."""
+    toy = board()
+    toy.add(
+        "J5",
+        "CONN",
+        "Connector:Conn_01x03",
+        {"1": ("+24V_EXT", "Pin_1"), "2": ("GND", "Pin_2"), "3": ("OUT", "Pin_3")},
+    )
+    check_toy.resistor(toy, "R20", "100k", "+24V_EXT", "SENSE24")
+    check_toy.resistor(toy, "R21", "10k", "SENSE24", "GND")
+    toy.add(
+        "Q5",
+        "AO3401A",
+        "Transistor_FET:AO3401A",
+        {"1": ("Q5G", "G"), "2": ("+24V_EXT", "S"), "3": ("OUT", "D")},
+        MPN="AO3401A",
+    )
+    check_toy.resistor(toy, "R22", "100k", "+24V_EXT", "Q5G")
+    check_toy.resistor(toy, "R23", "10k", "OUT", "GND")
+    return toy
+
+
+def test_a_source_the_model_leaves_out_on_a_judged_parts_nets_fails() -> None:
+    """F-B1: the divider makes +24V_EXT "driven" at 0 V; J5 is named instead."""
+    table = {**TABLE, "AO3401A": {"vds": 30.0, "vgs": 12.0}}
+    report = judge(external_rail(), table)
+    assert report.problems == [
+        "Q5 cannot be judged in STRESS_SCENARIOS[0]: the DC model leaves out J5 pad 1 "
+        "(Connector:Conn_01x03) on +24V_EXT, J5 pad 3 (Connector:Conn_01x03) on OUT, "
+        "on the nets that set its pads' levels; fix those nets in the scenario, or "
+        "model what drives them with its reference"
+    ]
+
+
+def test_fixing_the_external_rail_judges_the_fet_and_fails_its_gate() -> None:
+    """With +24V_EXT fixed at 24 V the gate sees 24 V against 0.8 of 12 V."""
+    table = {**TABLE, "AO3401A": {"vds": 30.0, "vgs": 12.0}}
+
+    def rail(c: Circuit, _index: int) -> None:
+        c.fix("+24V_EXT", 24.0)
+        c.fix("OUT", 0.0)
+
+    report = judge(external_rail(), table, rail)
+    assert report.problems == []  # the gate is pulled to its source: Vgs 0
+    assert report.parts["Q5"]["vds"]["v"] == 24.0
+
+
+def test_row_pins_that_disagree_with_readable_names_fail() -> None:
+    """F-M1: a 2N7002 named G, S, D whose row swaps g and d."""
+    row = {"vds": 30.0, "vgs": 12.0, "pins": {"g": "3", "d": "1", "s": "2"}}
+    report = judge(board(), {"FET-1": row})
+    assert report.problems == [
+        "Q1 (Transistor_FET:2N7002) cannot be judged: its row's pins disagree with its "
+        "pin names: pad 3 is named D but the row says g; pad 1 is named G but the row "
+        "says d"
+    ]
+
+
+def test_row_pins_that_agree_with_readable_names_pass() -> None:
+    """The same row, with the pads the names give."""
+    row = {"vds": 60.0, "vgs": 20.0, "pins": {"g": "1", "d": "3", "s": "2"}}
+    assert judge(board(), {"FET-1": row}).problems == []
+
+
+def test_each_scenario_is_judged_as_it_is_solved() -> None:
+    """F-m1: a project whose scenarios share one Circuit object."""
+    toy = Toy()
+    check_toy.resistor(toy, "R1", "10k", "IN", "DRN")
+    toy.add(
+        "Q1",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("G", "G"), "2": ("GND", "S"), "3": ("DRN", "D")},
+        MPN="FET-1",
+    )
+    check_toy.resistor(toy, "R2", "10k", "G", "GND")
+    nl = netlist(toy)
+    shared = build(nl)
+
+    def attempts_shared() -> Any:
+        shared.fix("GND", 0).fix("G", 0)  # scenario 0: IN undriven, DRN floats
+        yield 0, shared.solve(), None
+        shared.fix("IN", 40)  # scenario 1 changes the same object
+        yield 1, shared.solve(), None
+
+    report = semis.judge(nl, {"FET-1": {"vds": 60, "vgs": 20}}, attempts_shared())
+    assert report.problems == [
+        "Q1 cannot be judged in STRESS_SCENARIOS[0]: pad 3 (D) on DRN is floating "
+        "there (its 0 V is the solver's leak); fix the net that drives it in that "
+        "scenario, or give it a pull"
+    ]
+    assert report.parts["Q1"]["vds"]["v"] == 40.0
+
+
+def test_a_diodes_forward_drop_is_not_held_to_its_reverse_rating() -> None:
+    """F-m2: a white LED at 20 mA drops about 3.4 V; its 5 V VR row is not touched."""
+    toy = board()
+    toy.add("D8", "White", "Device:LED", {"1": ("GND", "K"), "2": ("LA", "A")}, MPN="W")
+    check_toy.resistor(toy, "R8", "50", "+5V", "LA")
+    report = judge(toy, {**TABLE, "W": {"vrrm": 5.0}})
+    assert report.problems == []
+    assert report.parts["D8"]["vr"]["v"] < 0
+
+
+# --- elements, clamps, SEMI_NOT_JUDGED ----------------------------------------------
+
+
+def dual_fet(toy: Toy) -> None:
+    """Add a dual N-FET whose elements are modelled by the scenario."""
+    toy.add(
+        "Q3",
+        "DUAL",
+        "MyLib:DualFET",
+        {
+            "1": ("GND", "S1"),
+            "2": ("GATE", "G1"),
+            "3": ("LOAD", "D1"),
+            "4": ("GND", "S2"),
+            "5": ("GPIO", "G2"),
+            "6": ("+5V", "D2"),
+        },
+        MPN="DUAL-1",
+    )
+
+
+def model_dual(c: Circuit, _index: int) -> None:
+    """Model both FETs of Q3 as the scenario would."""
+    c.fets.append(
+        {"kind": "n", "g": "GATE", "d": "LOAD", "s": "GND", "vth": 2, "ron": 1,
+         "ref": "Q3.a"}
+    )  # fmt: skip
+    c.fets.append(
+        {"kind": "n", "g": "GPIO", "d": "+5V", "s": "GND", "vth": 2, "ron": 1,
+         "ref": "Q3.b"}
+    )  # fmt: skip
+
+
+DUAL_ROW = {
+    "vds": 30.0,
+    "vgs": 12.0,
+    "elements": [
+        {"pins": {"g": "2", "d": "3", "s": "1"}},
+        {"pins": {"g": "5", "d": "6", "s": "4"}},
+    ],
+}
+
+
+def read(table: dict[str, Any]) -> Any:
+    """Return the table as ``tables.read`` gives it to the check."""
+    return tables.read(type("S", (), {"SEMI_VRATED": table}), "SEMI_VRATED")
+
+
+def test_a_dual_part_is_judged_element_by_element() -> None:
+    """Both FETs of Q3 against the shared rating; recorded per element."""
+    toy = board()
+    dual_fet(toy)
+    report = judge(toy, read({**TABLE, "DUAL-1": DUAL_ROW}), model_dual)
+    assert report.problems == []
+    first, second = report.parts["Q3"]["elements"]
+    assert first["vds"]["v"] == 12.0
+    assert second["vds"]["v"] == 5.0
+
+
+def test_one_element_over_its_rating_fails_naming_it() -> None:
+    """A 10 V rating: element 1 blocks 12 V, element 2 only 5 V."""
+    toy = board()
+    dual_fet(toy)
+    row = {**DUAL_ROW, "vds": 10.0}
+    report = judge(toy, read({**TABLE, "DUAL-1": row}), model_dual)
+    assert report.problems == [
+        "Q3 element 1 |Vds| reaches 12.00 V in STRESS_SCENARIOS[1], over 0.8 of its "
+        "10 V rating (8.00 V)"
+    ]
+
+
+def test_elements_that_leave_out_a_pad_on_another_net_fail() -> None:
+    """The pads left out are judged against the union of the elements' pads."""
+    toy = board()
+    dual_fet(toy)
+    row = {**DUAL_ROW, "elements": DUAL_ROW["elements"][:1]}
+    report = judge(toy, read({**TABLE, "DUAL-1": row}), model_dual)
+    assert report.problems[0].startswith(
+        "Q3 (MyLib:DualFET) cannot be judged: its row's pins leave out pads 5, 6"
+    )
+
+
+def test_pins_and_elements_together_fail() -> None:
+    """One or the other."""
+    toy = board()
+    dual_fet(toy)
+    row = {**DUAL_ROW, "pins": {"g": "2", "d": "3", "s": "1"}}
+    report = judge(toy, read({**TABLE, "DUAL-1": row}), model_dual)
+    assert report.problems[0] == (
+        'Q3 (MyLib:DualFET) cannot be judged: its row gives both "pins" and '
+        '"elements": give one'
+    )
+
+
+def test_a_dual_diode_with_a_common_cathode_is_judged_as_two_elements() -> None:
+    """A BAT54C-style part: two anodes, one cathode."""
+    toy = board()
+    toy.add(
+        "D5",
+        "BAT54C",
+        "Diode:BAT54C",
+        {"1": ("GND", "~"), "2": ("+5V", "~"), "3": ("+12V", "~")},
+        MPN="BAT54C",
+    )
+    row = {
+        "vrrm": 30.0,
+        "elements": [{"pins": {"a": "1", "k": "3"}}, {"pins": {"a": "2", "k": "3"}}],
+    }
+
+    def model(c: Circuit, _index: int) -> None:
+        c.D("GND", "+12V", 0.4, ref="D5.a")
+        c.D("+5V", "+12V", 0.4, ref="D5.b")
+
+    report = judge(toy, read({**TABLE, "BAT54C": row}), model)
+    assert report.problems == []
+    assert [e["vr"]["v"] for e in report.parts["D5"]["elements"]] == [12.0, 7.0]
+
+
+def tvs(toy: Toy) -> None:
+    """Add a TVS from +12V (K) to GND (A), modelled forward only."""
+    toy.add(
+        "D9",
+        "SMBJ12A",
+        "Diode:SMBJ",
+        {"1": ("+12V", "K"), "2": ("GND", "A")},
+        MPN="T12",
+    )
+
+
+def model_tvs(c: Circuit, _index: int) -> None:
+    """Model the TVS conducting only forward."""
+    c.D("GND", "+12V", 0.7, ref="D9")
+
+
+def test_a_tvs_at_its_standoff_passes_with_a_derate_of_one() -> None:
+    """12 V on a 12 V standoff: a TVS is specified there."""
+    toy = board()
+    tvs(toy)
+    report = judge(toy, read({**TABLE, "T12": {"vrwm": 12.0}}), model_tvs)
+    assert report.problems == []
+    assert report.parts["D9"]["kind"] == "tvs"
+    assert report.parts["D9"]["target"] == 1.0
+    assert report.parts["D9"]["vr"] == {
+        "v": 12.0,
+        "rated": 12.0,
+        "limit_v": 12.0,
+        "scenario": 0,
+    }
+
+
+def test_a_tvs_over_its_standoff_fails() -> None:
+    """12 V on a 10 V standoff."""
+    toy = board()
+    tvs(toy)
+    report = judge(toy, read({**TABLE, "T12": {"vrwm": 10.0}}), model_tvs)
+    assert report.problems == [
+        "D9 V(K) - V(A) reaches 12.00 V in STRESS_SCENARIOS[0], over 1 of its 10 V "
+        "rating (10.00 V)"
+    ]
+
+
+def test_a_tvs_that_is_not_modelled_fails_by_name() -> None:
+    """A clamp kind still needs its element in the scenario."""
+    toy = board()
+    tvs(toy)
+    report = judge(toy, read({**TABLE, "T12": {"vrwm": 12.0}}))
+    assert report.problems[0].startswith("D9 (Diode:SMBJ) is not modelled")
+
+
+def zener(toy: Toy) -> None:
+    """Add a gate Zener from +12V (K) to ZG (A), ZG pulled to GND by 100k."""
+    toy.add(
+        "D10", "BZT", "Device:D_Zener", {"1": ("+12V", "K"), "2": ("ZG", "A")}, MPN="Z"
+    )
+    check_toy.resistor(toy, "R30", "100k", "ZG", "GND")
+
+
+def test_a_zener_clamp_the_model_shows_over_its_vz_fails_and_says_why() -> None:
+    """No breakdown in the model: 12 V across a 5.1 V Zener is not the board."""
+    toy = board()
+    zener(toy)
+
+    def model(c: Circuit, _index: int) -> None:
+        c.D("ZG", "+12V", 0.7, ref="D10")
+
+    report = judge(toy, read({**TABLE, "Z": {"vz": 5.1}}), model)
+    assert report.problems == [
+        "D10 is a clamp (vz 5.1 V) but the model shows 12.00 V across it in "
+        "STRESS_SCENARIOS[0]: the DC model has no breakdown, so this solve is not the "
+        "board's; fix the clamped net at its clamped voltage in that scenario, or "
+        "model the breakdown as a diode from cathode to anode with vf 5.1 V"
+    ]
+    assert report.parts["D10"]["kind"] == "clamp"
+
+
+def test_a_zener_clamp_whose_breakdown_is_modelled_passes_and_is_recorded() -> None:
+    """With the breakdown as a reverse diode at vz, the model shows about vz."""
+    toy = board()
+    zener(toy)
+
+    def model(c: Circuit, _index: int) -> None:
+        c.D("ZG", "+12V", 0.7, ref="D10")
+        c.D("+12V", "ZG", 5.1, ref="D10.z")
+
+    report = judge(toy, read({**TABLE, "Z": {"vz": 5.1}}), model)
+    assert report.problems == []
+    entry = report.parts["D10"]
+    assert entry["kind"] == "clamp"
+    assert entry["vr"]["v"] == pytest.approx(5.1, abs=0.01)
+    assert entry["vr"]["vz"] == 5.1
+
+
+def test_semi_not_judged_skips_a_declared_part_and_records_its_reason() -> None:
+    """A bridge rectifier the check cannot read: declared, skipped, recorded."""
+    toy = board()
+    toy.add(
+        "D11",
+        "BRIDGE",
+        "Diode_Bridge:Bridge",
+        {"1": ("AC1", "~"), "2": ("+12V", "+"), "3": ("AC2", "~"), "4": ("GND", "-")},
+    )
+    assert judge(toy).problems[0].startswith("D11 (Diode_Bridge:Bridge) cannot be")
+    report = semis.judge(
+        netlist(toy), TABLE, attempts(toy), {"D11": "a bridge: judged by hand"}
+    )
+    assert report.problems == []
+    assert report.declared == {"D11": "a bridge: judged by hand"}
+    assert "D11" not in report.parts
+
+
+def test_semi_not_judged_naming_a_part_not_in_the_design_fails() -> None:
+    """A stale row fails by name."""
+    report = semis.judge(netlist(board()), TABLE, attempts(board()), {"D99": "x"})
+    assert report.problems == ["SEMI_NOT_JUDGED names D99, which is not in the design"]
+
+
+def test_a_declared_part_with_a_rating_row_is_still_judged() -> None:
+    """Q1 has a row, so declaring it changes nothing: it is judged and fails."""
+    report = semis.judge(
+        netlist(board()),
+        {"FET-1": {"vds": 5.0, "vgs": 20.0}},
+        attempts(board()),
+        {"Q1": "said to be out of reach"},
+    )
+    assert report.problems[0].startswith("Q1 |Vds| reaches 12.00 V")
+    assert report.declared == {}
+
+
+def test_a_fet_with_a_floating_gate_on_a_judged_parts_nets_stops_the_verdict() -> None:
+    """D2's cathode net is pulled up and pulled down by Q7, whose gate floats."""
+    toy = board()
+    check_toy.resistor(toy, "R9", "1k", "+12V", "NODE")
+    toy.add(
+        "D2",
+        "SS14",
+        "Device:D_Schottky",
+        {"1": ("NODE", "K"), "2": ("GND", "A")},
+        MPN="SCH-1",
+    )
+    toy.add(
+        "Q7",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("QG", "G"), "2": ("GND", "S"), "3": ("NODE", "D")},
+        MPN="FET-1",
+    )
+    report = judge(toy, {**TABLE, "SCH-1": {"vrrm": 40.0}})
+    assert (
+        "D2 cannot be judged in STRESS_SCENARIOS[0]: the gate of Q7 (QG) is floating, "
+        "so whether Q7 conducts is the solver's guess (the leak holds the gate at 0 "
+        "V); pull the gate to a net the scenario fixes, or fix it in the scenario"
+    ) in report.problems
+
+
+def test_a_part_the_scenario_models_only_from_a_later_row_is_named() -> None:
+    """X1 has a row, so it is judged from scenario 0, where nothing models it."""
+    toy = board()
+    toy.add("X1", "?", "MyLib:Thing", {"1": ("+5V", "P"), "2": ("GND", "N")}, MPN="X")
+
+    def late(c: Circuit, index: int) -> None:
+        if index == 1:
+            c.D("GND", "+5V", 0.7, ref="X1")
+
+    row = {"vrrm": 30.0, "pins": {"a": "2", "k": "1"}}
+    report = judge(toy, read({**TABLE, "X": row}), late)
+    assert len(report.problems) == 1
+    assert report.problems[0].startswith(
+        "X1 (MyLib:Thing) is not modelled on pad 2 (A) on GND, pad 1 (K) on +5V in "
+        "STRESS_SCENARIOS[0]"
+    )
+
+
+def test_a_part_found_only_through_a_later_scenarios_element_cannot_be_read() -> None:
+    """Without a row its pins (P, N) do not read as a part: it fails by name."""
+    toy = board()
+    toy.add("X1", "?", "MyLib:Thing", {"1": ("+5V", "P"), "2": ("GND", "N")})
+
+    def late(c: Circuit, index: int) -> None:
+        if index == 1:
+            c.D("GND", "+5V", 0.7, ref="X1")
+
+    report = judge(toy, extra=late)
+    assert report.problems == [
+        "X1 (MyLib:Thing) cannot be judged: its pin names (P, N) do not read as one "
+        'FET (G, D, S) or one diode (A, K); give its SEMI_VRATED row "pins"'
+    ]

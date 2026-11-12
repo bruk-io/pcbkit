@@ -145,12 +145,77 @@ def test_a_gate_left_floating_in_a_scenario_fails(tmp_path: Path) -> None:
     )
 
 
-def test_a_gate_pull_down_keeps_a_free_gpio_judgeable(tmp_path: Path) -> None:
-    """With R9 the free GPIO is held low through R8, so the scenario can be judged."""
+def test_a_free_gpio_with_the_controllers_pin_on_it_cannot_be_judged(
+    tmp_path: Path,
+) -> None:
+    """R9 holds the free GPIO low, but the MCU pin on it is not modelled: named."""
     specs = SPECS + TABLE.replace(
         'dict(vin=5.5, drive={"LED_DRV": 0.0})', "dict(vin=5.5)"
     )
-    assert go(tmp_path, "pulled", board(), specs).outcome(CHECK) == "passed"
+    entry = go(tmp_path, "pulled", board(), specs).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert said(entry).startswith(
+        "D1 cannot be judged in STRESS_SCENARIOS[1]: the DC model leaves out A1 pad 1 "
+        "(Module:MCU) on LED_DRV, on the nets that set its pads' levels"
+    )
+
+
+def test_an_external_rail_the_stress_rows_do_not_fix_fails(tmp_path: Path) -> None:
+    """F-B1: the reviewer's +24V_EXT on J5, divided to ground.
+
+    Fixed in the scenario, with the load on J5's output modelled by J5's reference, Q5
+    is judged and its gate fails at 24 V against 0.8 of 12 V.
+    """
+    toy = board()
+    toy.add(
+        "J5",
+        "CONN",
+        "Connector:Conn_01x03",
+        {"1": ("+24V_EXT", "Pin_1"), "2": ("GND", "Pin_2"), "3": ("OUT", "Pin_3")},
+    )
+    check_toy.resistor(toy, "R20", "100k", "+24V_EXT", "SENSE24")
+    check_toy.resistor(toy, "R21", "10k", "SENSE24", "GND")
+    toy.add(
+        "Q5",
+        "AO3401A",
+        "Transistor_FET:AO3401A",
+        {"1": ("Q5G", "G"), "2": ("+24V_EXT", "S"), "3": ("OUT", "D")},
+        MPN="AO3401A",
+    )
+    check_toy.resistor(toy, "R22", "100k", "+24V_EXT", "Q5G")
+    toy.add(
+        "Q6",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("LED_DRV", "G"), "2": ("GND", "S"), "3": ("Q5G", "D")},
+        MPN="FET-1",
+    )
+    check_toy.resistor(toy, "R23", "10k", "OUT", "GND")
+    table = TABLE.replace(
+        '"LED-1": {"vrrm": 5},',
+        '"LED-1": {"vrrm": 5},\n    "AO3401A": {"vds": 30, "vgs": 12},',
+    )
+    entry = go(tmp_path, "rail", toy, SPECS + table).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert (
+        "Q5 cannot be judged in STRESS_SCENARIOS[0]: the DC model leaves out J5 "
+        in (said(entry))
+    )
+    fixed = check_toy.CIRCUITS.replace(
+        "    return circuit\n",
+        "    circuit.fix('+24V_EXT', 24.0)\n"
+        "    circuit.R('OUT', 'GND', 1000.0, 'J5.load')\n"
+        "    return circuit\n",
+        1,
+    )
+    root = check_toy.write_project(
+        tmp_path / "rail-fixed", toy, ["power"], SPECS + table, fixed
+    )
+    entry = run(root, "test_semis").entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert "Q5 |Vgs| reaches 24.00 V in STRESS_SCENARIOS[0], over 0.8 of its 12 V" in (
+        said(entry)
+    )
 
 
 def test_a_missing_table_fails_by_name(tmp_path: Path) -> None:
@@ -158,3 +223,25 @@ def test_a_missing_table_fails_by_name(tmp_path: Path) -> None:
     entry = go(tmp_path, "missing", board(), SPECS).entry(CHECK)
     assert entry["outcome"] == "failed"
     assert "specs.SEMI_VRATED is not defined" in entry["message"]
+
+
+def test_a_stress_keyword_the_scenario_would_ignore_fails_by_name(
+    tmp_path: Path,
+) -> None:
+    """``hot`` would land in **kw: the operating point is not what the row says."""
+    circuits = check_toy.CIRCUITS.replace(
+        "def scenario(nl, vin=5.0, drive=None):",
+        "def scenario(nl, vin=5.0, drive=None, **kw):",
+    )
+    specs = SPECS + TABLE.replace(
+        'dict(vin=5.5, drive={"LED_DRV": 0.0})',
+        'dict(vin=5.5, drive={"LED_DRV": 0.0}, hot=True)',
+    )
+    root = check_toy.write_project(tmp_path / "kw", board(), ["power"], specs, circuits)
+    entry = run(root, "test_semis").entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert said(entry) == (
+        "STRESS_SCENARIOS[1]: circuits.scenario has no parameter named 'hot' (it "
+        "would land in **kwargs, or nowhere, so the operating point solved may not be "
+        "the one named): name it in scenario's signature"
+    )

@@ -455,7 +455,14 @@ GOOD_PROPOSED = {
     "SEMI_VRATED": {
         "Q-1": {"vds": 20, "vgs": 8, "derate": 0.7, "pins": {"g": 1, "d": 3, "s": 2}},
         "D-1": {"vrrm": 40},
+        "D-2": {
+            "vrrm": 30,
+            "elements": [{"pins": {"a": 1, "k": 3}}, {"pins": {"a": 2, "k": 3}}],
+        },
+        "TVS-1": {"vrwm": 5.0},
+        "Z-1": {"vz": 12.0, "pins": {"a": 2, "k": 1}},
     },
+    "SEMI_NOT_JUDGED": {"D9": "a bridge rectifier, judged by hand"},
     "I2C_EXPECTED": {"main": [0x3C, 0x40]},
     "ENABLE_LINKS": {"EN": [("U3", 3)]},
     "SUPPLY_NETS": ["GND", "+3V3"],
@@ -495,6 +502,7 @@ BAD_PROPOSED = {
     "MATING": {"P1": {"pins": [], "fits": [], "keyed": "no"}},
     "NET_LIMITS": {"+3V3": "3.6"},
     "SEMI_VRATED": {"Q-1": {"vds": 20}},
+    "SEMI_NOT_JUDGED": {"D9": 3},
     "I2C_EXPECTED": {"main": [0x80]},
     "ENABLE_LINKS": {"EN": [("U3",)]},
     "SUPPLY_NETS": ["GND", 3],
@@ -1534,3 +1542,13 @@ def test_a_table_error_in_a_check_body_fails_that_check_with_the_paths_only(
     assert "Traceback" not in bad["message"]
     assert "TableError" not in bad["message"]
     assert entries["test_other"]["outcome"] == "passed"
+
+
+def test_semi_vrated_takes_elements_and_the_clamp_kinds() -> None:
+    """A row may list elements; a TVS row may derate up to 1, a clamp row not at all."""
+    shape = tables.registry()["SEMI_VRATED"]
+    assert errors(shape, {"T": {"vrwm": 5.0, "derate": 1.0}}, "S") == []
+    assert errors(shape, {"Z": {"vz": 5.1, "derate": 0.5}}, "S") == [
+        'specs.S["Z"]: unknown key "derate" (the keys are "vz", "pins", "elements")'
+    ]
+    assert errors(shape, {"D": {"vrrm": 30, "elements": [{"pins": {"g": 1}}]}}, "S")

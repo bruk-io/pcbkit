@@ -971,7 +971,8 @@ and on `circuits.scenario` for the fault states, at the `sch` gate:
 | `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `DNI`, `NF`, `NP`, `NC`, `NM`, `NL`, `NOPOP`, in any case: the footprint is there to fit at bring-up), or a two-pad jumper: a part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one), or any two-pad part with reference letters `JP`, such as a header with a shunt. It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
 | `SUPPLY_NETS` | `[supply or ground net]` | The supply and ground nets, by name as the netlist writes them (no leading slash). The enable-link walk never crosses one, nor the ground net (`GROUND_NET`, or `"GND"` when that is not defined and the design has a `GND` net), so a pull-up or pull-down through a resistor is fine. pcbkit does not guess supplies from net or pin names: a supply you leave out is walked like a signal. List only real rails: a signal listed here hides every path through it, so a real bridge between two enables can pass. Each net must be in the design. Needed whenever `power` is on (`[]` says none). |
 | `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | The level each listed pin must hold in a fault condition ("controller absent", "input supply off"). `scenario` is the keyword arguments of `circuits.scenario` that make the condition: what the scenario fixes is driven, what it leaves free is not, so "controller absent, so +5V is off" is written into the scenario by hand (`circuit.fix("+5V", 0)`). The window is the datasheet's (an enable's VIL for "off": `(0, 0.4)`). Pads are pad numbers as the netlist writes them, never pin names. `{}` says there is no fault state to check. |
-| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | The voltage ratings of the FETs and diodes, by MPN: a FET row gives VDS and VGS, a diode row VRRM (for a TVS or zener, the reverse voltage it may hold without conducting). `derate` is the share of the rating allowed, 0.8 when left out and never more, so the row can only tighten. `pins` gives the pads, as the netlist numbers them, when the symbol's pin names do not read as one FET (G, D, S) or one diode (A, K); a bipolar transistor is written as a FET row, `vds` its VCEO, `vgs` its VEBO, `pins` `{"g": base, "d": collector, "s": emitter}`. A row describes one element, so a part with two diodes or two FETs in it cannot be judged. `{}` says there is nothing to rate. It also reads `STRESS_SCENARIOS` (as in `circuit`). |
+| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional), "elements": [{"pins": {"g": pad, "d": pad, "s": pad}}] (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)} or {"vrwm": V, "derate": fraction in (0, 1] (optional), "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)} or {"vz": V, "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)}}` | The voltage ratings of the FETs, diodes and clamps, by MPN, in four kinds. A FET row gives VDS and VGS; a diode row VRRM; a TVS row `vrwm`, its standoff voltage, judged at a default `derate` of 1.0 because a TVS is specified there; a Zener used as a clamp a `vz` row, recorded as a clamp and not held to a rating (see the check). `derate` is the share of the rating allowed: 0.8 when left out for a FET or diode and never more, 1.0 for a TVS; a clamp row has none. `pins` gives the pads, as the netlist numbers them, when the symbol's pin names do not read as one FET (G, D, S) or one diode (A, K); `elements` lists the pads of each diode or FET in a part that holds several (a dual diode, a dual FET), each judged on its own against the row's rating; a row gives `pins` or `elements`, not both. A bipolar transistor is written as a FET row, `vds` its VCEO, `vgs` its VEBO, `pins` `{"g": base, "d": collector, "s": emitter}`. A row is the designer's statement: a rectifier written as a TVS or a clamp is judged as one, and `numbers` records the kind. `{}` says there is nothing to rate. It also reads `STRESS_SCENARIOS` (as in `circuit`). |
+| `SEMI_NOT_JUDGED` | `{ref: reason}` | Optional: parts declared out of the semiconductor check's reach (a bridge rectifier, a diode array, an RGB LED), each with the reason, which `numbers` records under `declared not judged`. A reference that is not in the design fails by name. A declared part whose MPN has a `SEMI_VRATED` row is judged anyway. Missing or `{}` means none. |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
 looks at the whole table) fails naming each regulator whose enable pad is wired straight
@@ -1065,65 +1066,85 @@ It records `enable links`,
 keyed `"U3 pad 4"`).
 
 `test_fault_state_pins[condition]` (one per key of `FAULT_STATES`) builds
-`circuits.scenario(nl, **scenario)`, solves it, and fails when the condition lists no
-pins (it would judge nothing), and for each listed pin that:
+`circuits.scenario(nl, **scenario)`, solves it, and fails when a keyword of the
+condition's scenario is not a named parameter of `circuits.scenario` (one that would land
+only in `**kwargs` may be ignored, so the condition solved may not be the one named: name
+it in the signature), when the condition lists no pins (it would judge nothing), and for
+each listed pin that:
 
 - is not on a net (a reference that is not in the design, or a pad the netlist does not
   list: the message gives the pads it has);
 - is *floating*: no resistor, diode or FET the circuit holds joins its net to a net the
-  scenario fixes (a diode or FET counts only where it conducts in the solution). The DC
-  solver ties every net to ground through 1 nS, so a floating net reads 0.0 V, inside an
-  "off" window such as `(0, 0.4)`; the check never trusts that reading, and a floating
-  pin fails whatever its window says. A pin with nothing on its net but parts the model
-  leaves out (an IC pin, a capacitor, a `Device:D`) is floating, and the message names
-  those parts;
+  scenario fixes or a current source feeds (a diode or FET counts only where it conducts
+  in the solution). The DC solver ties every net to ground through 1 nS, so a floating
+  net reads 0.0 V, inside an "off" window such as `(0, 0.4)`; the check never trusts that
+  reading, and a floating pin fails whatever its window says. A pin with nothing on its
+  net but parts the model leaves out (an IC pin, a connector, a `Device:D`) is floating,
+  and the message names them (a capacitor is open at DC and is not named);
 - cannot be judged because the model leaves something out. The nets that set a pin's
   level are its own net and every net reached from it through any element of the circuit
   (every resistor, diode and FET terminal, conducting or not), stopping at the nets the
   scenario fixes. Every pad on those nets must belong to a part the circuit holds an
-  element for on the net of every pad it has (an element whose ref is the part's reference, or the
-  reference and a dot: `dc.build` names pack elements `RN1.1` and body diodes `Q1.body`),
-  be a capacitor from
-  KiCad's `Device` library (`C`, `C_Small`, `C_Polarized`, `CP` and their `_Small` and
-  `_US` forms: open at DC), or be listed in the same condition's pins (a listed pad is
-  taken to draw no current; its own level is judged). Anything else, an IC pin, a
-  connector pad, a `Device:D`, a Zener, a generic FET or BJT, a `Device:R_Small` (only
-  the symbols `dc.build` names are built), a capacitor from another library, fails by
-  name. The way out the message gives: model the part in `circuits.scenario` with its
-  reference as the element's ref (`circuit.D("SIG", "EN", 0.7, ref="D2")`), fix the net
-  it drives, or, for a pad that draws no current in the condition (an absent
-  controller's pin), list it in the condition's pins with its own window. A part the
-  scenario models on some of its pads but not all (one diode of a pair) has the pads it
-  leaves out named, wherever they are, since current can come in through them;
+  element for on the net of every pad it has (an element whose ref is the part's
+  reference, or the reference and a dot: `dc.build` names pack elements `RN1.1` and body
+  diodes `Q1.body`), or be a capacitor (a part with two pads whose reference letters are
+  `C`, from any library: open at DC; nothing else is exempt, so a `Device:C` referenced
+  `X1`, a three-pad feedthrough `C3` or a `CF1` is not), or be a two-pad part with both
+  pads on one net (it carries no current), or be listed in the same condition's pins.
+  Listing a pad is a claim that it is high-impedance in the condition: it draws no
+  current and drives nothing, and its own level is judged against its window. Anything
+  else, an IC pin, a connector pad, a `Device:D`, a Zener, a generic FET or BJT, a
+  `Device:R_Small` (unless `dc.build(nl, extended=True)` models it), fails by name. The
+  way out the message gives: model the part in `circuits.scenario` with its reference as
+  the element's ref (`circuit.D("SIG", "EN", 0.7, ref="D2")`), fix the net it drives, or,
+  for a pad that is high-impedance in the condition (an absent controller's pin), list it
+  in the condition's pins with its own window. A part the scenario models on some of its
+  pads but not all (one diode of a pair) has the pads it leaves out named, wherever they
+  are, since current can come in through them, unless the scenario fixes that pad's net;
+- depends on a FET whose state the solver guessed: a FET with any terminal on the nets
+  that set the pin's level whose gate net is floating, or whose gate's level moves by
+  more than 50 mV with a smaller leak. The leak holds such a gate near 0 V, so a P-FET
+  would count as on and an N-FET as off whatever the board does. The message names the
+  FET and its gate: pull the gate to a net the scenario fixes, or fix it;
 - is outside its window;
 - reads its level only because of the 1 nS leak: the level moves by more than 50 mV
   when the leak is made 1000 times smaller, which happens when the pin is held through
   about a gigaohm or more.
 
-A scenario that raises fails naming the condition and what it raised; a solve that does
-not converge fails with "the DC solve did not converge in condition X". It records
-`pins`, `{"U2 pad 5": [V, min, max, state]}` with state `driven`, `floating`, `no net`
-or `unsolved` (V is null without a net or a solution), and `not modelled`, `{"U2 pad 5":
-["U1 pad 3 (lib:part) on EN"]}`, when the model leaves out a pad on a pin's nets, before
-it fails.
+A pin on a net the scenario itself fixes is recorded as `fixed` and judged at that
+voltage. A scenario that raises fails naming the condition and what it raised; a solve
+that does not converge fails with "the DC solve did not converge in condition X". It
+records `pins`, `{"U2 pad 5": [V, min, max, state]}` with state `driven`, `fixed`,
+`floating`, `no net` or `unsolved` (V is null without a net or a solution), and `not
+modelled`, `{"U2 pad 5": ["U1 pad 3 (lib:part) on EN"]}`, when the model leaves out a pad
+on a pin's nets, before it fails.
 
 What it proves, and what it does not. It proves that, in the circuit the scenario
 describes, each listed pin is joined through modelled parts to a net the scenario fixes,
-that nothing the solver does not model sits on the nets that set its level, and that the
-level is inside the window. The scenario is the whole truth: a net the scenario fixes is
-taken at that voltage whatever really drives it, and a net it leaves free is undriven.
-There are no ICs in the model: no regulator turns its output off when its enable drops,
-no internal pull-up or pull-down, no ESD diode, no input leakage, no Zener breakdown, no
-BJT, and a current source the scenario injects (`Circuit.inject`) is not a drive, so a
-pin held only by one fails as floating. Consequences are not chased: "enable low, so the
-output is off, so the next enable is low" must be written into the scenario as fixed
-nets. A listed pad is taken at its word to draw nothing.
+that nothing the solver does not model sits on the nets that set its level, that no FET
+there is on or off only because of the leak, and that the level is inside the window.
+The scenario is the whole truth: a net the scenario fixes is taken at that voltage
+whatever really drives it, and a net it leaves free is undriven. There are no ICs in the
+model: no regulator turns its output off when its enable drops, no internal pull-up or
+pull-down, no ESD diode, no input leakage, no Zener breakdown, no BJT. A current source
+the scenario injects (`Circuit.inject`) is a drive. Consequences are not chased: "enable
+low, so the output is off, so the next enable is low" must be written into the scenario
+as fixed nets. A listed pad is taken at its word to be high-impedance: a pad that really
+drives the pin, listed, hides that drive.
 
-`test_semiconductor_voltage_derated` solves every row of `STRESS_SCENARIOS` and holds,
-at the worst of them, each FET's `|V(D) - V(S)|` under `derate` times `vds` and `|V(G) -
-V(S)|` under `derate` times `vgs`, and each diode's `|V(K) - V(A)|` under `derate` times
-`vrrm` (the voltage either way: a forward drop is small, and a bidirectional TVS is held
-both ways). It is the capacitor rule's twin. The parts it judges are any of these:
+`test_semiconductor_voltage_derated` solves the rows of `STRESS_SCENARIOS` one at a time
+and judges each as it is solved (so scenarios that share one circuit object are each
+judged on their own state). At the worst of them it holds each FET's `|V(D) - V(S)|`
+under `derate` times `vds` and `|V(G) - V(S)|` under `derate` times `vgs`, each diode's
+reverse voltage `V(K) - V(A)` under `derate` times `vrrm` (a forward drop is not
+judged), and each TVS's reverse voltage under `derate` (default 1.0) times `vrwm`. A
+clamp (`vz`) is not held to a rating: it fails when the model shows more than `vz` plus
+5 % across it, because the DC model has no breakdown, so such a solve is not the
+board's; the message says to fix the clamped net at its clamped voltage in that
+scenario, or to model the breakdown as a diode from cathode to anode with `vf` equal to
+`vz` (`circuit.D(cathode net, anode net, vz, ref="D2.z")`, which `extended` does not
+allow beside its own model of the part: fix the net instead). The parts it judges are any
+of these:
 
 - a part whose pins read as one FET or one diode: every pad on a net (not KiCad's
   `unconnected-(...)` one) has a pin name, and the names are exactly G, D and S (or
@@ -1133,41 +1154,66 @@ both ways). It is the capacitor rule's twin. The parts it judges are any of thes
   bipolar transistor's B, C and E, with or without a number: G1, A2) but do not read as
   one FET or diode, and a part from a library whose name starts with `Diode` or
   `Transistor`, or a `Device` symbol named `D`, `LED` or starting `D_`, `LED_` or `Q_`;
-  these are judged on their row's `pins`, and fail by name without them;
+  these are judged on their row's `pins` or `elements`, and fail by name without them;
 - a part whose MPN has a row;
-- a part `circuits.scenario` holds a diode or FET element for (by its reference).
+- a part `circuits.scenario` holds a diode or FET element for (by its reference);
 
-So every LED needs a row too (its reverse rating). A judged part fails, by name, when:
-it has no MPN or its MPN has no row (it still records its voltages); its pins cannot be
-read and its row gives none (the message gives the way to write a bipolar transistor);
-its row is of the other kind than its pins; its row's `pins` name a pad on no net or
-leave out pads of the part on other nets (a second element); the circuit of a scenario
-holds no element of the part on the net of each judged pad (`dc.build` models only
-`Device:LED`, `Device:D_Schottky` and the three FETs it names, so a `Device:D`, a zener
-or a generic FET must be added in `circuits.scenario` with its reference as the
-element's ref: `circuit.D(anode net, cathode net, vf, ref="D4")`, or a `circuit.fets`
-entry); a judged pad's net is floating in a scenario (nothing the model holds joins it
-to a net the scenario fixes, so its 0 V is the solver's leak: fix the net that drives
-it in that scenario, or give it a pull); a scenario cannot be solved (named by its
-index), or none is solved at all (an empty `STRESS_SCENARIOS` judges nothing, so it
-fails while there is a part to judge); or a voltage is over its limit.
+less the parts `SEMI_NOT_JUDGED` declares (unless their MPN has a row). So every LED
+needs a row too (its reverse rating). A judged part fails, by name, when: it has no MPN
+or its MPN has no row (it still records its voltages); its pins cannot be read and its
+row gives none (the message gives the way to write a bipolar transistor); its row is of
+the other family than its pins; its row gives both `pins` and `elements`; its row's pads
+disagree with its pin names (a pad named D given as `g`: numbered names G1, D2, S1, K1
+count, A1 and A2 do not, since a bidirectional part names both pads A); its row's pads
+name a pad on no net or leave out pads of the part on other nets (list each element);
+or, in a scenario (the first that shows each kind of problem is named):
+
+- the circuit holds no element of the part on the net of each judged pad: `dc.build`
+  models only `Device:LED`, `Device:D_Schottky` and the three FETs it names, and
+  `dc.build(nl, extended=True)` models more (see `circuits.py` below); anything else is
+  added in `circuits.scenario` with its reference as the element's ref
+  (`circuit.D(anode net, cathode net, vf, ref="D4")`, or a `circuit.fets` entry). A
+  TVS or clamp row still needs its part modelled;
+- a judged pad's net is floating (nothing the model holds joins it to a net the scenario
+  fixes or a current source feeds, so its 0 V is the solver's leak): fix the net that
+  drives it in that scenario, or give it a pull;
+- a pad on the nets that set the judged pads' levels (as in the fault-state check: their
+  nets and every net reached through any circuit element, stopping at fixed nets)
+  belongs to a part the model leaves out, under the same rule as the fault-state check
+  with no listed pins: a connector bringing in a rail the scenario does not fix, an IC
+  pin. Fix those nets in the scenario, or model what drives them with its reference;
+- a FET on those nets has a floating gate (its state is the solver's guess);
+
+or a scenario cannot be solved (named by its index), or none is solved at all (an empty
+`STRESS_SCENARIOS` judges nothing, so it fails while there is a part to judge), or a
+`STRESS_SCENARIOS` keyword is not a named parameter of `circuits.scenario`, or a
+voltage is over its limit.
 
 It records `semiconductor voltage`, `{ref: {"kind", "mpn", "target", <quantity>: {"v",
-"rated", "limit_v", "scenario"}}}` for each judged part whose pins were read (`vds` and
-`vgs` for a FET, `vr` for a diode; `rated` and `limit_v` null without a row, `v` null
-when no scenario gave a reading, `scenario` the index into `STRESS_SCENARIOS` of the
-worst case), `not judged`, `{ref: reason}`, and `unsolved scenarios`, before it fails.
+"rated", "limit_v", "scenario"}}}` for each judged part whose pins were read (`kind` is
+`fet`, `diode`, `tvs` or `clamp`; `vds` and `vgs` for a FET, `vr` for the others, the
+worst reverse voltage, negative when the part only ever conducted; a clamp records `vz`
+and `{"v", "vz", "limit_v", "scenario"}`; a row with `elements` records `"elements":
+[{<quantity>: ...}]` instead, one per element, and its messages name `D5 element 2`;
+`rated` and `limit_v` null without a row, `v` null when no scenario gave a reading,
+`scenario` the index into `STRESS_SCENARIOS` of the worst case), `not judged`, `{ref:
+reason}`, `declared not judged`, `{ref: reason}` from `SEMI_NOT_JUDGED`, and `unsolved
+scenarios`, before it fails.
 
 What it proves, and what it does not. It proves that at the operating points
 `STRESS_SCENARIOS` describes, as `dc` solves them, every part it judges stays under the
-share of its rating its row allows. It is static: no switching transients, no ringing,
-no inductive kick (a transient is a `STRESS_SCENARIOS` row with the net fixed at its
-peak). A part the scenario models only roughly (a FET as a switch with one threshold)
-gives voltages only as good as that model. A part whose pins mix families (an
-optocoupler's A, K, C and E) or have no names, that is not from a `Diode` or
-`Transistor` library or one of the `Device` symbols above, and has neither a row nor an
-element in the circuit, is not found. A part that conducts but is left out of the model
-elsewhere on the board can move the voltages of the parts judged, and is not looked for.
+share of its rating its row allows, that nothing the model leaves out sits on the nets
+that set those voltages, and that no FET there is on or off only because of the leak.
+It is static: no switching transients, no ringing, no inductive kick (a transient is a
+`STRESS_SCENARIOS` row with the net fixed at its peak). A part the scenario models only
+roughly (a FET as a switch with one threshold, a Zener with no breakdown) gives voltages
+only as good as that model. A row is the designer's statement: a rectifier written as a
+TVS is judged at its stated VRWM with a derate of 1.0, and one written as a clamp is not
+held to any rating unless the model shows more than its `vz` across it; `numbers`
+records the kind, so a review can see it. A part declared in `SEMI_NOT_JUDGED` is not
+judged at all. A part whose pins mix families (an optocoupler's A, K, C and E) or have no
+names, that is not from a `Diode` or `Transistor` library or one of the `Device` symbols
+above, and has neither a row nor an element in the circuit, is not found.
 
 **`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
 name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the
@@ -1245,10 +1291,38 @@ Functions the `circuit` and `esp32s3` checks call, and that your own checks may 
 
 | Function | Returns |
 |---|---|
-| `scenario(nl, **kw)` | An unsolved `pcbkit.check.dc.Circuit` for one operating condition: start from `pcbkit.check.dc.build(nl)` (every resistor, LED, diode and FET of the netlist), hold the supplies with `fix`, add what the netlist cannot know (off-board loads, a driven pin) and return it. The checks call `.solve()`. |
+| `scenario(nl, **kw)` | An unsolved `pcbkit.check.dc.Circuit` for one operating condition: start from `pcbkit.check.dc.build(nl)` (the resistors, LEDs, diodes and FETs of the netlist it knows, below), hold the supplies with `fix`, add what the netlist cannot know (off-board loads, a driven pin) and return it. The checks call `.solve()`. Name every keyword a table passes it as a parameter: the fault-state and semiconductor checks fail a keyword that would land only in `**kw`. |
 | `i2c_devices(nl)` | `(sda net, name, 7-bit address)` for each on-board I2C device, address pins read from the netlist. |
 
 It also holds whatever SPICE decks your own checks build, with `pcbkit.check.spice.run`.
+
+What `dc.build(nl)` models. A `Device:R` (pad 1 to pad 2 at its value; a value that reads
+as 0, such as an enable link's `0R`, is 1 milliohm, and a value that is a not-fitted mark
+alone, `DNP`, `DNF`, `DNI`, `NF`, `NP`, `NC`, `NM`, `NL` or `NOPOP`, leaves the part
+out), `Device:R_Pack04`, `Device:R_Shunt`, `Device:LED` (by colour), `Device:D_Schottky`,
+`Transistor_FET:Q_PMOS_GDS` and `AO3401A` (each with a body diode) and
+`Transistor_FET:2N7002`. Capacitors are open at DC; everything else, ICs included, is left
+to the scenario. A current source the scenario adds (`circuit.inject`) counts as a drive
+for `Solution.floating`.
+
+`dc.build(nl, extended=True)` is opt-in. It also models `Device:R_Small`, `R_US` and
+`R_Small_US` as resistors; the two-pad diodes `Device:D`, `D_Small`, `D_Schottky_Small`,
+`D_Zener`, `D_Zener_Small`, `D_TVS` and `D_TVS_Small` from their A and K pins, forward
+only (no breakdown: a Zener or TVS conducts only forward, and a TVS whose pins are A1
+and A2 is held as an open element, `<ref>.open`, so the checks see it modelled); the
+generic `Device:Q_NMOS_*` and `Q_PMOS_*` FETs, their gate, drain and source read from
+the G, D and S pin names (never from the symbol name's suffix), with a body diode; and a
+body diode for the `2N7002` (`<ref>.body`, source to drain for an N-FET, drain to source
+for a P-FET). A part whose pin names do not read that way is left out, as before.
+
+Warning: a scenario written before `extended` may already model some of these parts by
+hand. In extended mode a part that `build` modelled cannot be added again, and no ref can
+be added twice: `circuit.R`, `circuit.D` and `circuit.fets.append` raise ValueError naming
+the part (`D2 is already modelled by dc.build(extended=True)`), so the part is never
+doubled silently; remove the hand model, or build without `extended`. Without `extended`
+nothing changes: the built-in `circuit` and `esp32s3` checks, and every existing
+scenario, build exactly what they built before unless the project's own `scenario` asks
+for `extended=True`.
 
 ### mutants.py
 

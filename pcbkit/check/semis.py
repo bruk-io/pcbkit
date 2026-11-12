@@ -1,13 +1,22 @@
-"""Semiconductor voltage: FETs and diodes stay under a share of their rated voltages.
+"""Semiconductor voltage: FETs, diodes and clamps stay inside their voltage ratings.
 
-``SEMI_VRATED`` is ``{mpn: {"vds": V, "vgs": V} or {"vrrm": V}}``, each row with an
-optional ``derate`` (the share of the rating allowed, at most and by default 0.8) and
-optional ``pins`` (``{"g", "d", "s"}`` with a FET row, ``{"a", "k"}`` with a diode row,
-to pad numbers). The check solves every ``STRESS_SCENARIOS`` row and holds, at the
-worst of them, ``|V(d) - V(s)|`` under ``derate * vds``, ``|V(g) - V(s)|`` under
-``derate * vgs`` and ``|V(k) - V(a)|`` under ``derate * vrrm`` (the voltage either
-way: a diode's forward drop is small, and a bidirectional part is held both ways). It
-is the capacitor rule's twin.
+``SEMI_VRATED`` is ``{mpn: row}``. A row is one of four kinds:
+
+* a FET: ``{"vds": V, "vgs": V}``; ``|V(D) - V(S)|`` and ``|V(G) - V(S)|`` are held
+  under ``derate`` (at most and by default 0.8) times each rating;
+* a diode: ``{"vrrm": V}``; its reverse voltage ``V(K) - V(A)`` is held under
+  ``derate`` (at most and by default 0.8) times VRRM. A forward drop is not judged;
+* a TVS: ``{"vrwm": V}``; its reverse voltage is held under ``derate`` (at most and by
+  default 1.0, because a TVS is specified at its standoff voltage) times VRWM;
+* a Zener used as a clamp: ``{"vz": V}``; the part is recorded as a clamp and its
+  reverse voltage is not held to a rating, but because the DC model has no breakdown,
+  a solve that shows more than ``vz`` (plus ``CLAMP_TOLERANCE``) across it is not the
+  board's, and fails, saying what to do.
+
+Every row may give ``pins`` (``{"g", "d", "s"}`` for a FET row, ``{"a", "k"}`` for the
+others, to pad numbers) when the symbol's pin names do not read as one part, or
+``elements``, a list of ``{"pins": {...}}``, for a part with two or more diodes or FETs
+in it (a dual diode, a dual FET), each judged on its own against the row's rating.
 
 Which parts are judged. Any of these:
 
@@ -17,23 +26,28 @@ Which parts are judged. Any of these:
   ignored, each name's pads on one net;
 * a part whose pins are all named for one family's terminals but do not read as one
   FET or diode (B, C and E; G1, D1, S1, G2...; A1, A2, K; a name from two families,
-  as a jumper's A and B, is not one), and a part from a
-  library whose name starts with ``Diode`` or ``Transistor``, or a ``Device`` symbol
-  whose name is ``D``, ``LED`` or starts with ``D_``, ``LED_`` or ``Q_``: these are
-  judged when their row gives ``pins``, and fail by name when it does not;
+  as a jumper's A and B, is not one), and a part from a library whose name starts with
+  ``Diode`` or ``Transistor``, or a ``Device`` symbol whose name is ``D``, ``LED`` or
+  starts with ``D_``, ``LED_`` or ``Q_``: these are judged when their row gives ``pins``
+  or ``elements``, and fail by name when it does not;
 * a part whose MPN has a row;
 * a part the stress circuit holds a diode or FET element for.
 
-A judged part fails, by name, when it has no MPN or no row (no rating on file), when
-its pins cannot be read and its row gives none, when its row is of the other kind
-than its pins, when the row's ``pins`` leave out pads of the part on other nets (the
-row describes one element: a second diode or FET in the same part cannot be judged),
-when a judged pad is on no net, when the stress circuit holds no element of the part
-on the net of each judged pad (``dc.build`` models only some symbols: the voltage
-across a part it leaves out is not what the board would show), when a judged pad's net
-is floating in a scenario (its 0 V is the solver's leak), when a scenario cannot be
-solved, when no scenario is solved at all (an empty ``STRESS_SCENARIOS`` judges
-nothing), and when a voltage is over its limit.
+A part listed in the optional ``SEMI_NOT_JUDGED`` (``{ref: reason}``) is left out and
+its reason recorded, unless its MPN has a row, in which case it is judged as usual. A
+reference there that is not in the design fails by name.
+
+A judged part fails, by name, when it has no MPN or no row (no rating on file); when
+its pins cannot be read and its row gives none; when its row is of the other family
+than its pins; when its row gives both ``pins`` and ``elements``; when the row's pads
+disagree with the pin names (a pad named D given as ``g``); when the row's pads leave
+out pads of the part on other nets; when a row pad is on no net; and, scenario by
+scenario, as each is solved: when the circuit holds no element of the part on the net
+of each judged pad (``dc.build`` models only some symbols); when a judged pad's net is
+floating (its 0 V is the solver's leak); when a pad on the nets that set the judged
+pads' levels belongs to a part the model leaves out (``faults.left_out``: a connector
+bringing in a rail the scenario does not fix); when a FET there has a floating gate;
+when a scenario cannot be solved, or none is; and when a voltage is over its limit.
 
 Nothing is read from net names or reference letters. The functions here are pure and
 import no pytest, so ``pcbkit specs`` can read ``TABLES``.
@@ -42,51 +56,82 @@ import no pytest, so ``pcbkit specs`` can read ``TABLES``.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from pcbkit.check.faults import element_nets
+from pcbkit.check.faults import element_nets, left_out, level_nets, undecided_fets
 from pcbkit.check.netlist import Netlist, natkey
-from pcbkit.check.tables import DictOf, Fraction, OneOf, Pad, Record, Shape, Text, Volts
+from pcbkit.check.tables import (
+    DictOf,
+    Fraction,
+    ListOf,
+    OneOf,
+    Pad,
+    Record,
+    Ref,
+    Shape,
+    Text,
+    Volts,
+)
 
 DERATE_DEFAULT = 0.8
+TVS_DERATE_DEFAULT = 1.0
+# A clamp may show this share more than its vz before the solve counts as not clamping:
+# a modelled breakdown adds its on-resistance drop, and a Zener's vz has a tolerance.
+CLAMP_TOLERANCE = 0.05
 
-# a transistor's pads go with its vds and vgs, a diode's with its vrrm
+# a transistor's pads go with its vds and vgs, a diode's with the other ratings
 _FET_PINS = Record(required={"g": Pad(), "d": Pad(), "s": Pad()})
 _DIODE_PINS = Record(required={"a": Pad(), "k": Pad()})
+
+
+def _row(required: dict[str, Shape], pins: Shape, derate: float | None) -> Shape:
+    """Return the shape of one row kind: its ratings, derate, pins or elements."""
+    optional: dict[str, Shape] = {}
+    if derate is not None:
+        optional["derate"] = Fraction(hi=derate)
+    optional["pins"] = pins
+    optional["elements"] = ListOf(Record(required={"pins": pins}))
+    return Record(required=required, optional=optional)
+
 
 TABLES: dict[str, Shape] = {
     "SEMI_VRATED": DictOf(
         Text("mpn"),
         OneOf(
-            Record(
-                required={"vds": Volts(), "vgs": Volts()},
-                optional={
-                    "derate": Fraction(hi=DERATE_DEFAULT),
-                    "pins": _FET_PINS,
-                },
-            ),
-            Record(
-                required={"vrrm": Volts()},
-                optional={
-                    "derate": Fraction(hi=DERATE_DEFAULT),
-                    "pins": _DIODE_PINS,
-                },
-            ),
+            _row({"vds": Volts(), "vgs": Volts()}, _FET_PINS, DERATE_DEFAULT),
+            _row({"vrrm": Volts()}, _DIODE_PINS, DERATE_DEFAULT),
+            _row({"vrwm": Volts()}, _DIODE_PINS, TVS_DERATE_DEFAULT),
+            _row({"vz": Volts()}, _DIODE_PINS, None),
         ),
     ),
+    "SEMI_NOT_JUDGED": DictOf(Ref(), Text("reason")),
 }
 
 FET = "fet"
 DIODE = "diode"
+TVS = "tvs"
+CLAMP = "clamp"
 
-# The quantities judged, by kind: name, the two pins (plus minus), the rating key.
+# the row kind each rating key makes, and the default share of the rating allowed
+ROW_KINDS = {"vds": FET, "vrrm": DIODE, "vrwm": TVS, "vz": CLAMP}
+DEFAULT_TARGET = {FET: DERATE_DEFAULT, DIODE: DERATE_DEFAULT, TVS: TVS_DERATE_DEFAULT}
+# which family of terminals a kind has
+FAMILY = {FET: FET, DIODE: DIODE, TVS: DIODE, CLAMP: DIODE}
+# the quantities judged: name, plus terminal, minus terminal, taken as an absolute
 QUANTITIES = {
-    FET: (("vds", "d", "s"), ("vgs", "g", "s")),
-    DIODE: (("vr", "k", "a"),),
+    FET: (("vds", "d", "s", True), ("vgs", "g", "s", True)),
+    DIODE: (("vr", "k", "a", False),),
 }
-RATING_KEY = {"vds": "vds", "vgs": "vgs", "vr": "vrrm"}
+RATING_KEY = {
+    (FET, "vds"): "vds",
+    (FET, "vgs"): "vgs",
+    (DIODE, "vr"): "vrrm",
+    (TVS, "vr"): "vrwm",
+    (CLAMP, "vr"): "vz",
+}
+LABELS = {"vds": "|Vds|", "vgs": "|Vgs|", "vr": "V(K) - V(A)"}
 
 # Pin functions that read as one terminal of a FET or a diode.
 TERMINALS = {
@@ -101,6 +146,9 @@ TERMINALS = {
     "K": "k",
     "CATHODE": "k",
 }
+# Numbered names whose letter still says the terminal (G1, D2, S1, K1); A1 and A2 do
+# not: a bidirectional part names both its pads A.
+_NUMBERED_TERMINALS = ("G", "D", "S", "K")
 # Pin functions named like a semiconductor's terminals, with or without a number.
 _SEMI_NAME = re.compile(
     r"(G|D|S|A|K|B|C|E|GATE|DRAIN|SOURCE|ANODE|CATHODE|BASE|COLLECTOR|EMITTER)\d*"
@@ -131,6 +179,41 @@ class Pins:
     problem: str | None = None
 
 
+@dataclass
+class Plan:
+    """How a part is judged: its kind and elements (``{terminal: pad}``), or why not."""
+
+    kind: str | None
+    elements: list[dict[str, str]] = field(default_factory=list)
+    problem: str | None = None
+
+
+@dataclass
+class SemiReport:
+    """The verdict: the record of each judged part and one sentence per failure."""
+
+    parts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    not_judged: dict[str, str] = field(default_factory=dict)
+    declared: dict[str, str] = field(default_factory=dict)
+    unsolved: list[int] = field(default_factory=list)
+    problems: list[str] = field(default_factory=list)
+
+
+@dataclass
+class _Seen:
+    """What the scenarios showed of one part: worst readings and what stopped them."""
+
+    worst: dict[tuple[int, str], tuple[float, int]] = field(default_factory=dict)
+    problems: list[str] = field(default_factory=list)
+    kinds: set[str] = field(default_factory=set)
+
+    def once(self, kind: str, text: str) -> None:
+        """Keep the first problem of each kind: the first scenario that shows it."""
+        if kind not in self.kinds:
+            self.kinds.add(kind)
+            self.problems.append(text)
+
+
 def wired_pads(nl: Netlist, ref: str) -> dict[str, str]:
     """Return ``{pad: function}`` for the pads of ``ref`` that are on a real net."""
     return {
@@ -150,13 +233,13 @@ def named_like_a_semiconductor(nl: Netlist, ref: str) -> bool:
     pads = wired_pads(nl, ref)
     if len(pads) < 2:
         return False
-    letters = set()
+    found_letters = set()
     for func in pads.values():
         found = _SEMI_NAME.fullmatch(func.strip().upper())
         if not found:
             return False
-        letters.add(_LETTER.get(found.group(1), found.group(1)))
-    return any(letters <= family for family in _FAMILIES)
+        found_letters.add(_LETTER.get(found.group(1), found.group(1)))
+    return any(found_letters <= family for family in _FAMILIES)
 
 
 def from_a_semiconductor_library(nl: Netlist, ref: str) -> bool:
@@ -207,33 +290,14 @@ def read_pins(nl: Netlist, ref: str) -> Pins:
 
 
 def row_kind(row: Mapping[str, Any]) -> str:
-    """Return ``fet`` for a row with ``vds``, ``diode`` for one with ``vrrm``."""
-    return FET if "vds" in row else DIODE
+    """Return the kind of a row: ``fet``, ``diode``, ``tvs`` or ``clamp``.
 
-
-def judged_parts(
-    nl: Netlist, table: Mapping[str, Any], circuits: Iterable[Any]
-) -> list[str]:
-    """Return the references the check judges, in natural order (see the module)."""
-    modelled: set[str] = set()
-    for circuit in circuits:
-        modelled |= {_part(ref) for *_rest, ref in circuit.diodes if ref}
-        modelled |= {_part(f["ref"]) for f in circuit.fets if f.get("ref")}
-    found = []
-    for ref in nl.parts:
-        if (
-            named_like_a_semiconductor(nl, ref)
-            or from_a_semiconductor_library(nl, ref)
-            or mpn_of(nl, ref) in table
-            or ref in modelled
-        ):
-            found.append(ref)
-    return sorted(found, key=natkey)
-
-
-def _part(name: Any) -> str:
-    """Return the part an element belongs to: ``Q1`` of ``Q1.body``."""
-    return str(name).split(".", 1)[0]
+    Raise ValueError for a row with none of the ratings (the shape refuses one).
+    """
+    for key, kind in ROW_KINDS.items():
+        if key in row:
+            return kind
+    raise ValueError(f"a SEMI_VRATED row with no rating: {dict(row)!r}")
 
 
 def mpn_of(nl: Netlist, ref: str) -> str:
@@ -241,49 +305,76 @@ def mpn_of(nl: Netlist, ref: str) -> str:
     return str(nl.parts[ref]["fields"].get("MPN", "")).strip()
 
 
-def resolve(nl: Netlist, ref: str, row: Mapping[str, Any] | None) -> Pins:
-    """Return the pins the check judges ``ref`` on: its row's, else its pin names'."""
-    if row is not None and "pins" in row:
-        kind = row_kind(row)
-        pads = dict(row["pins"])
-        wired = wired_pads(nl, ref)
-        absent = [p for p in pads.values() if nl.net(ref, p) is None]
-        if absent:
-            return Pins(
-                None,
-                problem=f"its row's pins name pads {', '.join(absent)}, which are on "
-                f"no net (its pads are {', '.join(sorted(wired, key=natkey))})",
-            )
-        judged_nets = {nl.net(ref, p) for p in pads.values()}
-        others = [
-            p for p in sorted(wired, key=natkey) if nl.net(ref, p) not in judged_nets
-        ]
-        if others:
-            return Pins(
-                None,
-                problem=f"its row's pins leave out pads {', '.join(others)}, on "
-                "other nets: a row describes one element, so a part with a second "
-                "diode or FET cannot be judged",
-            )
-        return Pins(kind, pads)
+def _named_terminal(func: str) -> str | None:
+    """Return the terminal a pin name says (``D`` and ``D2`` say ``d``), or None."""
+    name = func.strip().upper()
+    if name in TERMINALS:
+        return TERMINALS[name]
+    letter = name.rstrip("0123456789")
+    if letter in _NUMBERED_TERMINALS and letter != name:
+        return TERMINALS[letter]
+    return None
+
+
+def _row_elements(nl: Netlist, ref: str, row: Mapping[str, Any]) -> Plan:
+    """Return the plan from a row's ``pins`` or ``elements``, checked on the part."""
+    if "pins" in row:
+        elements = [dict(row["pins"])]
+    else:
+        elements = [dict(e["pins"]) for e in row["elements"]]
+    wired = wired_pads(nl, ref)
+    pads = [p for e in elements for p in e.values()]
+    absent = list(dict.fromkeys(p for p in pads if nl.net(ref, p) is None))
+    if absent:
+        return Plan(
+            None,
+            problem=f"its row's pins name pads {', '.join(absent)}, which are on "
+            f"no net (its pads are {', '.join(sorted(wired, key=natkey))})",
+        )
+    names = nl.functions(ref)
+    clashes = []
+    for element in elements:
+        for terminal, pad in element.items():
+            said = _named_terminal(names.get(pad, ""))
+            if said is not None and said != terminal:
+                clashes.append(
+                    f"pad {pad} is named {names[pad].strip()} but the row says "
+                    f"{terminal}"
+                )
+    if clashes:
+        return Plan(
+            None,
+            problem="its row's pins disagree with its pin names: "
+            + "; ".join(dict.fromkeys(clashes)),
+        )
+    judged_nets = {nl.net(ref, p) for p in pads}
+    others = [p for p in sorted(wired, key=natkey) if nl.net(ref, p) not in judged_nets]
+    if others:
+        return Plan(
+            None,
+            problem=f"its row's pins leave out pads {', '.join(others)}, on other "
+            'nets: list every diode or FET of the part in its row\'s "elements"',
+        )
+    return Plan(row_kind(row), elements)
+
+
+def plan_part(nl: Netlist, ref: str, row: Mapping[str, Any] | None) -> Plan:
+    """Return how ``ref`` is judged: from its row's pads, else from its pin names."""
+    if row is not None and "pins" in row and "elements" in row:
+        return Plan(None, problem='its row gives both "pins" and "elements": give one')
+    if row is not None and ("pins" in row or "elements" in row):
+        return _row_elements(nl, ref, row)
     pins = read_pins(nl, ref)
-    if pins.kind is not None and row is not None and row_kind(row) != pins.kind:
-        return Pins(
+    if pins.kind is None:
+        return Plan(None, problem=pins.problem)
+    if row is not None and FAMILY[row_kind(row)] != pins.kind:
+        return Plan(
             None,
             problem=f"its pins read as a {pins.kind} but its row is a "
             f"{row_kind(row)} row",
         )
-    return pins
-
-
-@dataclass
-class SemiReport:
-    """The verdict: the record of each judged part and one sentence per failure."""
-
-    parts: dict[str, dict[str, Any]] = field(default_factory=dict)
-    not_judged: dict[str, str] = field(default_factory=dict)
-    unsolved: list[int] = field(default_factory=list)
-    problems: list[str] = field(default_factory=list)
+    kind = row_kind(row) if row is not None else pins.kind
+    return Plan(kind, [pins.pads])
 
 
 def _hint(nl: Netlist, ref: str) -> str:
@@ -300,19 +391,196 @@ def _hint(nl: Netlist, ref: str) -> str:
     return text
 
 
+def _static_candidates(nl: Netlist, table: Mapping[str, Any]) -> set[str]:
+    """Return the parts judged whatever the circuit holds (names, library, a row)."""
+    return {
+        ref
+        for ref in nl.parts
+        if named_like_a_semiconductor(nl, ref)
+        or from_a_semiconductor_library(nl, ref)
+        or (mpn_of(nl, ref) != "" and mpn_of(nl, ref) in table)
+    }
+
+
+def _modelled_now(nl: Netlist, circuit: Any) -> set[str]:
+    """Return the parts of the netlist the circuit holds a diode or FET element for."""
+    found = {str(ref).split(".", 1)[0] for *_x, ref in circuit.diodes if ref}
+    found |= {str(f["ref"]).split(".", 1)[0] for f in circuit.fets if f.get("ref")}
+    return found & set(nl.parts)
+
+
+def _pad_list(
+    nl: Netlist, ref: str, plan: Plan, nets_ok: Callable[[Any], bool]
+) -> list[str]:
+    """Return ``"pad 1 (G) on GATE"`` for each judged pad whose net fails the test."""
+    found = []
+    for element in plan.elements:
+        for terminal, pad in sorted(element.items()):
+            net = nl.net(ref, pad)
+            if not nets_ok(net):
+                found.append(f"pad {pad} ({terminal.upper()}) on {net}")
+    return list(dict.fromkeys(found))
+
+
+def _observe(
+    nl: Netlist, ref: str, plan: Plan, index: int, solution: Any, seen: _Seen
+) -> None:
+    """Judge one part in one solved scenario, now, before the next is solved."""
+    circuit = solution.c
+    held = element_nets(circuit).get(ref, set())
+    left = _pad_list(nl, ref, plan, lambda n: n in held)
+    if left:
+        seen.once(
+            "model",
+            f"{ref} ({nl.kind(ref)}) is not modelled on {', '.join(left)} in "
+            f"STRESS_SCENARIOS[{index}]: dc.build does not model this symbol, so the "
+            "voltage across it is not the board's; build with dc.build(nl, "
+            "extended=True), which models more symbols, or add it in "
+            f"circuits.scenario with ref {ref!r} (circuit.D(anode net, cathode net, "
+            f"vf, ref={ref!r}) for a diode, a circuit.fets entry for a FET)",
+        )
+        return
+    floating = _pad_list(nl, ref, plan, lambda n: not solution.floating(n))
+    if floating:
+        seen.once(
+            "floating",
+            f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: "
+            f"{', '.join(floating)} {'is' if len(floating) == 1 else 'are'} floating "
+            "there (its 0 V is the solver's leak); fix the net that drives it in that "
+            "scenario, or give it a pull",
+        )
+        return
+    nets = {str(nl.net(ref, p)) for e in plan.elements for p in e.values()}
+    lnets = sorted({n for net in nets for n in level_nets(circuit, net)}, key=natkey)
+    missing = left_out(nl, circuit, lnets, set())
+    if missing:
+        seen.once(
+            "left out",
+            f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: the DC model "
+            f"leaves out {', '.join(missing)}, on the nets that set its pads' levels; "
+            "fix those nets in the scenario, or model what drives them with its "
+            "reference",
+        )
+        return
+    guessed = undecided_fets(circuit, solution, None, lnets)
+    if guessed:
+        seen.once(
+            "gate",
+            f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: "
+            + "; ".join(guessed),
+        )
+        return
+    family = FAMILY[plan.kind or FET]
+    for number, element in enumerate(plan.elements):
+        for name, plus, minus, absolute in QUANTITIES[family]:
+            v = float(
+                solution[nl.net(ref, element[plus])]
+                - solution[nl.net(ref, element[minus])]
+            )
+            v = abs(v) if absolute else v
+            key = (number, name)
+            if key not in seen.worst or v > seen.worst[key][0]:
+                seen.worst[key] = (v, index)
+
+
+def _verdict(
+    nl: Netlist, ref: str, plan: Plan, row: Mapping[str, Any] | None, seen: _Seen
+) -> tuple[dict[str, Any], list[str]]:
+    """Return a judged part's record and problems, from what the scenarios showed."""
+    kind = plan.kind or FET
+    mpn = mpn_of(nl, ref)
+    target = DEFAULT_TARGET.get(kind)
+    if row is not None and "derate" in row:
+        target = row["derate"]
+    entry: dict[str, Any] = {"kind": kind, "mpn": mpn, "target": target}
+    if kind == CLAMP and row is not None:
+        entry["vz"] = row["vz"]
+    problems: list[str] = []
+    if row is None:
+        problems.append(
+            f"no voltage rating on file for {ref} "
+            + (f"({mpn}): add a SEMI_VRATED row" if mpn else "(no MPN)")
+        )
+    problems += seen.problems
+    several = row is not None and "elements" in row
+    records = []
+    for number in range(len(plan.elements)):
+        who = f"{ref} element {number + 1}" if several else ref
+        quantities: dict[str, Any] = {}
+        for name, _plus, _minus, _abs in QUANTITIES[FAMILY[kind]]:
+            v, index = seen.worst.get((number, name), (None, None))
+            rated = row.get(RATING_KEY[(kind, name)]) if row is not None else None
+            shown = None if v is None else round(v, 3)
+            if kind == CLAMP:
+                limit = None if rated is None else rated * (1 + CLAMP_TOLERANCE)
+                quantities[name] = {
+                    "v": shown,
+                    "vz": rated,
+                    "limit_v": None if limit is None else round(limit, 4),
+                    "scenario": index,
+                }
+                if v is not None and limit is not None and v > limit:
+                    problems.append(
+                        f"{who} is a clamp (vz {rated:g} V) but the model shows "
+                        f"{v:.2f} V across it in STRESS_SCENARIOS[{index}]: the DC "
+                        "model has no breakdown, so this solve is not the board's; fix "
+                        "the clamped net at its clamped voltage in that scenario, or "
+                        "model the breakdown as a diode from cathode to anode with vf "
+                        f"{rated:g} V"
+                    )
+                continue
+            limit = None if rated is None or target is None else target * rated
+            quantities[name] = {
+                "v": shown,
+                "rated": rated,
+                "limit_v": None if limit is None else round(limit, 4),
+                "scenario": index,
+            }
+            if v is not None and limit is not None and v > limit:
+                problems.append(
+                    f"{who} {LABELS[name]} reaches {v:.2f} V in STRESS_SCENARIOS"
+                    f"[{index}], over {target:g} of its {rated:g} V rating "
+                    f"({limit:.2f} V)"
+                )
+        records.append(quantities)
+    if several:
+        entry["elements"] = records
+    else:
+        entry.update(records[0])
+    return entry, problems
+
+
 def judge(
     nl: Netlist,
     table: Mapping[str, Any],
     attempts: Iterable[tuple[int, Any, Exception | None]],
+    declared: Mapping[str, str] | None = None,
 ) -> SemiReport:
     """Judge every semiconductor over the stress scenarios; return the record.
 
     ``attempts`` is what ``stress.stress_attempts`` yields: ``(index, solution or
-    None, error or None)`` per ``STRESS_SCENARIOS`` row. A solution's circuit is
-    ``solution.c``.
+    None, error or None)`` per ``STRESS_SCENARIOS`` row; each solution is judged as it
+    arrives (its circuit is ``solution.c``), so a project whose scenarios share one
+    circuit is judged on each one's own state. ``declared`` is ``SEMI_NOT_JUDGED``.
     """
     report = SemiReport()
-    solved: list[tuple[int, Any]] = []
+    declared = dict(declared or {})
+
+    def row_of(ref: str) -> Mapping[str, Any] | None:
+        mpn = mpn_of(nl, ref)
+        return table.get(mpn) if mpn else None
+
+    for ref in sorted(declared, key=natkey):
+        if ref not in nl.parts:
+            report.problems.append(
+                f"SEMI_NOT_JUDGED names {ref}, which is not in the design"
+            )
+    skipped = {r for r in declared if r in nl.parts and row_of(r) is None}
+    report.declared = {r: declared[r] for r in sorted(skipped, key=natkey)}
+    static = _static_candidates(nl, table) - skipped
+    plans: dict[str, Plan] = {}
+    seen: dict[str, _Seen] = {}
+    solved: list[int] = []
     for index, solution, error in attempts:
         if error is not None or solution is None:
             report.unsolved.append(index)
@@ -320,103 +588,34 @@ def judge(
                 f"STRESS_SCENARIOS[{index}] could not be solved: "
                 f"{type(error).__name__}: {error}"
             )
-        else:
-            solved.append((index, solution))
-    judged = judged_parts(nl, table, [s.c for _, s in solved])
+            continue
+        now = _modelled_now(nl, solution.c) - skipped
+        for ref in sorted(static | now, key=natkey):
+            if ref not in plans:
+                plans[ref] = plan_part(nl, ref, row_of(ref))
+                seen[ref] = _Seen()
+            if plans[ref].kind is not None:
+                _observe(nl, ref, plans[ref], index, solution, seen[ref])
+        solved.append(index)
+    for ref in static - set(plans):
+        plans[ref] = plan_part(nl, ref, row_of(ref))
+        seen[ref] = _Seen()
+    judged = sorted(plans, key=natkey)
     if judged and not solved:
         report.problems.append(
             f"no STRESS_SCENARIOS row was solved, so {', '.join(judged)} "
             "could not be judged: give the operating points that stress them hardest"
         )
     for ref in judged:
-        _judge_part(nl, table, ref, solved, report)
-    return report
-
-
-def _judge_part(
-    nl: Netlist,
-    table: Mapping[str, Any],
-    ref: str,
-    solved: list[tuple[int, Any]],
-    report: SemiReport,
-) -> None:
-    """Judge one part over the solved scenarios, adding its record and problems."""
-    kind_name = nl.kind(ref)
-    mpn = mpn_of(nl, ref)
-    row = table.get(mpn) if mpn else None
-    pins = resolve(nl, ref, row)
-    if pins.kind is None:
-        why = f"{ref} ({kind_name}) cannot be judged: {pins.problem}"
-        if row is None or "pins" not in row:
-            why += f"; {_hint(nl, ref)}"
-        report.not_judged[ref] = why
-        report.problems.append(why)
-        return
-    nets = {t: nl.net(ref, p) for t, p in pins.pads.items()}
-    target = row.get("derate", DERATE_DEFAULT) if row is not None else DERATE_DEFAULT
-    entry: dict[str, Any] = {"kind": pins.kind, "mpn": mpn, "target": target}
-    problems: list[str] = []
-    worst: dict[str, tuple[float, int]] = {}
-    for index, solution in solved:
-        held = element_nets(solution.c).get(ref, set())
-        left = [
-            f"pad {pins.pads[t]} ({t.upper()}) on {n}"
-            for t, n in sorted(nets.items())
-            if n not in held
-        ]
-        if left:
-            problems.append(
-                f"{ref} ({kind_name}) is not modelled on {', '.join(left)} in "
-                f"STRESS_SCENARIOS[{index}]: dc.build does not model this symbol, so "
-                "the voltage across it is not the board's; add it in "
-                "circuits.scenario with ref "
-                f"{ref!r} (circuit.D(anode net, cathode net, vf, ref={ref!r}) for a "
-                "diode, a circuit.fets entry for a FET)"
-            )
-            break
-        floating = [
-            f"pad {pins.pads[t]} ({t.upper()}) on {n}"
-            for t, n in sorted(nets.items())
-            if solution.floating(n)
-        ]
-        if floating:
-            problems.append(
-                f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: "
-                f"{', '.join(floating)} {'is' if len(floating) == 1 else 'are'} "
-                "floating there (its 0 V is the solver's "
-                "leak); fix the net that drives it in that scenario, or give it a "
-                "pull"
-            )
+        plan, row = plans[ref], row_of(ref)
+        if plan.kind is None:
+            why = f"{ref} ({nl.kind(ref)}) cannot be judged: {plan.problem}"
+            if row is None or not ("pins" in row or "elements" in row):
+                why += f"; {_hint(nl, ref)}"
+            report.not_judged[ref] = why
+            report.problems.append(why)
             continue
-        for name, plus, minus in QUANTITIES[pins.kind]:
-            v = abs(solution[nets[plus]] - solution[nets[minus]])
-            if name not in worst or v > worst[name][0]:
-                worst[name] = (v, index)
-    for name, _plus, _minus in QUANTITIES[pins.kind]:
-        rated = row.get(RATING_KEY[name]) if row is not None else None
-        v, index = worst.get(name, (None, None))
-        entry[name] = {
-            "v": None if v is None else round(float(v), 3),
-            "rated": rated,
-            "limit_v": None if rated is None else round(target * rated, 4),
-            "scenario": index,
-        }
-        if v is not None and rated is not None and v > target * rated:
-            problems.append(
-                f"{ref} |{_label(name)}| reaches {v:.2f} V in STRESS_SCENARIOS"
-                f"[{index}], over {target:g} of its {rated:g} V rating "
-                f"({target * rated:.2f} V)"
-            )
-    if row is None:
-        problems.insert(
-            0,
-            f"no voltage rating on file for {ref} "
-            + (f"({mpn}): add a SEMI_VRATED row" if mpn else "(no MPN)"),
-        )
-    report.parts[ref] = entry
-    report.problems.extend(problems)
-
-
-def _label(name: str) -> str:
-    """Return how a message writes a quantity: ``Vds``, ``Vgs``, ``V(K) - V(A)``."""
-    return {"vds": "Vds", "vgs": "Vgs", "vr": "V(K) - V(A)"}[name]
+        entry, problems = _verdict(nl, ref, plan, row, seen[ref])
+        report.parts[ref] = entry
+        report.problems.extend(problems)
+    return report

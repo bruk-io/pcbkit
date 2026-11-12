@@ -152,6 +152,7 @@ TABLE_GROUP = {
     "ENABLE_LINKS": "power",
     "FAULT_STATES": "power",
     "SEMI_VRATED": "power",
+    "SEMI_NOT_JUDGED": "power",
     "SUPPLY_NETS": "power",
     "I2C_EXPECTED": "bringup",
 }
