@@ -907,10 +907,27 @@ description with a space in it), judged after bom.py's overrides.
 | `PINOUT` | `{ref: {pad: datasheet function}}`. Optional `PIN_ALIASES` maps the symbol's spelling to the datasheet's (`None`: an unnamed pin), and `ABSENT_REFS` `{ref: reason}` skips a part this revision does not carry. A part that is neither in the design nor listed compares nothing, with a warning. |
 | `STRESS_SCENARIOS` | Keyword arguments of `circuits.scenario` for the operating points that stress parts hardest. |
 | `RESISTOR_POWER_W` | `{"default": watts, ref: watts}`: resistors must stay under half. |
-| `CAP_VRATED` | Capacitor MPN to rated volts: capacitors must stay under 80 %. |
+| `CAP_VRATED` | Capacitor MPN to rated volts: capacitors must stay under 80 %, or under the share `CAP_DERATE` gives the part. |
 | `LED_REFS`, `LED_SCENARIO`, `LED_I_MIN`, `LED_I_MAX` | The LEDs (a name the scenario adds stands for an off-board one), the conditions, and the current window in amps. |
 | `SUPPLY_SCENARIO`, `SUPPLY_PINS`, `SUPPLY_LIMITS` | Rows `(ref, pin, (min V, max V))` for supply pins, and rows `(what, value, "<=" or "<", limit)` (or a function of the netlist that returns one) for the limits a design range must fit inside. |
 | `I2C_BUSES`, `I2C_IOL` | As in `fab`, and the sink current per speed (A). Optional `I2C_PULLUP_NET` and `I2C_VDD` (default 3.3). |
+
+Optional table of the `circuit` group (its row has a Shape cell, as each table
+that has its own check does):
+
+| Name | Shape | Holds |
+|---|---|---|
+| `CAP_DERATE` | `{mpn: fraction in (0, 0.8]}` | The share of its rated voltage a part may reach, per MPN, where 0.8 is too much (a tantalum on a rail that can be hot-plugged: `{"TANT-10U": 0.5}`). 0.8 when the MPN is absent, and a fraction above 0.8 is refused, so the table can only tighten. Every MPN named must have a `CAP_VRATED` row, or the capacitor check fails naming it. |
+
+Every `circuit` check records before it asserts, so `results.json` holds each part's
+numbers even when the check fails (`pcbkit report` writes a table of more than eight
+entries as `(N entries: see results.json)`):
+
+| Check | Records |
+|---|---|
+| `test_resistor_power_derated` | `hottest resistor mW`: the four hottest. `resistor power`: `{ref: {"mW", "limit_mW", "scenario"}}` for each judged resistor (not the parts of a multi-element part or elements a scenario adds by name), where `scenario` is the index into `STRESS_SCENARIOS` of its worst case. |
+| `test_capacitor_voltage_derated` | `cap stress (V, rated)`: the four most stressed, left out when a capacitor has no rating or is reverse biased. `capacitor voltage`: `{ref: {"v", "rated", "target", "mpn", "scenario"}}` for every capacitor, with `rated` null when `CAP_VRATED` has no row, `target` the share of the rating allowed (0.8 or the `CAP_DERATE` row) and `scenario` as above. A failure is reported in the order reverse bias, missing rating, over its target. |
+| `test_supply_pins_in_range` | `supply pins`: `{"U1 pad 1": {"v", "min", "max"}}`. `supply limits`: `{what: {"value", "op", "limit", "ok"}}`. A second row with the same name is keyed `name #2`. |
 
 **`esp32s3`** (a board that carries an ESP32-S3-DevKitC-1 in sockets; the chip's own
 facts, `RESERVED`, `UART0`, `ADC1`, `INPUT_ONLY`, `STRAPS`, `ESP32_VDD`, `ESP32_VIH`,
@@ -962,7 +979,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 
 | Name | Shape | Read by |
 |---|---|---|
-| `CAP_DERATE` | `{mpn: fraction in (0, 0.8]}` | `circuit` capacitor derating: a fraction per MPN, 0.8 when absent, so it can only tighten |
 | `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | fault-state pins (`power`) |
 | `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count; the nets a path names should be members of `nets` (the check says so, this shape does not) |
 | `PIN_NETS` | `{ref: {pad: net or None}}` | port map and mis-plug (`ports`) |

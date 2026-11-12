@@ -1016,7 +1016,6 @@ _SEMI_FET_PINS = Record(required={"g": Pad(), "d": Pad(), "s": Pad()})
 _SEMI_DIODE_PINS = Record(required={"a": Pad(), "k": Pad()})
 
 PROPOSED: dict[str, Shape] = {
-    "CAP_DERATE": DictOf(Text("mpn"), Fraction(hi=0.8)),
     "FAULT_STATES": DictOf(
         Text("condition"),
         Record(

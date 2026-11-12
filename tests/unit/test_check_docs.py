@@ -130,26 +130,41 @@ def proposed_block() -> str:
     return section[start : end if end != -1 else len(section)]
 
 
+def table_rows(text: str) -> dict[str, list[str]]:
+    """Return the cells of each ``| `NAME` | ... |`` row of ``text``, by table name."""
+    rows: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        if line.startswith("| `"):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            rows.setdefault(cells[0].strip("`"), cells)
+    return rows
+
+
 def test_every_registered_table_that_is_not_an_existing_one_has_a_generated_row() -> (
     None
 ):
-    """Show ``describe(shape)`` word for word in the row named for each new table."""
+    """Show ``describe(shape)`` word for word in the Shape cell of each new table.
+
+    A table whose check is not written is in the proposed-tables block, and the block
+    holds exactly those. A table that has moved to its engine module has its row in its
+    group's block, three cells wide (name, shape, holds), and is no longer in the
+    proposed block.
+    """
     from pcbkit.check import tables
 
     new = {n: s for n, s in tables.registry().items() if n not in tables.EXISTING}
-    assert new, "no proposed tables: the test would pass vacuously"
-    rows = {}
-    for line in proposed_block().splitlines():
-        if line.startswith("| `"):
-            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-            rows[cells[0].strip("`")] = cells
-    missing = sorted(set(new) - set(rows))
+    assert new, "no new tables: the test would pass vacuously"
+    proposed = table_rows(proposed_block())
+    missing = sorted(set(tables.PROPOSED) - set(proposed))
     assert not missing, f"no row in the proposed-tables block for {missing}"
-    stale = sorted(set(rows) - set(new))
-    assert not stale, f"rows for tables that are not registered: {stale}"
+    stale = sorted(set(proposed) - set(tables.PROPOSED))
+    assert not stale, f"rows in the proposed-tables block for tables built: {stale}"
+    rows = table_rows(checks_section())
     for name, shape in new.items():
-        assert len(rows[name]) == 3, f"{name}: a row is name | shape | read by"
-        assert rows[name][1] == f"`{tables.describe(shape)}`", name
+        assert name in rows, f"no row for {name} in the checks section"
+        cells = proposed[name] if name in proposed else rows[name]
+        assert len(cells) == 3, f"{name}: a row is name | shape | read by"
+        assert cells[1] == f"`{tables.describe(shape)}`", name
 
 
 def test_every_existing_table_with_a_shape_is_named_in_the_docs() -> None:

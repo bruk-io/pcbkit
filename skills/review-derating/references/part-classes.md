@@ -17,7 +17,7 @@ House targets below are starting defaults. Where the user has set a different ta
 - **Tantalum (MnO2):** fails short on surge. House target: working voltage at most 50% of rating on any rail that can be hot-plugged or sees surges.
 - **Polymer tantalum, polymer aluminium, aluminium electrolytic:** target at most 80% of rating at worst-case voltage. Check ripple current rating at the hottest ambient; electrolytic life halves roughly every 10 C rise.
 - **Look up:** the ripple current rating and its temperature multiplier in the datasheet.
-- **Written to:** `CAP_VRATED`. The built-in check holds every capacitor to 80 %; a tantalum's 50 % target is met by writing 62.5 % of its rating in the table (80 % of that is 50 %), with a comment saying so.
+- **Written to:** `CAP_VRATED` (the rating as printed) and, for a 50 % target, `CAP_DERATE = {mpn: 0.5}`. The built-in check holds every capacitor to 80 % unless `CAP_DERATE` gives its part number a smaller share; a share above 0.8 is refused.
 
 ## FETs and diodes
 

@@ -116,9 +116,27 @@ def _cell(text: object) -> str:
     return " ".join(str(text).split()).replace("|", "/")
 
 
+# A recorded value with more entries than this is not written out in the report.
+MAX_ENTRIES = 8
+
+
+def _number(value: object) -> str:
+    """Return one recorded value as text: a long table is counted, not listed.
+
+    A dict, list or tuple of more than ``MAX_ENTRIES`` entries (a check that records
+    one row per part) shows as ``(N entries: see results.json)``, so the report stays
+    readable; results.json keeps all of it.
+    """
+    if isinstance(value, (dict, list, tuple)) and len(value) > MAX_ENTRIES:
+        return f"({len(value)} entries: see results.json)"
+    return str(value)
+
+
 def _numbers(entry: dict[str, Any]) -> str:
     """Return a check's recorded numbers as one cell: ``key: value; key: value``."""
-    return _cell("; ".join(f"{k}: {v}" for k, v in entry.get("numbers", {}).items()))
+    return _cell(
+        "; ".join(f"{k}: {_number(v)}" for k, v in entry.get("numbers", {}).items())
+    )
 
 
 def render(data: dict[str, Any]) -> str:

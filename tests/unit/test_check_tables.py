@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -345,10 +346,31 @@ def test_a_table_declared_twice_is_an_error_naming_both_places(
         tables.registry(pkg)
 
 
+def declared_in_source() -> set[str]:
+    """Return the engine modules that assign ``TABLES`` at module level, by source."""
+    folder = Path(tables.__file__).parent
+    return {
+        f"pcbkit.check.{path.stem}"
+        for path in folder.glob("*.py")
+        if re.search(r"^TABLES\b", path.read_text(encoding="utf-8"), re.M)
+    }
+
+
 def test_the_real_registry_imports_only_modules_that_declare_tables() -> None:
-    """Run on the real package without importing pytest-bound or pcbnew modules."""
-    assert tables.engine_modules() == []
-    assert set(tables.registry()) == set(tables.EXISTING) | set(tables.PROPOSED)
+    """Run on the real package without importing pytest-bound or pcbnew modules.
+
+    The engine modules found are exactly those whose source assigns ``TABLES``, and
+    none is a built-in check module or a pack.
+    """
+    found = tables.engine_modules()
+    assert {m.__name__ for m in found} == declared_in_source() != set()
+    assert not [
+        m for m in found if ".builtin." in m.__name__ or ".packs." in m.__name__
+    ]
+    expected = set(tables.EXISTING) | set(tables.PROPOSED)
+    for module in found:
+        expected |= set(module.TABLES)
+    assert set(tables.registry()) == expected
 
 
 def test_no_name_is_in_both_the_existing_and_the_proposed_shapes() -> None:
@@ -413,6 +435,12 @@ def test_check_module_skips_a_table_the_module_does_not_define() -> None:
 
 # --- the proposed tables ----------------------------------------------------------
 
+# Every table that is not an existing one: the proposed ones, and those that have
+# moved into the engine module of their check.
+NEW_TABLES = {
+    n: shape for n, shape in tables.registry().items() if n not in tables.EXISTING
+}
+
 GOOD_PROPOSED = {
     "CAP_DERATE": {"CAP-1": 0.5},
     "FAULT_STATES": {"c": {"scenario": {"vin": 0}, "pins": [("U2", 5, (0, 0.4))]}},
@@ -447,15 +475,15 @@ GOOD_PROPOSED = {
 }
 
 
-def test_the_good_example_covers_every_proposed_table() -> None:
-    """Keep an example per proposed table, so none goes untested."""
-    assert set(GOOD_PROPOSED) == set(tables.PROPOSED)
+def test_the_good_example_covers_every_new_table() -> None:
+    """Keep an example per proposed or engine table, so none goes untested."""
+    assert set(GOOD_PROPOSED) == set(NEW_TABLES)
 
 
-@pytest.mark.parametrize("name", sorted(tables.PROPOSED))
-def test_each_proposed_table_accepts_its_example(name: str) -> None:
+@pytest.mark.parametrize("name", sorted(NEW_TABLES))
+def test_each_new_table_accepts_its_example(name: str) -> None:
     """Accept a table written as the shape says."""
-    assert tables.validate(name, GOOD_PROPOSED[name], tables.PROPOSED[name]) == []
+    assert tables.validate(name, GOOD_PROPOSED[name], NEW_TABLES[name]) == []
 
 
 BAD_PROPOSED = {
@@ -483,17 +511,17 @@ BAD_PROPOSED = {
 }
 
 
-@pytest.mark.parametrize("name", sorted(tables.PROPOSED))
-def test_each_proposed_table_refuses_a_wrong_example(name: str) -> None:
+@pytest.mark.parametrize("name", sorted(NEW_TABLES))
+def test_each_new_table_refuses_a_wrong_example(name: str) -> None:
     """Refuse one mistake per table, with an error that starts at its path."""
-    found = tables.validate(name, BAD_PROPOSED[name], tables.PROPOSED[name])
+    found = tables.validate(name, BAD_PROPOSED[name], NEW_TABLES[name])
     assert found
     assert all(line.startswith(f"specs.{name}") for line in found)
 
 
-def test_the_bad_example_covers_every_proposed_table() -> None:
+def test_the_bad_example_covers_every_new_table() -> None:
     """Keep a refused example per table."""
-    assert set(BAD_PROPOSED) == set(tables.PROPOSED)
+    assert set(BAD_PROPOSED) == set(NEW_TABLES)
 
 
 # --- pcbkit specs -----------------------------------------------------------------

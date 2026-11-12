@@ -435,6 +435,28 @@ def test_render_writes_numbers_as_key_colon_value_joined_by_semicolons() -> None
     assert row[2] == "volts: 3.3; count: 4; zero: 0; flag: False; rows: [1, 2]"
 
 
+def test_render_counts_a_value_of_more_than_eight_entries_and_lists_eight() -> None:
+    """Show ``(N entries: see results.json)`` for a long table, the short ones whole."""
+    nine = {f"R{i}": i for i in range(9)}
+    eight = {f"R{i}": i for i in range(8)}
+    item = entry(
+        "passed",
+        numbers={
+            "nine": nine,
+            "eight": eight,
+            "long list": list(range(12)),
+            "long tuple": tuple(range(9)),
+            "text": "x" * 20,
+        },
+    )
+    row = one_row("checks/test_a.py::test_x", item)
+    assert row[2] == (
+        f"nine: (9 entries: see results.json); eight: {eight}; "
+        "long list: (12 entries: see results.json); "
+        "long tuple: (9 entries: see results.json); text: " + "x" * 20
+    )
+
+
 def test_render_shows_one_exact_row() -> None:
     """Lay a row out as ``| name | result | numbers |``."""
     data = make_results(

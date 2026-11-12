@@ -12,7 +12,9 @@ gives, in ``specs.py``:
   passes, with a warning.
 * ``STRESS_SCENARIOS``: keyword arguments for ``circuits.scenario`` for the operating
   conditions that stress parts hardest; ``RESISTOR_POWER_W``: ``{"default": watts, ref:
-  watts}``; ``CAP_VRATED``: capacitor MPN to rated volts.
+  watts}``; ``CAP_VRATED``: capacitor MPN to rated volts; optional ``CAP_DERATE``:
+  ``{mpn: fraction}``, a share of the rating tighter than 0.8 (at most 0.8) for a part
+  whose class needs it.
 * ``LED_REFS``, ``LED_SCENARIO``, ``LED_I_MIN``, ``LED_I_MAX``: the LEDs (a name the
   scenario adds, such as ``"panel_led"``, stands for an off-board one), the conditions
   and the current window in amps.
@@ -33,14 +35,14 @@ from __future__ import annotations
 
 import re
 import warnings
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
-from pcbkit.check.dc import Solution
-from pcbkit.check.netlist import Netlist, parse_value
+from pcbkit.check import tables
+from pcbkit.check.netlist import Netlist, natkey, parse_value
 from pcbkit.check.plugin import ProjectModule, spec_params
+from pcbkit.check.stress import CAP_DERATE_DEFAULT, stress_solutions
 
 # Symbol pin names that mean "no name": the checks skip them.
 GENERIC_ALIASES: dict[str, str | None] = {"~": None, "": None}
@@ -98,64 +100,130 @@ def test_symbol_pin_functions_match_datasheet(
 
 
 # ------------------------------------------------------------------ component stress
-def _stress_scenarios(
-    nl: Netlist, specs: ProjectModule, circuits: ProjectModule
-) -> Iterator[Solution]:
-    """Yield the solved operating points that stress parts hardest."""
-    for keywords in specs.STRESS_SCENARIOS:
-        yield circuits.scenario(nl, **keywords).solve()
+def _unique(table: dict[str, Any], key: str) -> str:
+    """Return ``key``, or ``key #2`` and so on when a row already took it."""
+    if key not in table:
+        return key
+    n = 2
+    while f"{key} #{n}" in table:
+        n += 1
+    return f"{key} #{n}"
 
 
 def test_resistor_power_derated(
     nl: Netlist, record: Any, specs: ProjectModule, circuits: ProjectModule
 ) -> None:
-    """Keep every resistor under half its power rating at the worst operating point."""
-    worst: dict[str, float] = {}
-    for solved in _stress_scenarios(nl, specs, circuits):
+    """Keep every resistor under half its power rating at the worst operating point.
+
+    Records ``hottest resistor mW`` (the four hottest) and ``resistor power``: for each
+    judged resistor, ``{"mW", "limit_mW", "scenario"}``, where ``scenario`` is the index
+    into ``STRESS_SCENARIOS`` of its worst case.
+    """
+    worst: dict[str, tuple[float, int]] = {}
+    for index, solved in stress_solutions(nl, specs, circuits):
         for ref, p in solved.resistor_power().items():
-            worst[ref] = max(worst.get(ref, 0), p)
+            if ref not in worst or p > worst[ref][0]:
+                worst[ref] = (p, index)
     rating = dict(specs.RESISTOR_POWER_W)
     default = rating["default"]
     # the parts of multi-element parts (names with a dot) and elements a scenario adds
     # by name (lower case) are not judged on their own
+    judged = [r for r in worst if not r[0].islower() and "." not in r]
     bad = {
-        r: round(p * 1e3, 1)
-        for r, p in worst.items()
-        if not r[0].islower() and "." not in r and p > 0.5 * rating.get(r, default)
+        r: round(worst[r][0] * 1e3, 1)
+        for r in worst
+        if r in judged and worst[r][0] > 0.5 * rating.get(r, default)
     }
-    top = sorted(worst.items(), key=lambda kv: -kv[1])[:4]
-    record("hottest resistor mW", {r: round(p * 1e3, 2) for r, p in top})
+    top = sorted(worst.items(), key=lambda kv: -kv[1][0])[:4]
+    record("hottest resistor mW", {r: round(p * 1e3, 2) for r, (p, _) in top})
+    record(
+        "resistor power",
+        {
+            r: {
+                "mW": round(worst[r][0] * 1e3, 2),
+                "limit_mW": round(0.5 * rating.get(r, default) * 1e3, 2),
+                "scenario": worst[r][1],
+            }
+            for r in sorted(judged, key=natkey)
+        },
+    )
     assert not bad, f"over 50% of rating (mW): {bad}"
 
 
 def test_capacitor_voltage_derated(
     nl: Netlist, record: Any, specs: ProjectModule, circuits: ProjectModule
 ) -> None:
-    """Keep capacitors under 80 % of their rated voltage, polarised ones forward."""
-    worst: dict[str, float] = {}
+    """Keep capacitors under 80 % of their rated voltage, polarised ones forward.
+
+    ``CAP_DERATE`` may set a tighter share for a part number. Records ``cap stress (V,
+    rated)`` (the four most stressed, only when every capacitor has a rating and none is
+    reverse biased) and
+    ``capacitor voltage``: for each capacitor, ``{"v", "rated", "target", "mpn",
+    "scenario"}``, before any failure is raised. ``rated`` is null when the table has no
+    row, ``target`` is the share of the rating allowed and ``scenario`` the index into
+    ``STRESS_SCENARIOS`` of the worst case.
+
+    A failure is raised in the order it always was: a reverse-biased polarised
+    capacitor, then a missing rating, then one over its target.
+    """
+    derate = tables.read(specs, "CAP_DERATE") if "CAP_DERATE" in specs else {}
+    worst: dict[str, tuple[float, int]] = {}
+    reverse: tuple[str, float] | None = None  # the first one found, as the old assert
     caps = nl.by_kind("Device:C", "Device:C_Polarized")
-    for solved in _stress_scenarios(nl, specs, circuits):
-        for ref in caps:
-            v = solved[nl.net(ref, 1)] - solved[nl.net(ref, 2)]
-            if nl.kind(ref) == "Device:C_Polarized":
-                assert v >= -0.3, f"{ref} reverse biased ({v:.2f} V)"
-            worst[ref] = max(worst.get(ref, 0), abs(v))
+    try:
+        for index, solved in stress_solutions(nl, specs, circuits):
+            for ref in caps:
+                v = solved[nl.net(ref, 1)] - solved[nl.net(ref, 2)]
+                if (
+                    reverse is None
+                    and nl.kind(ref) == "Device:C_Polarized"
+                    and not v >= -0.3
+                ):
+                    reverse = (ref, v)
+                if ref not in worst or abs(v) > worst[ref][0]:
+                    worst[ref] = (abs(v), index)
+    except Exception:  # noqa: BLE001 - a later solve that fails hides nothing
+        # The check used to stop at the first reverse-biased capacitor, so a later
+        # scenario that cannot be solved never changed what it said; it still does not.
+        if reverse is None:
+            raise
     rated_by_mpn = specs.CAP_VRATED
-    bad = {}
-    for ref, v in worst.items():
-        mpn = nl.parts[ref]["fields"].get("MPN", "")
-        rated = rated_by_mpn.get(mpn)
-        assert rated, f"no voltage rating on file for {ref} ({mpn})"
-        if v > 0.8 * rated:
-            bad[ref] = (round(v, 2), rated)
-    top = sorted(worst, key=lambda r: -worst[r])[:4]
+    mpns = {r: nl.parts[r]["fields"].get("MPN", "") for r in worst}
+    rated = {r: rated_by_mpn.get(mpns[r]) for r in worst}
+    target = {r: derate.get(mpns[r], CAP_DERATE_DEFAULT) for r in worst}
+    if reverse is None and all(rated.values()):
+        # recorded first, as before the per-part table was added, and only when the
+        # check got this far
+        top = sorted(worst, key=lambda r: -worst[r][0])[:4]
+        record(
+            "cap stress (V, rated)",
+            {r: (round(worst[r][0], 2), rated[r]) for r in top},
+        )
     record(
-        "cap stress (V, rated)",
+        "capacitor voltage",
         {
-            r: (round(worst[r], 2), rated_by_mpn[nl.parts[r]["fields"]["MPN"]])
-            for r in top
+            r: {
+                "v": round(worst[r][0], 2),
+                "rated": rated[r] or None,
+                "target": target[r],
+                "mpn": mpns[r],
+                "scenario": worst[r][1],
+            }
+            for r in sorted(worst, key=natkey)
         },
     )
+    if reverse is not None:
+        ref, v = reverse
+        assert v >= -0.3, f"{ref} reverse biased ({v:.2f} V)"
+    for ref in worst:
+        assert rated[ref], f"no voltage rating on file for {ref} ({mpns[ref]})"
+    bad = {
+        ref: (round(v, 2), rated[ref])
+        for ref, (v, _) in worst.items()
+        if v > target[ref] * rated[ref]
+    }
+    unrated = sorted(m for m in derate if m not in rated_by_mpn)
+    assert not unrated, f"CAP_DERATE names {unrated}, which have no row in CAP_VRATED"
     assert not bad, bad
 
 
@@ -173,23 +241,49 @@ def test_led_currents(
 
 
 def test_supply_pins_in_range(
-    nl: Netlist, specs: ProjectModule, circuits: ProjectModule
+    nl: Netlist, record: Any, specs: ProjectModule, circuits: ProjectModule
 ) -> None:
-    """Hold each supply pin in its datasheet range and the design inside its limits."""
+    """Hold each supply pin in its datasheet range and the design inside its limits.
+
+    Records ``supply pins`` (``{"U1 pad 1": {"v", "min", "max"}}``) and ``supply
+    limits`` (``{what: {"value", "op", "limit", "ok"}}``) before any failure is raised.
+    """
     solved = circuits.scenario(nl, **specs.SUPPLY_SCENARIO).solve()
     problems = []
+    pins: dict[str, Any] = {}
     for ref, pin, (low, high) in specs.SUPPLY_PINS:
         v = solved[nl.net(ref, pin)]
+        pins[_unique(pins, f"{ref} pad {pin}")] = {
+            "v": round(v, 3),
+            "min": low,
+            "max": high,
+        }
         if not low <= v <= high:
             problems.append(
                 f"{ref} pin {pin} sees {v:.2f} V, allowed {low} to {high} V"
             )
+    limits: dict[str, Any] = {}
+    bad_operator = None
     for entry in specs.SUPPLY_LIMITS:
         what, value, op, limit = entry(nl) if callable(entry) else entry
         if op not in ("<", "<="):
-            raise ValueError(f"SUPPLY_LIMITS: {what!r}: operator {op!r} is not < or <=")
-        if not (value < limit if op == "<" else value <= limit):
+            bad_operator = bad_operator or (
+                f"SUPPLY_LIMITS: {what!r}: operator {op!r} is not < or <="
+            )
+            continue
+        ok = value < limit if op == "<" else value <= limit
+        limits[_unique(limits, what)] = {
+            "value": value,
+            "op": op,
+            "limit": limit,
+            "ok": ok,
+        }
+        if not ok:
             problems.append(f"{what}: {value:g} {op} {limit:g} is false")
+    record("supply pins", pins)
+    record("supply limits", limits)
+    if bad_operator is not None:
+        raise ValueError(bad_operator)
     assert not problems, problems
 
 

@@ -860,3 +860,242 @@ def test_a_part_that_is_absent_skips_with_its_reason_or_passes_with_a_warning(
     result = run(root, "test_symbol_pin_functions")
     assert result.outcome("[U9]") == "skipped"
     assert result.entry("[U9]")["reason"] == "moved to a module"
+
+
+# --- the circuit records and CAP_DERATE ---------------------------------------------
+
+# What the toy's resistor and capacitor checks recorded before the per-part records
+# were added: the new records must leave these as they were, key and value.
+TOP_FOUR_RESISTORS = '{"R1": 4.55, "R4": 0.14, "R5": 0.07, "R6": 0.0}'
+TOP_FOUR_CAPS = '{"C1": [3.3, 10.0]}'
+
+
+def _tantalum(toy: Toy, pos: str = "VIN", neg: str = "GND") -> None:
+    """Add a polarised capacitor, C2, across the toy's 5 V rail (5.5 V at worst)."""
+    toy.add(
+        "C2",
+        "10u",
+        "Device:C_Polarized",
+        {"1": (pos, "+"), "2": (neg, "-")},
+        MPN="TANT-10U",
+    )
+
+
+# the tantalum is rated 9 V, so 5.5 V is 61 % of it: under 80 %, over 50 %
+TANT_VRATED = ("CAP_VRATED = {", 'CAP_VRATED = {"TANT-10U": 9.0, ')
+
+
+def _circuit_run(
+    tmp_path: Path,
+    name: str,
+    toy: Toy | None = None,
+    swaps: tuple[tuple[str, str], ...] = (),
+    extra: str = "",
+    only: str | None = None,
+) -> Run:
+    """Run the circuit group on a toy with the specs changed as ``swaps`` say."""
+    specs = SPECS
+    for old, new in swaps:
+        assert old in specs, f"the toy specs no longer contain {old!r}"
+        specs = specs.replace(old, new)
+    root = check_toy.write_project(
+        tmp_path / name, toy or check_toy.good(), ["circuit"], specs=specs + extra
+    )
+    return run(root, only)
+
+
+def test_the_top_four_records_of_the_toy_are_what_they_were_before(
+    tmp_path: Path,
+) -> None:
+    """Keep ``hottest resistor mW`` and ``cap stress (V, rated)`` as they were.
+
+    The value is the same text, and the key still comes first in the entry.
+    """
+    result = _circuit_run(tmp_path, "records")
+    assert result.done.returncode == 0, result.done.stdout
+    resistors = result.entry("test_resistor_power_derated")["numbers"]
+    assert list(resistors)[0] == "hottest resistor mW"
+    assert json.dumps(resistors["hottest resistor mW"]) == TOP_FOUR_RESISTORS
+    caps = result.entry("test_capacitor_voltage_derated")["numbers"]
+    assert list(caps)[0] == "cap stress (V, rated)"
+    assert json.dumps(caps["cap stress (V, rated)"]) == TOP_FOUR_CAPS
+
+
+def test_every_resistor_capacitor_supply_pin_and_limit_is_recorded(
+    tmp_path: Path,
+) -> None:
+    """Record each part, with the index of the stress scenario that was its worst."""
+    result = _circuit_run(tmp_path, "records")
+    resistors = result.entry("test_resistor_power_derated")["numbers"]
+    power = resistors["resistor power"]
+    assert list(power) == ["R1", "R2", "R3", "R4", "R5", "R6"]
+    assert power["R1"] == {"mW": 4.55, "limit_mW": 50.0, "scenario": 0}
+    # the divider sees most at 5.5 V, the second scenario
+    assert power["R4"] == {"mW": 0.14, "limit_mW": 50.0, "scenario": 1}
+    assert power["R5"]["scenario"] == 1
+    caps = result.entry("test_capacitor_voltage_derated")["numbers"]
+    assert caps["capacitor voltage"] == {
+        "C1": {"v": 3.3, "rated": 10.0, "target": 0.8, "mpn": "CAP-10U", "scenario": 0}
+    }
+    supply = result.entry("test_supply_pins_in_range")["numbers"]
+    assert supply["supply pins"] == {"U1 pad 1": {"v": 3.3, "min": 2.7, "max": 5.5}}
+    assert supply["supply limits"] == {
+        "the rail is under the regulator's input limit": {
+            "value": 5.5,
+            "op": "<=",
+            "limit": 6.0,
+            "ok": True,
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("check", "key", "swaps", "says"),
+    [
+        (
+            "test_resistor_power_derated",
+            "resistor power",
+            (('"default": 0.100', '"default": 1e-9'),),
+            "over 50% of rating",
+        ),
+        (
+            "test_supply_pins_in_range",
+            "supply pins",
+            (("(2.7, 5.5)", "(3.4, 5.5)"),),
+            "U1 pin 1 sees 3.30 V",
+        ),
+        (
+            "test_supply_pins_in_range",
+            "supply limits",
+            (('5.5, "<=", 6.0', '5.5, "<=", 5.0'),),
+            "is false",
+        ),
+    ],
+    ids=["resistor over rating", "supply pin below range", "limit broken"],
+)
+def test_a_failing_check_still_records_its_parts(
+    tmp_path: Path, check: str, key: str, swaps: tuple[tuple[str, str], ...], says: str
+) -> None:
+    """Record before asserting: the failed check's numbers hold every row."""
+    result = _circuit_run(tmp_path, "failing", swaps=swaps, only=check)
+    entry = result.entry(check)
+    assert entry["outcome"] == "failed"
+    assert says in entry["message"]
+    assert entry["numbers"][key]
+    if key == "resistor power":
+        assert len(entry["numbers"][key]) == 6
+        assert entry["numbers"][key]["R1"]["limit_mW"] == 0.0
+
+
+def test_a_capacitor_with_no_rating_fails_as_before_and_every_cap_is_recorded(
+    tmp_path: Path,
+) -> None:
+    """Keep the message, and record the rated capacitor and the unrated one."""
+    toy = check_toy.good()
+    _tantalum(toy)
+    result = _circuit_run(tmp_path, "unrated", toy, only="test_capacitor_voltage")
+    entry = result.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert "no voltage rating on file for C2 (TANT-10U)" in entry["message"]
+    records = entry["numbers"]["capacitor voltage"]
+    assert set(records) == {"C1", "C2"}
+    assert records["C1"]["rated"] == 10.0
+    assert records["C2"] == {
+        "v": 5.5,
+        "rated": None,
+        "target": 0.8,
+        "mpn": "TANT-10U",
+        "scenario": 1,
+    }
+    # as before, the four most stressed are left out when a rating is missing
+    assert "cap stress (V, rated)" not in entry["numbers"]
+
+
+def test_a_reverse_biased_capacitor_fails_as_before_and_every_cap_is_recorded(
+    tmp_path: Path,
+) -> None:
+    """Keep the message, and still record every capacitor, the reversed one too."""
+    toy = check_toy.good()
+    _tantalum(toy, pos="GND", neg="VIN")
+    swaps = (TANT_VRATED,)
+    result = _circuit_run(
+        tmp_path, "reverse", toy, swaps, only="test_capacitor_voltage"
+    )
+    entry = result.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert "C2 reverse biased (-5.00 V)" in entry["message"]
+    records = entry["numbers"]["capacitor voltage"]
+    assert set(records) == {"C1", "C2"}
+    # every scenario was solved: the 5.5 V one is the larger, so it is the worst case
+    assert records["C2"]["v"] == 5.5
+    assert records["C2"]["scenario"] == 1
+
+
+def test_a_tantalum_at_61_percent_passes_unless_cap_derate_tightens_it(
+    tmp_path: Path,
+) -> None:
+    """Fail the part at 61 % of its rating only when CAP_DERATE asks for 50 %."""
+    toy = check_toy.good()
+    _tantalum(toy)
+    swaps = (TANT_VRATED,)
+    control = _circuit_run(
+        tmp_path, "control", toy, swaps, only="test_capacitor_voltage"
+    )
+    assert control.outcome("test_capacitor_voltage_derated") == "passed"
+    record = control.entry("test_capacitor_voltage_derated")["numbers"]
+    assert record["capacitor voltage"]["C2"]["target"] == 0.8
+    tight = _circuit_run(
+        tmp_path,
+        "tight",
+        toy,
+        swaps,
+        extra='\nCAP_DERATE = {"TANT-10U": 0.5}\n',
+        only="test_capacitor_voltage",
+    )
+    entry = tight.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert "{'C2': (5.5, 9.0)}" in entry["message"]
+    assert entry["numbers"]["capacitor voltage"]["C2"]["target"] == 0.5
+    # the other capacitor keeps 0.8
+    assert entry["numbers"]["capacitor voltage"]["C1"]["target"] == 0.8
+
+
+def test_cap_derate_above_the_default_is_refused_by_name(tmp_path: Path) -> None:
+    """Refuse 0.9, naming the table, the row and the shape."""
+    toy = check_toy.good()
+    _tantalum(toy)
+    result = _circuit_run(
+        tmp_path,
+        "loose",
+        toy,
+        (TANT_VRATED,),
+        extra='\nCAP_DERATE = {"TANT-10U": 0.9}\n',
+        only="test_capacitor_voltage",
+    )
+    entry = result.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert (
+        'specs.CAP_DERATE["TANT-10U"]: expected fraction in (0, 0.8], got 0.9'
+        in entry["message"]
+    )
+    assert "Traceback" not in entry["message"]
+
+
+def test_a_cap_derate_row_with_no_cap_vrated_row_fails_naming_the_mpn(
+    tmp_path: Path,
+) -> None:
+    """Fail when CAP_DERATE names a part number the rating table does not."""
+    result = _circuit_run(
+        tmp_path,
+        "orphan",
+        extra='\nCAP_DERATE = {"NO-SUCH-PART": 0.5}\n',
+        only="test_capacitor_voltage",
+    )
+    entry = result.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert (
+        "CAP_DERATE names ['NO-SUCH-PART'], which have no row in CAP_VRATED"
+        in (entry["message"])
+    )
+    # the existing capacitor is still recorded
+    assert set(entry["numbers"]["capacitor voltage"]) == {"C1"}
