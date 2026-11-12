@@ -105,6 +105,7 @@ SKILL_NAMES = [
     "walk-fault-states",
     "review-derating",
     "review-current-paths",
+    "review-misplug",
 ]
 AGENT_NAMES = ["parts-researcher", "check-writer"]
 
