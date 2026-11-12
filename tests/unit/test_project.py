@@ -338,7 +338,13 @@ BAD_VALUES = [
         "stackup",
         "inner",
         [{"role": "plane", "net": " "}],
-        "expected a non-empty string",
+        "[stackup] inner: entry 0 net: expected a non-empty string",
+    ),
+    (
+        "stackup",
+        "inner",
+        [{"role": "split"}, {"role": "plane", "net": ""}],
+        "[stackup] inner: entry 1 net: expected a non-empty string, got ''",
     ),
     ("stackup", "inner", [{"role": "split", "net": "V"}], "takes no 'net'"),
     ("stackup", "inner", [{"role": "signal", "net": "V"}], "takes no 'net'"),
@@ -489,6 +495,17 @@ def test_four_layer_keys_are_refused_on_a_two_layer_board(
     assert f"[stackup] {key}: only for a four-layer board (set layers = 4)" in (
         err.value.message
     )
+
+
+def test_a_bad_four_layer_key_on_a_two_layer_board_is_reported_once() -> None:
+    """Report a wrong-typed four-layer key once, by its own check, not as misplaced."""
+    data = good()
+    data["stackup"] = {"layers": 2, "prepreg_mm": "x"}
+    with pytest.raises(ProjectError) as err:
+        parse_config(data)
+    assert err.value.message.count("\n  ") == 1
+    assert "prepreg_mm: expected a number > 0, got 'x' (string)" in err.value.message
+    assert "only for a four-layer board" not in err.value.message
 
 
 def test_a_bad_value_is_reported_once_and_not_again_across_keys() -> None:

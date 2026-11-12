@@ -368,7 +368,10 @@ def _to_layers(rule: Rule, value: object) -> object:
         if role == "plane":
             if "net" not in item:
                 raise ValueError(f"entry {index} is a plane and needs a 'net'")
-            net = str(_to_text(rule, item["net"]))
+            try:
+                net = str(_to_text(rule, item["net"]))
+            except ValueError as err:
+                raise ValueError(f"entry {index} net: {err}") from None
         elif "net" in item:
             raise ValueError(f"entry {index} is a {role!r} layer and takes no 'net'")
         else:
@@ -434,7 +437,7 @@ def _check_stackup(table: object, values: Mapping[str, Any], errors: list[str]) 
     layers = values.get("layers")
     if layers == 2 and isinstance(table, dict):
         for key in FOUR_LAYER_KEYS:
-            if key in table:
+            if key in table and key in values:  # one that failed was reported already
                 errors.append(
                     f"[stackup] {key}: only for a four-layer board (set layers = 4)"
                 )
