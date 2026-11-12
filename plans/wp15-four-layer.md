@@ -236,6 +236,9 @@ inner = [
 
 ### D6. The coupling model with planes (sign-off)
 
+- **Where the reference height is worked out:** in the coupling slice (5c), from layer
+  roles. `pcbkit/stackup.py` reports geometry only (`nearest_copper(layer)`,
+  `gap_to_nearest_copper(layer)`); it does not say which layer is a reference.
 - Today, by design: no solid return plane; `h = thickness_mm`; `d_near = 3h`; the far
   layer coupled through `hypot(gap, h)` (`coupling.py:1-20,322-345`).
 - **Recommend, for four layers only:**
@@ -274,9 +277,13 @@ inner = [
     with masks outside the sum. Sign-off: whether the sum should include the masks
     depends on what KiCad does with it (K4) and what PCBWay quotes (K18).
 - **Pure model:** a new `pcbkit/stackup.py` (pure, no pcbnew) builds the layer list,
-  roles, thicknesses, z positions, `reference_layer(layer)`,
-  `height_to_reference(layer)` and `span_mm(a, b)` from `StackupConfig`. Placement, the
+  roles, thicknesses, z positions, `nearest_copper(layer)`,
+  `gap_to_nearest_copper(layer)` and `span_mm(a, b)` from `StackupConfig`. Placement, the
   solver, coupling and the two follow-on checks all read it.
+- **Geometry only:** the model does not decide which layer is a reference. D6's
+  reference height (the dielectric to an adjacent `plane` or `split` layer, otherwise
+  the board thickness) is worked out in slice 5c from layer roles, using the geometry
+  here. A tie between equally near layers goes to the layer nearer the top of the stack.
 
 ### D8. Backwards compatibility
 
@@ -362,7 +369,7 @@ changed stops and asks.
     message.
   - `stackup.py` tests show, for a 1.6 mm board with 0.2 mm prepreg and 1 oz everywhere:
     layer order, z positions, a core that makes the sum exactly 1.6,
-    `height_to_reference("top") == 0.2`, and `reference_layer("bottom") == "in2"`.
+    `gap_to_nearest_copper("top") == 0.2`, and `nearest_copper("bottom") == "in2"`.
   - Every schema key is documented: the existing docs test passes with the new kind.
 - **Planted mistakes:**
   - Drop the inner-count check: its row goes red.
@@ -517,7 +524,8 @@ changed stops and asks.
 
 ### Slice 5c: copper solver and coupling (after 5b)
 
-- **Goal:** D5 and D6.
+- **Goal:** D5 and D6. D6's reference height is worked out here, from layer roles; the
+  stackup model only reports geometry (`nearest_copper`, `gap_to_nearest_copper`).
 - **May touch:** `pcbkit/check/copper.py`, `pcbkit/check/coupling.py`,
   `pcbkit/check/builtin/test_copper.py` (`_config`, `_solve`, segment and regulation
   tests), `tests/unit/test_check_copper_pure.py`,
@@ -682,9 +690,11 @@ run during the spike because it depends on no KiCad fact.
 - **Needs:** for a buck's input loop (input capacitor, high-side switch input pin,
   low-side or ground return), the loop's area and its height over the first reference
   plane. Loop inductance over a plane is about mu0 x h x (path length / width), so
-  `stackup.height_to_reference(layer)` from slice 1 is the input.
+  `stackup.gap_to_nearest_copper(layer)` from slice 1 is the geometry input; the
+  reference height itself comes from the roles (D6).
 - **Room left:**
-  - The pure `stackup.py` model exposes reference layer and height per copper layer.
+  - The pure `stackup.py` model exposes the nearest copper layer and the gap to it per
+    copper layer (geometry only; roles decide the reference, D6).
   - The `copper` group's docstring and the specs naming leave a slot for `HOT_LOOPS` rows
     (`name`, `cap_ref`, `cap_pads`, `switch_ref`, `switch_pin`, `max_nh`).
   - `coupling.loop_area` (`coupling.py:343`) is the pattern to reuse for the area.
@@ -701,7 +711,7 @@ run during the spike because it depends on no KiCad fact.
     a crossing.
   - A via changing reference planes without a nearby stitching or decoupling via is the
     same family of fault.
-- **Room left:** `stackup.reference_layer` (slice 1); `kb.copper_layers` and the
+- **Room left:** `stackup.nearest_copper` (slice 1, geometry; the reference comes from the roles); `kb.copper_layers` and the
   per-layer fill access built in slices 4-5c; the "a step over a gap is not shielded"
   rule in D6 already samples the reference fill under a track, so the crossing check can
   share that sampler.

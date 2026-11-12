@@ -73,28 +73,28 @@ def test_the_z_positions_are_the_layer_centres_below_the_top_face() -> None:
     assert stack.layer("in2").thickness_mm == 0.035
 
 
-def test_the_top_layer_sits_one_prepreg_above_its_reference() -> None:
-    """Take the first inner layer as the top's reference, 0.2 mm away."""
+def test_the_top_layer_sits_one_prepreg_above_its_nearest_copper() -> None:
+    """Take the first inner layer as the top's nearest copper, 0.2 mm away."""
     stack = build_stackup(FOUR)
-    assert stack.reference_layer("top") == "in1"
-    assert stack.height_to_reference("top") == 0.2
+    assert stack.nearest_copper("top") == "in1"
+    assert stack.gap_to_nearest_copper("top") == 0.2
 
 
-def test_the_bottom_layer_refers_to_the_second_inner_layer() -> None:
-    """Mirror the top: the bottom's reference is in2, 0.2 mm away."""
+def test_the_bottom_layer_is_nearest_to_the_second_inner_layer() -> None:
+    """Mirror the top: the bottom's nearest copper is in2, 0.2 mm away."""
     stack = build_stackup(FOUR)
-    assert stack.reference_layer("bottom") == "in2"
-    assert stack.height_to_reference("bottom") == 0.2
+    assert stack.nearest_copper("bottom") == "in2"
+    assert stack.gap_to_nearest_copper("bottom") == 0.2
 
 
-def test_an_inner_layer_refers_to_the_nearer_outer_layer() -> None:
+def test_an_inner_layer_is_nearest_to_the_nearer_outer_layer() -> None:
     """Pick the closer neighbour for an inner layer: 0.2 mm beats the 1.06 mm core."""
     stack = build_stackup(FOUR)
-    assert (stack.reference_layer("in1"), stack.height_to_reference("in1")) == (
+    assert (stack.nearest_copper("in1"), stack.gap_to_nearest_copper("in1")) == (
         "top",
         0.2,
     )
-    assert (stack.reference_layer("in2"), stack.height_to_reference("in2")) == (
+    assert (stack.nearest_copper("in2"), stack.gap_to_nearest_copper("in2")) == (
         "bottom",
         0.2,
     )
@@ -105,8 +105,8 @@ def test_equally_near_layers_tie_toward_the_top_of_the_stack() -> None:
     even = StackupConfig(4, 0.74, 0.035, 0.035, 0.2, FOUR.inner)
     stack = build_stackup(even)
     assert stack.gaps_mm == (0.2, 0.2, 0.2)
-    assert stack.reference_layer("in1") == "top"
-    assert stack.reference_layer("in2") == "in1"  # "bottom" sorts first by name
+    assert stack.nearest_copper("in1") == "top"
+    assert stack.nearest_copper("in2") == "in1"  # "bottom" sorts first by name
 
 
 def test_span_runs_from_the_outer_face_of_one_layer_to_the_other() -> None:
@@ -124,7 +124,7 @@ def test_an_unknown_layer_name_is_refused() -> None:
     with pytest.raises(ValueError, match="no layer 'in1' on this board"):
         build_stackup(TWO).layer("in1")
     with pytest.raises(ValueError, match="top, in1, in2, bottom"):
-        build_stackup(FOUR).reference_layer("in3")
+        build_stackup(FOUR).nearest_copper("in3")
 
 
 def test_a_two_layer_board_has_one_core_between_its_coppers() -> None:
@@ -132,8 +132,8 @@ def test_a_two_layer_board_has_one_core_between_its_coppers() -> None:
     stack = build_stackup(TWO)
     assert [layer.name for layer in stack.layers] == ["top", "bottom"]
     assert stack.gaps_mm == (1.53,)
-    assert stack.reference_layer("top") == "bottom"
-    assert stack.height_to_reference("top") == 1.53
+    assert stack.nearest_copper("top") == "bottom"
+    assert stack.gap_to_nearest_copper("top") == 1.53
     assert stack.span_mm("top", "bottom") == pytest.approx(1.6, abs=1e-9)
 
 

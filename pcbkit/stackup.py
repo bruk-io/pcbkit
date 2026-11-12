@@ -63,15 +63,16 @@ class Stackup:
         known = ", ".join(layer.name for layer in self.layers)
         raise ValueError(f"no layer {name!r} on this board (it has {known})")
 
-    def reference_layer(self, name: str) -> str:
-        """Return the name of the nearest other copper layer, the layer's reference.
+    def nearest_copper(self, name: str) -> str:
+        """Return the name of the nearest other copper layer, whatever its role.
 
-        Whatever its role: the caller decides whether a signal layer can serve.
+        This is geometry only. Which layer is a trace's reference, and so its coupling
+        height, depends on layer roles and is worked out where it is used.
         """
         return self._nearest(name)[0]
 
-    def height_to_reference(self, name: str) -> float:
-        """Return the dielectric thickness between a layer and its reference layer."""
+    def gap_to_nearest_copper(self, name: str) -> float:
+        """Return the dielectric thickness between a layer and its nearest copper."""
         return self._nearest(name)[1]
 
     def span_mm(self, first: str, second: str) -> float:
