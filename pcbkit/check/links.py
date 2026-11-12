@@ -88,7 +88,16 @@ BRIDGED = re.compile(r"_Bridged(\d*)")
 # Device resistor symbols with more than two pads: never a link, whatever the netlist
 # shows of their pads.
 MULTI_PAD_RESISTOR = re.compile(r"R_(Pack|Network|Array|Pot|Trim|Shunt)")
-NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six"}
+NUMBER_WORDS = {
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+}
 
 # A path: net, part, net, part, ..., net.
 Path = list[str]
@@ -488,12 +497,18 @@ def _own_link(
             )
         else:
             note = f"{_show(to_net)} joins them, with no link on it"
-            three = [
+            # a jumper or resistor with more pads than a link may have
+            many = [
                 r
                 for r in dict.fromkeys([*to_net[1::2], *nl.refs_on(own)])
-                if is_jumper(nl, r) and pad_count(nl, r) > 2
+                if (is_jumper(nl, r) or letters(r).startswith("R"))
+                and pad_count(nl, r) > 2
             ]
-            note += "".join(f"; {not_a_link(nl, j)}" for j in three)
+            note += "".join(
+                f"; {r} has {NUMBER_WORDS.get(pad_count(nl, r), pad_count(nl, r))} "
+                "pads: a link must have two"
+                for r in many
+            )
         return None, [
             f"{what}: no 0 ohm resistor or jumper joins {own} to {net} ({note})"
             + _hint(to_net, enables)

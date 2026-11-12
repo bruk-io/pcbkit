@@ -1237,3 +1237,16 @@ def test_a_big_board_with_an_undeclared_rail_is_searched_in_bounded_steps() -> N
         nl, "EN_ALL", {"EN_ALL": rows}, [*SUPPLIES, "3V3"]
     )
     assert declared.problems == []
+
+
+def test_a_zero_ohm_pack_element_as_the_only_link_says_a_link_has_two_pads() -> None:
+    """Say why RN1 is not a link when an element of it is the only way through."""
+    toy = board()
+    replace(toy, "R7")
+    sip(toy, "Device:R_Pack04", {"1": "EN_U2", "8": "EN_ALL"})
+    toy.set_value("RN1", "4x0")
+    assert check(toy).problems == [
+        "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL (EN_U2 - RN1 - "
+        "EN_ALL joins them, with no link on it; RN1 has eight pads: a link must have "
+        "two)"
+    ]
