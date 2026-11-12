@@ -36,6 +36,14 @@ the ``numbers`` the check recorded. ``pcbkit report`` turns the file into a repo
 Groups. A built-in check module belongs to a group (``BUILTIN_GROUPS``); the modules of
 a group the project has not switched on in ``[checks] groups`` are not collected at all,
 so they are neither run nor counted as skipped.
+
+Gates. ``--pcbkit-gate G`` (``pcbkit check --gate G``) keeps only the checks whose gate
+is ``G`` or earlier (``pcbkit.check.results.gate_of`` says which gate a check has:
+from the fixtures it asks for, a few exceptions for the built-in ones, or the
+``@pytest.mark.pcbkit_gate("place")`` marker, which wins over both). The checks held
+back are removed from the run without going through ``pytest_deselected``, so they are
+counted as ``gated_out`` and listed in ``waiting``, and ``deselected`` stays what
+``-k`` and ``-m`` left out.
 """
 
 from __future__ import annotations
@@ -55,8 +63,10 @@ import pytest
 from pcbkit.check.results import (
     BUILTIN_GROUPS,
     BUILTIN_PACKAGE,
+    GATES,
     RESULTS_FILE,
     RESULTS_FORMAT,
+    gate_of,
     results_dir,
 )
 from pcbkit.project import (
@@ -67,6 +77,8 @@ from pcbkit.project import (
 )
 
 OPTION = "--pcbkit-project"
+GATE_OPTION = "--pcbkit-gate"
+GATE_MARKER = "pcbkit_gate"
 
 STATE = pytest.StashKey[Any]()
 
@@ -161,6 +173,9 @@ class State:
     modules: dict[str, ProjectModule] = field(default_factory=dict)
     started: float = field(default_factory=time.time)
     deselected: int = 0
+    gate: str | None = None
+    gates: dict[str, str] = field(default_factory=dict)
+    waiting: dict[str, str] = field(default_factory=dict)
 
     def module(self, name: str) -> ProjectModule:
         """Return the project's module ``name``, shared by every user of it."""
@@ -200,6 +215,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="the board project to check (a folder with a pcbkit.toml); "
         "default: the nearest one above the current directory",
     )
+    group.addoption(
+        GATE_OPTION,
+        dest="pcbkit_gate",
+        metavar="GATE",
+        choices=GATES,
+        default=None,
+        help="only run the checks whose inputs exist at this design gate "
+        f"({', '.join(GATES)}); the rest are listed as waiting in the results",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -210,7 +234,12 @@ def pytest_configure(config: pytest.Config) -> None:
         project = load_project(start)
     except ProjectError as err:
         raise pytest.UsageError(err.format_message()) from None
-    config.stash[STATE] = State(project)
+    config.stash[STATE] = State(project, gate=config.getoption("pcbkit_gate"))
+    config.addinivalue_line(
+        "markers",
+        f"{GATE_MARKER}(gate): the design gate this check needs ({', '.join(GATES)}), "
+        "in place of the one worked out from the fixtures it asks for",
+    )
     root = str(project.root)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -433,6 +462,55 @@ def pytest_runtest_makereport(
         entry["message"] = crash.message if crash is not None else str(report.longrepr)
 
 
+def _marked_gate(item: pytest.Item) -> str | None:
+    """Return the gate given to ``@pytest.mark.pcbkit_gate`` on a check, if any."""
+    marker = item.get_closest_marker(GATE_MARKER)
+    if marker is None:
+        return None
+    if len(marker.args) != 1 or marker.kwargs or not isinstance(marker.args[0], str):
+        raise pytest.UsageError(
+            f"{item.nodeid}: @pytest.mark.{GATE_MARKER} takes one gate name "
+            f"({', '.join(GATES)})"
+        )
+    return str(marker.args[0])
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Work out each check's gate, and drop the checks later than the run's gate.
+
+    Runs before pytest's own ``-k`` and ``-m`` selection, so a held-back check is
+    counted as waiting whatever those would have done with it.
+    """
+    state = config.stash.get(STATE, None)
+    if state is None:
+        return
+    root = state.project.root
+    builtin = builtin_dir()
+    kept = []
+    for item in items:
+        path = Path(str(item.path)).resolve()
+        function = getattr(item, "originalname", None) or item.name
+        try:
+            gate = gate_of(
+                path.stem if path.parent == builtin else None,
+                function,
+                item.fixturenames,
+                _marked_gate(item),
+            )
+        except ValueError as err:
+            raise pytest.UsageError(f"{item.nodeid}: {err}") from None
+        key = check_id(item, root)
+        state.gates[key] = gate
+        if state.gate is not None and GATES.index(gate) > GATES.index(state.gate):
+            state.waiting[key] = gate
+        else:
+            kept.append(item)
+    items[:] = kept
+
+
 def pytest_deselected(items: list[pytest.Item]) -> None:
     """Count the checks a ``-k``, ``-m`` or ``--deselect`` left out of this run."""
     if not items:
@@ -451,6 +529,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     # A run that selected nothing still writes (an empty list), so the results of an
     # earlier run are never mistaken for this one's.
     checks = {k: v for k, v in state.results.items() if v["outcome"]}
+    for key, entry in checks.items():
+        entry["gate"] = state.gates.get(key)
     counts: dict[str, int] = {}
     for entry in checks.values():
         counts[entry["outcome"]] = counts.get(entry["outcome"], 0) + 1
@@ -461,7 +541,13 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         "keyword": keyword,
         "markexpr": markexpr,
         "deselected": state.deselected,
-        "complete": not keyword and not markexpr and state.deselected == 0,
+        "gated_out": len(state.waiting),
+        "complete": (
+            not keyword
+            and not markexpr
+            and state.deselected == 0
+            and state.gate in (None, GATES[-1])
+        ),
     }
     data = {
         "format": RESULTS_FORMAT,
@@ -471,6 +557,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         "exit_status": int(exitstatus),
         "counts": counts,
         "seconds": round(time.time() - state.started, 1),
+        "gate": state.gate,
+        "waiting": dict(state.waiting),
         "selection": selection,
         "checks": checks,
     }

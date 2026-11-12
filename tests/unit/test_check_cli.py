@@ -42,10 +42,12 @@ class Recorder:
 
     result: Any = 0
     calls: list[tuple[Any, ...]] = field(default_factory=list)
+    keywords: list[dict[str, Any]] = field(default_factory=list)
 
-    def __call__(self, *args: Any) -> Any:
+    def __call__(self, *args: Any, **keywords: Any) -> Any:
         """Record the call and return the canned result."""
         self.calls.append(args)
+        self.keywords.append(keywords)
         return self.result
 
 
@@ -225,6 +227,69 @@ def test_check_without_a_schematic_says_to_run_pcbkit_sch(
     result = invoke("check")
     assert_error(result, "my_board.kicad_sch", "run `pcbkit sch`")
     assert "Results:" not in result.output
+
+
+@pytest.mark.parametrize("gate", ["place", "route", "order"])
+def test_check_with_a_gate_after_sch_still_needs_pcbnew(
+    gate: str, root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stop at the pcbnew guard for every gate but the schematic one."""
+    monkeypatch.setitem(sys.modules, "pcbnew", None)
+    spy = Recorder()
+    monkeypatch.setattr(runner, "run", spy)
+    assert_error(invoke("check", "--gate", gate), "pcbnew isn't importable here")
+    assert spy.calls == []
+
+
+def test_check_gate_sch_reaches_the_runner_without_pcbnew(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the schematic gate where pcbnew cannot be imported: it needs kicad-cli."""
+    monkeypatch.setitem(sys.modules, "pcbnew", None)
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    assert_exit(invoke("check", "--gate", "sch"), 0)
+    ((project, expression),) = spy.calls
+    assert project.root == root
+    assert expression is None
+    assert spy.keywords == [{"gate": "sch"}]
+
+
+@pytest.mark.parametrize("gate", ["place", "route", "order"])
+def test_check_hands_the_gate_to_the_runner(
+    gate: str,
+    root: Path,
+    fake_pcbnew: types.ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass ``--gate`` on as the runner's ``gate`` keyword, next to ``-k``."""
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    assert_exit(invoke("check", "-k", "led", "--gate", gate), 0)
+    assert [args[1] for args in spy.calls] == ["led"]
+    assert spy.keywords == [{"gate": gate}]
+
+
+def test_check_without_a_gate_passes_none(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hand the runner ``gate=None`` for a run with no gate."""
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    assert_exit(invoke("check"), 0)
+    assert spy.keywords == [{"gate": None}]
+
+
+def test_check_refuses_a_gate_that_does_not_exist(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Name the gates in click's usage error and run nothing."""
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    result = invoke("check", "--gate", "launch")
+    assert result.exit_code == 2, result.output
+    assert "sch" in result.output and "order" in result.output
+    assert spy.calls == []
 
 
 # --- mutants ----------------------------------------------------------------------

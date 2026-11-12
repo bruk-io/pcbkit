@@ -54,14 +54,19 @@ def summary_line(data: dict[str, Any]) -> str:
     parts = [f"{counts[k]} {k}" for k in order if counts.get(k)]
     seconds = data.get("seconds")
     tail = f" in {seconds:g}s" if seconds is not None else ""
+    gate = data.get("gate")
+    if gate:
+        tail += f" (gate {gate})"
     return (", ".join(parts) or "no checks") + tail
 
 
 def partial_note(data: dict[str, Any]) -> str | None:
     """Return a sentence saying the run was filtered, or None for a whole run.
 
-    The plugin's ``selection`` block has ``complete`` false after ``-k``, ``-m`` or a
-    deselect. Results from before pcbkit wrote that block count as whole, as they did.
+    The plugin's ``selection`` block has ``complete`` false after ``-k``, ``-m``, a
+    deselect or a run stopped at a gate before ``order``; the sentence names the gate
+    and how many checks it held back. Results from before pcbkit wrote that block count
+    as whole, as they did.
     """
     selection = data.get("selection")
     if not isinstance(selection, dict) or selection.get("complete") is not False:
@@ -72,6 +77,22 @@ def partial_note(data: dict[str, Any]) -> str | None:
     ]
     left = selection.get("deselected") or 0
     counted = f", which left out {left} check{'' if left == 1 else 's'}" if left else ""
+    gate = data.get("gate")
+    if gate and not any(selection.get(key) for _, key in flags) and not left:
+        held = selection.get("gated_out") or 0
+        waiting = f"{held} check{'' if held == 1 else 's'} waiting for a later gate"
+        return (
+            f"Partial run: stopped at the {gate} gate, with {waiting}. "
+            "Run `pcbkit check` with no `--gate` before you order boards."
+        )
+    if gate:
+        filters.append(f"--gate {gate}")
+        held = selection.get("gated_out") or 0
+        counted += f" and held back {held} for a later gate"
+        return (
+            f"Partial run: filtered by {' and '.join(filters)}{counted}. "
+            "Run `pcbkit check` with no `-k` or `--gate` before you order boards."
+        )
     return (
         f"Partial run: filtered by {' and '.join(filters) or 'a selection'}{counted}. "
         "Run `pcbkit check` with no `-k` before you order boards."

@@ -129,6 +129,7 @@ it fails, naming each one.
 ```
 .venv/bin/pcbkit check                              # the built-in groups you switched on, then checks/
 .venv/bin/pcbkit check -k test_led_current_window   # only the checks that match
+pcbkit check --gate sch                             # only what the schematic can judge (no pcbnew)
 pcbkit report                                       # write out/checks/VALIDATION.md
 ```
 
@@ -149,6 +150,31 @@ A `-k` run replaces the results with the few checks it ran, and says so in the f
 Treat those results as partial. `pcbkit report` says so under the counts of the report it
 writes from them, and the order preflight refuses results with `complete: false`
 ([ordering](ordering.md)). Run `pcbkit check` with no `-k` before you order.
+
+### Gates: running only what a design step can judge
+
+A check runs once its inputs exist, and `pcbkit check --gate GATE` runs only the checks
+that can run at `GATE`: `sch`, `place`, `route` or `order`, in that order. The checks left
+out are listed as `waiting` in `results.json`, and the run counts as partial until the
+`order` gate. `--gate sch` needs only kicad-cli, so it runs before the project's `.venv`
+exists.
+
+pcbkit works out a check's gate from the fixtures it asks for: `board` makes it `route`,
+the fab files make it `order`, and a check that needs neither is `sch`. When that is
+wrong for one of your checks, say so with a marker, which wins:
+
+```python
+import pytest
+
+
+@pytest.mark.pcbkit_gate("place")
+def test_connector_is_near_the_edge(board, layout): ...
+```
+
+A check that reads only part positions, say, is `place`, and the marker lets a review
+at the placement gate run it before any track exists. An unknown gate name is a usage
+error, so a typo cannot quietly move a check. The full rules, and the JSON fields, are in
+[the project interface](project-interface.md#gates).
 
 ### When a check fails
 
