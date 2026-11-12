@@ -219,6 +219,7 @@ def test_a_number_of_the_value_must_be_a_number_of_the_quote(
         ("4.5 V to 17 V", "4.5-V to 17-V Input"),
         ("0x70", "Default address 0x70."),
         ("0x70", "Default address 70h."),
+        ("0x7f", "Mask 0x7F"),  # hex digits are not case-sensitive
         ("10 MHz", "fSW TPS54331 10 MHz"),  # digits inside a name are not numbers
     ],
 )
@@ -227,6 +228,23 @@ def test_numbers_match_whatever_dash_sign_or_prefix_they_are_written_with(
 ) -> None:
     """Accept the same numbers written with other dashes, a plus sign or 0x."""
     assert citations.missing_numbers(value, quote) == []
+
+
+@pytest.mark.parametrize(
+    "value, quote, missing",
+    [
+        ("0x1A", "Register 0x1F.", ["0x1a"]),  # a letter digit differs
+        ("0xFE", "Register 0xFF.", ["0xfe"]),
+        ("0x70", "Supply current 70 mA", ["0x70"]),  # hex is not decimal
+        ("70", "Default address 0x70.", ["70"]),
+        ("0x70", "Default address 71h.", ["0x70"]),
+    ],
+)
+def test_hexadecimal_numbers_are_whole_tokens_apart_from_decimals(
+    value: str, quote: str, missing: list[str]
+) -> None:
+    """Refuse a hex value that differs from the quote's after its first letter digit."""
+    assert citations.missing_numbers(value, quote) == missing
 
 
 def test_check_citation_refuses_a_wrong_number() -> None:

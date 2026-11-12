@@ -40,7 +40,8 @@ Case is kept: "mA" and "MA" are nine orders of magnitude apart.
 Numbers (``numbers``) are read from folded text with its spacing, as whole numbers
 with their decimals: "9" is not a number of "19 V". A minus sign belongs to a number
 unless a digit or a point comes before it ("3.0-5.5" is a range), so "-40" in the
-datasheet and "40" in the value differ. A hexadecimal ``0x`` is dropped on both sides.
+datasheet and "40" in the value differ. A hexadecimal number ("0x70", "70h") is one
+number in one form, "0x70", kept apart from decimals: "0x70" is "70h" but not "70".
 
 Blind spots: figures and scans (no text: the value is "read from figure N" for a person
 to check instead), a quote across a page break, and a number whose digits the PDF
@@ -95,8 +96,10 @@ _FOLD = str.maketrans(
 )
 _LETTER_HYPHEN = re.compile(r"(?<=[^\W\d_])-(?:[ \t]*\r?\n\s*)?(?=[^\W\d_])")
 _SPACE = re.compile(r"\s+")
-_HEX_PREFIX = re.compile(r"(?<![\w.])0[xX](?=[0-9A-Fa-f])")
-_NUMBER = re.compile(r"(?:(?<![\d.])-)?(?<![\w.])\d+(?:\.\d+)?")
+_TOKEN = re.compile(
+    r"(?<![\w.])(?:0[xX](?P<prefixed>[0-9A-Fa-f]+)|(?P<suffixed>\d[0-9A-Fa-f]*)[hH])(?!\w)"
+    r"|(?:(?<![\d.])-)?(?<![\w.])\d+(?:\.\d+)?"
+)
 
 
 class Rule(Enum):
@@ -192,8 +195,16 @@ def pages_with(quote: str, pages: Sequence[str]) -> list[int]:
 
 
 def numbers(text: str) -> list[str]:
-    """Return the numbers in ``text``, signed where a minus sign belongs to them."""
-    return _NUMBER.findall(_HEX_PREFIX.sub("", fold(text)))
+    """Return the numbers in ``text``, signed where a minus sign belongs to them.
+
+    A hexadecimal number ("0x70", "70h") comes back as "0x70", one form, and is never
+    equal to a decimal one: "0x70" is not "70".
+    """
+    found = []
+    for match in _TOKEN.finditer(fold(text)):
+        digits = match["prefixed"] or match["suffixed"]
+        found.append(f"0x{int(digits, 16):x}" if digits else match[0])
+    return found
 
 
 def missing_numbers(value: str, quote: str) -> list[str]:
