@@ -307,6 +307,27 @@ def test_digits_followed_by_letters_alone_are_still_numbers(
     assert citations.missing_numbers(value, quote) == []
 
 
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("1,000 mA", "Output current 1000 mA"),  # thousands separator
+        ("-0,3 V", "Input voltage VIN -0.3 19 V"),  # decimal comma
+        ("19.0 V", "Input voltage VIN -0.3 19 V"),  # a trailing zero
+        ("-1% to +1%", "Tolerance ±1% at 25 °C"),  # a plus-minus form
+    ],
+)
+def test_other_ways_of_writing_a_number_are_refused_not_normalised(
+    value: str, quote: str
+) -> None:
+    """Refuse "1,000" for "1000", "-0,3", "19.0" for "19" and "-1%" for "±1%"."""
+    assert citations.missing_numbers(value, quote) != []
+
+
+def test_units_are_not_checked_a_known_blind_spot() -> None:
+    """Pin that "1.25 mV" passes against "1.25 V": units are not read, only numbers."""
+    assert citations.missing_numbers("1.25 mV", "Reference voltage 1.25 V") == []
+
+
 def test_check_citation_refuses_a_wrong_number() -> None:
     """Refuse a cited value whose number its quote does not have, naming it."""
     problem = check_citation("-0.3 to 17 V", "Input voltage VIN -0.3 19 V", 1, PAGES)

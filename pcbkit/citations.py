@@ -47,9 +47,19 @@ A word with letters between its digits ("2N7002", "3V3", "4k7") is a part number
 value code, not a number, and is skipped: "4k7" is not read as 4.7k, so a value that
 needs one has no number there to check.
 
-Blind spots: figures and scans (no text: the value is "read from figure N" for a person
-to check instead), a quote across a page break, and a number whose digits the PDF
-splits across table cells (rejected, which shows).
+Blind spots, which this module does not prove:
+
+- Units and SI prefixes in a value are not checked: "1.25 mV" passes against a quote
+  that says "1.25 V". Only the numbers are compared.
+- Numbers are compared as written, not as values. A thousands separator ("1,000"
+  for "1000"), a decimal comma ("-0,3"), a trailing zero ("19.0" for "19") and a
+  "±" form ("-1% to +1%" for "±1%") are refused, not normalised: the value must be
+  written as the quote writes it, or marked derived.
+- The digits of a part number or a value code ("2N7002", "4k7") are not numbers, so
+  a value made of them has nothing to check.
+- Figures and scans (no text: the value is "read from figure N" for a person to
+  check instead), a quote across a page break, and a number whose digits the PDF
+  splits across table cells (rejected, which shows).
 
 Everything here is pure: it takes page texts and bytes, never a file. pcbkit reads a
 PDF's pages with pdftotext (``pcbkit.datasheet_find.page_texts``), and the extraction
