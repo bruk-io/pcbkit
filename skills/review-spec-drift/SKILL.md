@@ -20,25 +20,7 @@ have their own reviews. Gate: every gate. In pcbkit each claim a program can dec
 lives in a `specs.py` table, a `layout.py` value or `pcbkit.toml`, where a check reads
 it; the prose spec holds intent, behaviour and open questions.
 
-## 1. Start from the checks that apply at this gate
-
-Run only the checks whose inputs exist; a check whose inputs do not exist yet is not a
-finding, and its claims are `cannot tell`:
-
-- Schematic: `.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"`
-- Placement: the same, plus `or test_decoupling_caps_are_close or
-  test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin`
-- Route: `.venv/bin/pcbkit check -k "not test_outputs"`
-- Order: `.venv/bin/pcbkit check` with no `-k`.
-
-Add `or test_<topic>` for each project check whose inputs exist. A `-k` run leaves
-partial results; the order gate runs all. A gate option (WP17, --gate) will replace
-these selections. For each claim type,
-[references/claim-homes.md](references/claim-homes.md) says where it lives and which check
-holds it: a claim whose check passed matches; one whose check failed differs, with the
-check's message as evidence.
-
-## 2. Read the spec and settle the claims
+## 1. Read the spec and write its claims down first
 
 - The prose spec: ask where it is (a `README.md` or a spec file in the project, a doc
   elsewhere), and read all of it, captions, tables and notes included. design.py's
@@ -48,43 +30,58 @@ check's message as evidence.
   "X powers Y only", fail-safe claims). Exclusions and open questions are claims too.
 - **Check the spec against itself.** Captions, diagrams and summaries lag the body. Two
   parts of the spec that disagree are a finding before the design is opened.
+- **Write each mechanical claim down as the spec states it, before reading the
+  design.** A claim [references/claim-homes.md](references/claim-homes.md) gives a
+  table goes into that table in specs.py; a claim about what the design contains (a
+  count, a footprint, the pads on a net, the outline, the stackup) goes into
+  `spec-claims.json` in the project folder, `{fact key: claimed value}`, keyed as
+  `listing.py` names its facts.
 
-## 3. List the design by script, then match
+## 2. Let code compare them
 
-What the design contains is listable, never recounted by reading. In the project's
-`.venv/bin/python`, read the netlist with
-`pcbkit.check.netlist.Netlist.from_file("kicad/<stem>.net")` and print:
+Run only the checks whose inputs exist at this gate; one whose inputs do not exist yet
+is not a finding, and its claims are `cannot tell`. Switch on any group the first line
+says is off (it needs `kicad` and `circuit`; add `fab` and `copper` from placement and
+`outputs` at the order gate), then run the gate's selection and the listing:
 
-- every connector, regulator, IC, switch, jumper and test point (`parts`, `kind(ref)`),
-  and every `dnp` part from design.py;
-- each enable net and each rail with the parts on it (`refs_on(net)`), so the chain
-  from a source to its loads is a listing, not a trace in the conversation.
+```
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
+.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"
+.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean or test_decoupling_caps_are_close or test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin"
+.venv/bin/pcbkit check -k "not test_outputs"
+.venv/bin/pcbkit check
+.venv/bin/python "${CLAUDE_SKILL_DIR}/scripts/listing.py" spec-claims.json
+```
 
-Quote the output. The judgement is the match: which listed item each claim refers to,
-whether the chain does what a behavioural claim says, and every item no claim covers
-(`not in spec`: scope creep, or a spec never updated?). When a part changed, re-check
-every claim that mentioned it and anything it fed. For each open question, say whether
-the design now answers it, silently assumed an answer, or leaves it open; answered or
-assumed is `differs` until the spec records the answer.
+The selections are, in turn, the schematic, placement, route and order gates; add `or
+test_<topic>` for each project check whose inputs exist. A claim whose check passed, or
+that `listing.py` reports `matches`, matches; one whose check failed, or that it reports
+`differs` or `not in design`, differs, with the message or both values as evidence.
 
-Never decide which side is right, and never edit the spec or the design during the
-review. Drift to hunt: a part swap that changed a rating in one place only; a
-consolidation that quietly dropped a feature the spec still lists; a part that kept its
-name but changed its job; captions describing an earlier layout. A generic worked
-example, for the shape of the claims table: [references/example.md](references/example.md).
+## 3. Judge what code cannot
 
-## 4. Move claims to code
+- **Behavioural claims**: which listed parts and nets each refers to (`listing.py`
+  prints the pads on every net, so a chain is a lookup), and whether the chain does what
+  the claim says.
+- **What no claim covers**: every part and net in the listing that no claim names is
+  `not in spec`: scope creep, or a spec never updated? When a part changed, re-check
+  every claim that mentioned it and anything it fed.
+- **Open questions**: does the design now answer each, silently assume an answer, or
+  leave it open? Answered or assumed is `differs` until the spec records the answer.
+- Never decide which side is right, and never edit the spec or the design during the
+  review. Drift to hunt: a part swap that changed a rating in one place only; a
+  consolidation that dropped a feature the spec still lists; a part that kept its name
+  but changed its job; captions describing an earlier layout. A generic worked example,
+  for the shape of the claims table: [references/example.md](references/example.md).
 
-Once the user has decided, write each settled mechanical claim where a check reads it,
-so the next gate reads a result: `layout.W` and `H` for the outline size, `HOLES` for
-the holes; `[stackup]` for layers and copper; `SUPPLY_PINS` for a rail at a load;
-`I2C_BUSES` for bus devices; `PINOUT` for a part's pin functions; `DEVKIT_GPIO` and
-`ANALOG_NETS` on an ESP32-S3 DevKit board. Claims with no built-in check go into the
-proposed tables (`PIN_NETS`, `PORT_EDGES`, `EXCLUSIONS`, `POWER_PATHS`,
-`I2C_EXPECTED`; shapes in "Proposed tables",
-`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`), each handed to `add-check`.
-Behavioural claims stay in the prose spec until a check can hold them;
-`walk-fault-states` writes the default-state ones as `FAULT_STATES`.
+## 4. Settle the rows with the user
+
+Ask the decisions below. Once the user has decided, change the row or the design to
+match, so the next gate reads a result. A claim with no built-in check sits in a
+proposed table (`PIN_NETS`, `PORT_EDGES`, `EXCLUSIONS`, `POWER_PATHS`, `I2C_EXPECTED`;
+shapes in "Proposed tables", `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`), each
+handed to `add-check`. Behavioural claims stay in the prose spec until a check can hold
+them; `walk-fault-states` writes the default-state ones as `FAULT_STATES`.
 
 ## Output
 
@@ -105,5 +102,5 @@ both spec locations as evidence.
 ("J1 is a terminal block in the design and a barrel jack in the port map. Update the
 spec, or change J1 back?"). Order by consequence: what changes the order first.
 
-**Moves to code**: each mechanical claim settled by a listing, with the table or value
-it goes into (step 4).
+**Written down**: each claim's row in specs.py or `spec-claims.json`, and what changed
+once the user decided (step 4).

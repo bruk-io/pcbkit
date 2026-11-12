@@ -40,8 +40,10 @@ result.
 with them, so run `pcbkit check` with no `-k` before an order.
 
 The review skills run at gates in this loop. Each runs only the checks whose inputs
-exist at its gate (it gives the `-k` selection), and ends by writing what it settled
-into specs.py, so the next run is a check:
+exist at its gate (it gives the `-k` selection), once
+`${CLAUDE_SKILL_DIR}/scripts/groups.py` has said which of the check groups it needs are
+off in pcbkit.toml (a group that is off collects nothing). Each ends by writing what it
+settled into specs.py, so the next run is a check:
 
 - After `sch` is ERC-clean: `walk-fault-states` (any board that drives a load) and
   `review-derating`.
@@ -89,11 +91,12 @@ then `finalize`.
   information; fix the design, or use add-check if the limit itself is wrong.
 - Ordering from a fab house is started by the user with `/pcbkit:order-pcbway`, never by
   Claude. If asked to order, say so and point them to it: it begins by checking that the
-  fab files and the check results are current. In the same reply, name the order-gate
-  reviews that have not run on these files, and run them before the user starts it, in
-  this order: `review-derating` again if parts changed since it ran, `plan-bringup`,
-  `review-sourcing` (it writes `sourcing.md`, which the order reads), `review-spec-drift`
-  if there is a written spec, then a full `pcbkit check`.
+  fab files and the check results are current. Before the user starts it, run the
+  order-gate reviews, every one, every time, in this order: first the reviews that edit
+  sources, `review-derating`, `plan-bringup`, and `review-spec-drift` if there is a
+  written spec; then `pcbkit finalize` (after build, route and promote if the board
+  changed); then `review-sourcing` on the files finalize wrote, which stamps them for the
+  order; then a full `pcbkit check`.
 
 ## References
 

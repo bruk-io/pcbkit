@@ -44,7 +44,7 @@ Candidates:
 - The same value in two packages (0402 and 0603) where one package would do.
 - Connectors of the same family in different pin counts where one count with unused pins would work - only if mis-plug risk does not increase (`review-misplug` owns that judgement; flag it, do not decide it).
 
-Not candidates: anything where merging changes timing, filtering, regulation or current limit; deliberate consolidation already made (same regulator repeated by design); parts chosen for a mechanical or thermal reason.
+Not candidates: anything where merging changes timing, filtering, regulation or current limit; deliberate consolidation already made (one op-amp or logic part used across circuits on purpose); parts chosen for a mechanical or thermal reason.
 
 Each proposal states unique lines saved and asks whether the current split is deliberate.
 
@@ -80,7 +80,7 @@ Connector families have many near-identical part numbers. Confirm, for each conn
 - Locating bosses or pegs and whether the footprint has the holes.
 - Mating housing and crimp terminal part numbers recorded, even though they are not assembled - otherwise cables cannot be made.
 - Current rating of the variant actually ordered (some families differ by plating or terminal).
-- Polarity of high-current connectors (battery): footprint orientation and silkscreen `+` / `-` checked against the physical part.
+- Polarity of power input connectors (a DC jack, a terminal block): footprint orientation and silkscreen `+` / `-` checked against the physical part.
 
 ## Variants and DNP
 
