@@ -115,3 +115,57 @@ def test_every_name_a_built_in_module_reads_is_in_the_docs(source: Path) -> None
         if not documented:
             missing.append(f"{module}.{name}")
     assert not missing, f"{source.name} reads {missing}: add them to {DOC.name}"
+
+
+# --- table shapes ---------------------------------------------------------------
+
+PROPOSED_HEADING = "### Proposed tables (validated, no built-in check yet)"
+
+
+def proposed_block() -> str:
+    """Return the doc's block of proposed tables, up to the next heading."""
+    section = checks_section()
+    start = section.index(PROPOSED_HEADING)
+    end = section.find("\n### ", start + len(PROPOSED_HEADING))
+    return section[start : end if end != -1 else len(section)]
+
+
+def test_every_registered_table_that_is_not_an_existing_one_has_a_generated_row() -> (
+    None
+):
+    """Show ``describe(shape)`` word for word in the row named for each new table."""
+    from pcbkit.check import tables
+
+    new = {n: s for n, s in tables.registry().items() if n not in tables.EXISTING}
+    assert new, "no proposed tables: the test would pass vacuously"
+    rows = {
+        line.split("|")[1].strip(" `"): line
+        for line in proposed_block().splitlines()
+        if line.startswith("| `")
+    }
+    missing = sorted(set(new) - set(rows))
+    assert not missing, f"no row in the proposed-tables block for {missing}"
+    stale = sorted(set(rows) - set(new))
+    assert not stale, f"rows for tables that are not registered: {stale}"
+    for name, shape in new.items():
+        assert f"`{tables.describe(shape)}`" in rows[name], name
+
+
+def test_every_existing_table_with_a_shape_is_named_in_the_docs() -> None:
+    """Keep the shapes of today's tables to names the docs section already lists."""
+    from pcbkit.check import tables
+
+    section = checks_section()
+    missing = [
+        name
+        for name in tables.EXISTING
+        if not re.search(rf"`[^`]*\b{re.escape(name)}\b[^`]*`", section)
+    ]
+    assert not missing, f"shapes for tables the docs never mention: {missing}"
+
+
+def test_the_docs_have_a_table_shapes_paragraph_that_names_the_command() -> None:
+    """Explain the shapes and point at ``pcbkit specs``."""
+    section = checks_section()
+    assert "### Table shapes" in section
+    assert "`pcbkit specs`" in section

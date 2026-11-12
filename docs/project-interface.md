@@ -926,6 +926,59 @@ override):
 | `GPIO_SCENARIOS` | `{id: keyword arguments}`: no GPIO may exceed its absolute maximum in any of them. |
 | `OPEN_DRAIN_NETS`, `RAIL_3V3` | Optional: nets exempt from the source-current check (default: the I2C lines of `I2C_BUSES`), and the 3.3 V rail the strapping pulls go to (default `"+3V3"`). |
 
+### Table shapes
+
+Every table the built-in checks read has a *shape*, defined in one place
+(`pcbkit/check/tables.py`) and checked by code, so a table with a wrong row is reported
+with the path of the row. `pcbkit specs` imports your `specs.py` and checks each table
+it has a shape for, printing one line per problem (`specs.FAULT_STATES["c"]["pins"][1]:
+expected (ref, pad, (min V, max V)), got ('U2', 'EN')`) and exiting 1 if there is any.
+It needs neither pcbnew nor kicad-cli. Names pcbkit has no shape for, and `COUPLING`
+(which `pcbkit/check/coupling.py` validates), are left alone.
+
+The shapes of the tables above are as permissive as the checks are: a row may be a tuple
+or a list, a pad number an int or a str, and a key a check does not read is ignored. The
+built-in checks still read their tables as before, so `pcbkit specs` is where a wrong
+one is reported. A table read with `tables.read` (as the checks of the proposed tables
+will) that has the wrong shape fails its check by name, with the id `bad-table`.
+
+Reading a shape: `{key: value}` is a dict, `[item]` a list (a tuple or set is accepted
+too), `(a, b)` a row of fixed length, `X or Y` either, `X or None` a value that may be
+None, `"key": X (optional)` a key that may be left out (`default` says what it then
+means), and `...` that other keys are ignored. A `pad` is a pad number as the netlist
+writes it, never a pin name; `1` and `"1"` are the same pad. `V`, `A`, `ohm`, `mm` and
+`mm2` are plain numbers in those units.
+
+### Proposed tables (validated, no built-in check yet)
+
+The tables the design reviews write into `specs.py`. `pcbkit specs` validates them
+now; the checks that read them come later, and a table that is not defined is not an
+error. Each row's text is generated from the shape, and a test keeps it so.
+
+| Name | Shape | Read by |
+|---|---|---|
+| `CAP_DERATE` | `{mpn: fraction in (0, 0.8]}` | `circuit` capacitor derating: a fraction per MPN, 0.8 when absent, so it can only tighten |
+| `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | fault-state pins (`power`) |
+| `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]}, "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count |
+| `PIN_NETS` | `{ref: {pad: net or None}}` | port map and mis-plug (`ports`) |
+| `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": true or false, "rows": 1 or 2 (optional)}}` | mis-plug (`ports`) |
+| `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
+| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} or {"a": pad, "k": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} or {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
+| `I2C_EXPECTED` | `{bus: [7-bit address]}` | exact bus scan (`bringup`); the buses should be keys of `I2C_BUSES` (the check says so, this shape does not) |
+| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | enable links (`power`) |
+| `TEST_POINTS` | `[(net, max ground mm)]` | test points (later) |
+| `PROBE_KEEPAWAY` | `[(name, x0, y0, x1, y1)]` | test points, in layout mm (later) |
+| `REFERENCE_PLANES` | `{net: "top" or "bottom" or ("top" or "bottom", max unreferenced mm)}` | two-layer reference planes (later) |
+| `PART_SPACING` | `[(ref, ref, min mm)]` | placement (later) |
+| `POLARITY_MARKS` | `[ref]` | pin-1 marks (later) |
+| `FIDUCIALS` | `{"min": n, "clearance_mm": mm}` | placement (later) |
+| `BOTTOM_PARTS` | `[ref]` | placement (later) |
+| `EXCLUSIONS` | `[(id, text, [ref pattern], [net])]` | exclusions (later) |
+| `PORT_EDGES` | `{ref: ("top" or "bottom" or "left" or "right", max mm)}` | placement (later) |
+| `CONTACT_RATINGS` | `{ref: {"amps": A per contact, "derate": fraction in (0, 1]}}` | contact current (later) |
+| `HOT_LOOPS` | `[{"name": text, "refs": [ref], "pads": [(ref, pad)], "max_mm2": max mm2}]` | hot-loop area (later); `pads` as (ref, pad) pairs is an inference |
+| `HEIGHT_MAX_MM` | `mm` | height (later) |
+
 ### circuits.py
 
 Functions the `circuit` and `esp32s3` checks call, and that your own checks may too:
