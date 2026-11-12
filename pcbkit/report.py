@@ -80,9 +80,13 @@ def partial_note(data: dict[str, Any]) -> str | None:
     gate = data.get("gate")
     if gate and not any(selection.get(key) for _, key in flags) and not left:
         held = selection.get("gated_out") or 0
-        waiting = f"{held} check{'' if held == 1 else 's'} waiting for a later gate"
+        waiting = (
+            f", with {held} check{'' if held == 1 else 's'} waiting for a later gate"
+            if held
+            else ""
+        )
         return (
-            f"Partial run: stopped at the {gate} gate, with {waiting}. "
+            f"Partial run: stopped at the {gate} gate{waiting}. "
             "Run `pcbkit check` with no `--gate` before you order boards."
         )
     if gate:

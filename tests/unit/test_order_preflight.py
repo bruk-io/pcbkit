@@ -201,6 +201,29 @@ def test_a_run_stopped_at_a_gate_is_refused_and_names_the_gate(tmp_path: Path) -
     ) in done.stdout
 
 
+def test_a_gated_run_that_held_nothing_back_is_refused_without_a_count(
+    tmp_path: Path,
+) -> None:
+    """Say the run stopped at the gate, not "0 checks left out", and what to run."""
+    selection = {
+        "keyword": "",
+        "markexpr": "",
+        "deselected": 0,
+        "gated_out": 0,
+        "complete": False,
+    }
+    project = make_project(
+        tmp_path / "my-board", results=results_file(selection=selection, gate="sch")
+    )
+    done = run(project)
+    assert done.returncode == 1, done.stdout
+    assert (
+        "PARTIAL: the last pcbkit check run was cut short at the sch gate: run "
+        "pcbkit check with no -k and no --gate before ordering"
+    ) in done.stdout
+    assert "0 checks" not in done.stdout
+
+
 def test_a_run_at_the_order_gate_is_fine(tmp_path: Path) -> None:
     """Pass results of ``--gate order``: it is a full run and says so."""
     selection = {

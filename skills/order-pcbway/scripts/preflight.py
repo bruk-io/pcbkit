@@ -20,11 +20,7 @@ It reports a problem when
   check of the project's own (``checks/test_*.py``, read as Python and never run) that
   has none.
 
-What it cannot see: a ``-k`` run that leaves a result in every group and for every
-project check (``-k "not drc"``, say) looks complete, because the results file does not
-say what was deselected. Recording the expression, or the count of deselected checks, is
-pcbkit's to do (pcbkit/check/plugin.py), and this script should then refuse such a run.
-Nor does it look for a check the module does not spell out as ``def test...`` (a
+What it cannot see: a check the module does not spell out as ``def test...`` (a
 ``unittest.TestCase`` class, a function made while the module loads).
 
 Exit codes: 0 every file is current, the checks passed and none of the above is
@@ -299,9 +295,13 @@ def problems(root: Path) -> list[str]:
 
 
 def partial(text: str) -> list[str]:
-    """Return a line if the results say their run was cut short by -k, -m or a deselect.
+    """Return a line if the results say their run was cut short.
 
-    pcbkit writes a ``selection`` block whose ``complete`` is false after such a run.
+    That is a run narrowed by -k, -m or a deselect, or stopped at a gate before
+    ``order``. pcbkit writes a ``selection`` block whose ``complete`` is false after
+    such a run. The line names the gate and counts the checks left out, or says only
+    that the run was cut short when none were.
+
     Results from a pcbkit too old to write it are judged by ``incomplete`` alone.
     """
     data = json.loads(text)
@@ -319,10 +319,8 @@ def partial(text: str) -> list[str]:
     else:
         left = selection.get("deselected", 0)
         advice = "run pcbkit check with no -k before ordering"
-    return [
-        f"PARTIAL: the last pcbkit check run was cut short{how} ({left} checks left "
-        f"out): {advice}"
-    ]
+    counted = f" ({left} checks left out)" if left else ""
+    return [f"PARTIAL: the last pcbkit check run was cut short{how}{counted}: {advice}"]
 
 
 def main() -> int:

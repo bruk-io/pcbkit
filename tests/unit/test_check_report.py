@@ -263,6 +263,15 @@ def test_partial_note_names_the_gate_a_run_stopped_at() -> None:
     assert "1 check waiting" in one
 
 
+def test_partial_note_of_a_gated_run_that_held_nothing_back_has_no_count() -> None:
+    """Say the run stopped at the gate without "with 0 checks waiting"."""
+    note = report.partial_note(gated("sch", 0))
+    assert note == (
+        "Partial run: stopped at the sch gate. "
+        "Run `pcbkit check` with no `--gate` before you order boards."
+    )
+
+
 def test_partial_note_of_a_gate_and_a_k_run_names_both() -> None:
     """Name -k and the gate together, with both counts."""
     block = {**selection(keyword="led", deselected=3), "gated_out": 5}
