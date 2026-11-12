@@ -6,11 +6,11 @@ description: >-
   cable routing, labels and pull-out loads - and write each plug and the sockets it
   fits into specs.py so a check lands every plug on the netlist. Run it after
   placement; load it before reviewing, planning or advising on connector choice,
-  connector pinouts, port layout or enclosure cut-outs, even for one connector. Without it Claude
-  checks only the intended mating, trusts family or pin count to stop a wrong-port mate,
-  misses a narrower plug seated offset in a wider socket, works out pin landings by
-  hand instead of by a check, and reaches for protection parts or labels before
-  changing the family, keying or pin order.
+  connector pinouts, port layout or enclosure cut-outs, even for one connector.
+  Without it Claude checks only the intended mating, trusts family or pin count to
+  stop a wrong-port mate, misses a narrower plug seated offset in a wider socket, works
+  out pin landings by hand instead of by a check, and reaches for protection parts or
+  labels before changing the family, keying or pin order.
 ---
 
 # Mis-plug and physical usability review
@@ -23,20 +23,18 @@ does X", hand X to `walk-fault-states` and record the hand-off.
 ## 1. Start from the checks that apply at this gate
 
 A placed board exists, but of the built-in checks only the netlist ones bear on plugs
-now: the `kicad` and `circuit` groups, and `esp32s3` on an ESP32-S3 DevKit board. Switch
-on in `[checks] groups` of pcbkit.toml any group the first line says is off:
+now. The script names any group pcbkit.toml leaves off (switch it on in `[checks]
+groups`) and prints the gate's run with its caveats; run what it prints:
 
 ```
-.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
-.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate sch
 ```
 
 Add `or test_<topic>` for a previous run's mating check. `esp32s3` holds each GPIO
 under the powered chip's 3.6 V in each `GPIO_SCENARIOS` row; it does not judge the
 current through a pin that becomes a plug's ground return, nor a plug that drives an
 unpowered board: those are step 4's. `test_wire_pads_have_polarity_marks` needs the
-silkscreen `pcbkit route` adds, and DRC a routed board: a check whose inputs do not
-exist yet is not a finding. A `-k` run is partial; the order gate runs all.
+silkscreen `pcbkit route` adds, and DRC a routed board: not findings yet.
 
 ## 2. Gather the inputs and the fit
 

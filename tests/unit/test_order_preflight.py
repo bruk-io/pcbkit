@@ -123,6 +123,15 @@ def write_results(project: Path, data: object) -> None:
     os.utime(path, (CHECKED, CHECKED))
 
 
+FAB_NAMES = (
+    "board_gerbers.zip",
+    "board_BOM.csv",
+    "board_BOM.xlsx",
+    "board_centroid.csv",
+)
+JUDGED_NAMES = ("board_BOM.csv", "board_BOM.xlsx", "board_centroid.csv")
+
+
 def make_project(
     root: Path,
     fab: str = "out/fab",
@@ -142,7 +151,7 @@ def make_project(
     for name in ("specs.py", "circuits.py"):
         touch(root / name, SOURCES)
     touch(root / "checks" / "test_led.py", SOURCES, check_module)
-    for name in ("board_gerbers.zip", "board_BOM.csv", "board_centroid.csv"):
+    for name in FAB_NAMES:
         touch(root / fab / name, FABRICATED, f"{name}\n")
     if stamped:
         stamp_files(root, fab)
@@ -156,7 +165,7 @@ def stamp_files(root: Path, fab: str = "out/fab") -> None:
     """Write the sourcing.json the review leaves: the sha256 of the BOM and centroid."""
     files = {
         f"{fab}/{name}": hashlib.sha256((root / fab / name).read_bytes()).hexdigest()
-        for name in ("board_BOM.csv", "board_centroid.csv")
+        for name in JUDGED_NAMES
     }
     data = {"format": 1, "review": "sourcing.md", "files": files}
     (root / "sourcing.json").write_text(json.dumps(data), encoding="utf-8")
@@ -337,9 +346,7 @@ def test_a_link_that_leads_nowhere_is_not_a_source(project: Path) -> None:
 # --- files that are missing or ambiguous ----------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "name", ["board_gerbers.zip", "board_BOM.csv", "board_centroid.csv"]
-)
+@pytest.mark.parametrize("name", FAB_NAMES)
 def test_a_missing_order_file_is_reported(project: Path, name: str) -> None:
     (project / "out" / "fab" / name).unlink()
     done = run(project)
@@ -361,7 +368,7 @@ def test_no_fab_folder_at_all_is_reported_for_each_file(tmp_path: Path) -> None:
     (project / "out" / "fab").rmdir()
     done = run(project)
     assert done.returncode == 1
-    assert done.stdout.count("MISSING: fab/ has 0 files") == 3
+    assert done.stdout.count("MISSING: fab/ has 0 files") == 4
 
 
 def test_a_project_that_was_never_checked_is_reported(tmp_path: Path) -> None:
@@ -894,7 +901,7 @@ def test_an_order_with_no_sourcing_stamp_is_refused(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.parametrize("name", ["board_BOM.csv", "board_centroid.csv"])
+@pytest.mark.parametrize("name", JUDGED_NAMES)
 def test_a_judged_file_that_changed_after_the_review_is_refused(
     project: Path, name: str
 ) -> None:
@@ -919,8 +926,8 @@ def test_a_stamp_for_other_files_is_refused(project: Path) -> None:
     assert done.returncode == 1, done.stdout
     assert done.stdout.splitlines()[0] == (
         "UNREVIEWED: out/fab/board_BOM.csv is not a file the sourcing review judged "
-        "(sourcing.json names out/fab/old_BOM.csv, out/fab/old_centroid.csv): "
-        + UNREVIEWED
+        "(sourcing.json names out/fab/old_BOM.csv, out/fab/old_BOM.xlsx, "
+        "out/fab/old_centroid.csv): " + UNREVIEWED
     )
 
 

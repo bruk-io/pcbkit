@@ -13,7 +13,7 @@ Read on demand from SKILL.md. Where a line below is already a check or a `pcbkit
 
 Aggregators (Octopart, FindChips) are fine for finding sources, but record the distributor figure, not the aggregator summary.
 
-Quantity needed per line = quantity per board x boards in batch + the assembler's attrition allowance for that package (from their page or quote). Compare that to stock and MOQ. Reel-only or cut-tape-unavailable parts at a five-board batch are a cost finding.
+Quantity needed per line is `bomlines.py`'s `needed`: quantity per board x boards to assemble + the assembler's attrition allowance for that package (from their page or quote), given to the script as its spare count. Compare that to stock and MOQ. Reel-only or cut-tape-unavailable parts at a five-board batch are a cost finding.
 
 ## Risk sort - what makes a line HIGH
 

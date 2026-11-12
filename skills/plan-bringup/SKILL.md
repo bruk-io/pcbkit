@@ -15,10 +15,10 @@ description: >-
 
 # Bring-up plan
 
-Gate: after `pcbkit finalize`, before an order (`board-workflow` runs it). The plan
-is the bench checklist when boards arrive. A step that cannot be carried out is a design
-defect you can still fix: no test point, no link to isolate a section, no way to power
-a section alone.
+Gate: after `pcbkit finalize`, before an order (`board-workflow` runs it). The plan is
+the bench checklist when boards arrive. A step that cannot be carried out is a design
+defect you can still fix: no test point, no isolation link, no way to power a section
+alone.
 
 ## Safety rules (never relax)
 
@@ -31,13 +31,12 @@ a section alone.
 
 ## 1. Start from what the checks decide
 
-Everything exists at this gate, so every group applies; the readings below need
-`circuit` on. Switch on in `[checks] groups` of pcbkit.toml any group the first line
-says is off, then run the checks in full and read `out/checks/results.json`:
+Everything exists at this gate, so every group applies. The script names any group
+pcbkit.toml leaves off (switch it on in `[checks] groups`) and prints the run, which is
+every check; run it and read `out/checks/results.json`:
 
 ```
-.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
-.venv/bin/pcbkit check
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate order
 ```
 
 - What the design answers on each bus: the `i2c` table that
@@ -45,8 +44,10 @@ says is off, then run the checks in full and read `out/checks/results.json`:
 - Expected rail voltages: `SUPPLY_PINS` and `test_supply_pins_in_range`.
 - Default-off states: a project check reading `FAULT_STATES`, if `walk-fault-states`
   wrote one. The plan tests those states on the bench; it does not re-derive them.
-- A check that failed or was skipped is a step that cannot pass on the bench: list it
-  in Part 1 and stop there until it is fixed.
+- A check that failed, or was skipped without a documented reason, is a step that
+  cannot pass on the bench: list it in Part 1 and stop there until it is fixed. A
+  table left out on purpose (`test_load_supply_regulation` without `SUPPLY_REGULATION`)
+  or a part in `ABSENT_REFS` is a documented skip; results.json gives each reason.
 
 ## 2. Settle the power tree and the bench
 
@@ -63,20 +64,19 @@ The tables are proposed: no built-in check reads them yet. Their shapes are in
 
 - `TEST_POINTS`: every net a step probes, with the ground distance a scope spring tip
   needs. `PROBE_KEEPAWAY`: the boxes mated plugs and fitted modules cover.
-- `ENABLE_LINKS`: each enable net several regulators share, with each regulator's
-  enable pad, so each can be isolated.
+- `ENABLE_LINKS`: each shared enable net and its regulators' enable pads (to isolate).
 - `I2C_EXPECTED`: the exact scan per bus, from the user or the spec, never from the
   recorded `i2c` table (that would compare the design with itself).
 - `BRINGUP_STAGES`: each stage's scenario, supply net and current limit. Its readings
   check records each stage's input current and each test point's resistance to ground:
   the expected readings, never arithmetic in the conversation. The model sees only
-  resistors, diodes and FETs, so a bench reading can be lower.
+  resistors, diodes and FETs: a bench reading can be lower.
 - `SUPPLY_PINS` for any rail whose window the plan relies on and no row holds;
   design.py `dnp=True` for parts left off for first power; a layout.py `SHOTS` region
   per stage's probe points.
 
-Hand each table to `add-check`, then run `pcbkit check` in full again. A failed row is
-a Part 1 finding.
+Hand each table to `add-check`, then run the checks in full again: a failed row is a
+Part 1 finding.
 
 ## 4. Write the plan
 

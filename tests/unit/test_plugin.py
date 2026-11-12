@@ -19,6 +19,7 @@ outside the subset fails with the line, rather than being misread.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import re
 import sys
@@ -28,6 +29,7 @@ from typing import Any
 import click
 import pytest
 
+from pcbkit.check.results import BUILTIN_GROUPS
 from pcbkit.cli import cli
 from pcbkit.fab.pcbway import NOTES_LIMIT, OZ_MM
 from pcbkit.kicad.board import OX, OY
@@ -1158,11 +1160,27 @@ PROSE_RULES = [
         WORKFLOW,
         "Boundaries",
         "Before the user starts it, run the order-gate reviews, every one, every time, "
-        "in this order: first the reviews that edit sources, `review-derating`, "
+        "in this order: first `groups.py --gate order`, switching on every group it "
+        "names (an edit to pcbkit.toml), so that every pcbkit.toml edit comes before "
+        "`pcbkit finalize`; then the reviews that edit sources, `review-derating`, "
         "`plan-bringup`, and `review-spec-drift` if there is a written spec; then "
         "`pcbkit finalize` (after build, route and promote if the board changed); then "
         "`review-sourcing` on the files finalize wrote, which stamps them for the "
         "order; then a full `pcbkit check`.",
+    ),
+    (
+        "sourcing-switches-on-a-group-with-finalize-only",
+        SOURCING,
+        "1. Start from what the checks and the quote decide",
+        "one that is off here, switched on now, needs `pcbkit finalize` only (not a "
+        "new route), then start again.",
+    ),
+    (
+        "sourcing-stamp-refuses-an-outdated-review-and-stamps-both-bom-formats",
+        SOURCING,
+        "4. Write it down, then stamp",
+        "It refuses a `sourcing.md` older than the BOM or the centroid, and stamps the "
+        "BOM in both formats.",
     ),
     (
         "bringup-first-power-is-a-bench-supply",
@@ -1571,7 +1589,9 @@ def test_an_eval_cases_scaffold_script_exists(case: Path) -> None:
 BUILTIN = ROOT / "pcbkit" / "check" / "builtin"
 # Project checks the worked examples name: written by add-check, never built in.
 PROJECT_CHECKS = {"test_fault_states", "test_power_paths", "test_mating"}
-# The -k selection of each gate, exactly as the plan's "Left for WP17" states it.
+# The -k selection of each gate, exactly as the plan's "Left for WP17" states it. The
+# skills no longer spell one: groups.py owns it (and the groups per gate) and prints the
+# run, so this is the one place a test pins it, against the plan and against the script.
 SELECTIONS = {
     "sch": "test_circuit or test_esp32s3 or test_erc_clean",
     "place": "test_circuit or test_esp32s3 or test_erc_clean or "
@@ -1579,15 +1599,19 @@ SELECTIONS = {
     "test_filter_caps_sit_by_the_adc_pin",
     "route": "not test_outputs",
 }
-# Which gates' selections each review runs.
-REVIEW_SELECTIONS = {
+GROUPS_SCRIPT = SKILLS / "board-workflow" / "scripts" / "groups.py"
+GROUPS_CALL = '"${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate '
+# Which gates each review calls groups.py with. A review that serves several gates
+# writes them as one placeholder, ``sch|place|route|order``, naming every gate.
+EVERY_GATE = "|".join(["sch", "place", "route", "order"])
+REVIEW_GATES = {
     "walk-fault-states": {"sch"},
     "review-derating": {"sch"},
     "review-misplug": {"sch"},
     "review-current-paths": {"place", "route"},
-    "review-spec-drift": {"sch", "place", "route"},
-    "plan-bringup": set(),
-    "review-sourcing": set(),
+    "review-spec-drift": {EVERY_GATE},
+    "plan-bringup": {"order"},
+    "review-sourcing": {"order"},
 }
 
 
@@ -1640,6 +1664,53 @@ def test_the_cited_check_scan_catches_a_renamed_check() -> None:
     ]
 
 
+def groups_script() -> Any:
+    """Import groups.py as a module, by its path: the one owner of the gates."""
+    spec = importlib.util.spec_from_file_location("plugin_groups", GROUPS_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def checks_of(module: Path) -> list[str]:
+    """Return the names of the check functions in a built-in module."""
+    return [
+        node.name
+        for node in ast.walk(ast.parse(read(module)))
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
+    ]
+
+
+def selected_groups(expression: str) -> set[str]:
+    """Return the groups of the built-in checks a ``-k`` expression selects.
+
+    Matches as pytest does: a term is a case-insensitive substring of the module name
+    or the check function's name.
+    """
+    found = set()
+    for module in BUILTIN.glob("test_*.py"):
+        for function in checks_of(module):
+            names = (module.stem.lower(), function.lower())
+
+            def word(match: re.Match[str], names: tuple[str, ...] = names) -> str:
+                text = match.group(0)
+                if text in ("and", "or", "not"):
+                    return text
+                return str(any(text.lower() in n for n in names))
+
+            python = re.sub(r"[A-Za-z_][A-Za-z0-9_]*", word, expression)
+            if eval(python):  # noqa: S307 - True, False, and, or, not: ours alone
+                found.add(BUILTIN_GROUPS[module.stem])
+    return found
+
+
+def test_every_k_term_a_gate_runs_names_a_built_in_check() -> None:
+    known = builtin_names()
+    for gate, (_, expression) in groups_script().GATES.items():
+        if expression is not None:
+            assert k_terms(expression) <= known, (gate, expression)
+
+
 def test_every_k_term_a_skill_runs_names_a_built_in_check() -> None:
     known = builtin_names()
     for path, text in plugin_texts().items():
@@ -1647,26 +1718,62 @@ def test_every_k_term_a_skill_runs_names_a_built_in_check() -> None:
             assert k_terms(expression) <= known, (path.name, expression)
 
 
-def test_the_selections_are_the_plans_and_each_review_runs_its_own() -> None:
-    """One selection per gate, the same in every review and in the plan."""
+def test_the_selections_are_the_plans_and_the_one_groups_script_owns_them() -> None:
+    """One selection per gate: the plan's, the script's, and in no skill."""
     plan = folded(read(ROOT / "plans" / "wp16-review-skills.md"))
     for expression in SELECTIONS.values():
         assert f"`{expression}`" in plan, expression
-    by_expression = {v: k for k, v in SELECTIONS.items()}
-    for name, gates in REVIEW_SELECTIONS.items():
-        found = selections(read(SKILLS / name / "SKILL.md"))
-        unknown = [e for e in found if e not in by_expression]
-        assert not unknown, (name, unknown)
-        assert {by_expression[e] for e in found} == gates, name
+    gates = groups_script().GATES
+    assert {g: e for g, (_, e) in gates.items() if e is not None} == SELECTIONS
+    assert gates["order"][1] is None, "the order gate runs every check"
+    for name in REVIEW_GATES:
+        text = read(SKILLS / name / "SKILL.md")
+        assert not selections(text), f"{name} spells a selection the script owns"
 
 
-def test_each_review_says_which_check_groups_are_off_before_its_first_run() -> None:
+def test_each_gates_groups_are_the_groups_its_selection_collects() -> None:
+    """The script's group set must be what its -k expression really selects.
+
+    esp32s3 is added by the script for a DevKit board, and the order gate runs every
+    group: so each gate's set, plus esp32s3, is exactly what the selection collects.
+    """
+    for gate, (groups, expression) in groups_script().GATES.items():
+        wanted = set(groups) | {"esp32s3"}
+        if expression is None:
+            assert wanted == set(CHECK_GROUPS), gate
+        else:
+            assert selected_groups(expression) == wanted, gate
+
+
+def test_the_group_scan_sees_a_selection_that_collects_a_group_it_leaves_out() -> None:
+    """Guard the guard: a selection that reaches fab is not a kicad-and-circuit one."""
+    assert selected_groups("test_circuit or test_erc_clean") == {"circuit", "kicad"}
+    assert "fab" in selected_groups(SELECTIONS["place"])
+    assert "outputs" not in selected_groups(SELECTIONS["route"])
+
+
+def gate_calls(text: str) -> list[str]:
+    """Return the gate argument of every groups.py call in a skill's text."""
+    return re.findall(re.escape(GROUPS_CALL) + r"([\w|]+)", text)
+
+
+def test_each_review_calls_groups_with_its_gates_before_its_first_run() -> None:
     """A selection over a group pcbkit.toml leaves off runs nothing, silently."""
-    script = '"${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py"'
     for path in REVIEWS:
+        name = path.parent.name
         body = body_of(path)
-        lines = [line for line in body.splitlines() if script in line]
-        assert len(lines) == 1, path.parent.name
-        groups = lines[0].split(script, 1)[1].split()
-        assert groups and set(groups) <= set(CHECK_GROUPS), (path.parent.name, groups)
-        assert body.index(script) < body.index("pcbkit check"), path.parent.name
+        calls = gate_calls(body)
+        assert set(calls) == REVIEW_GATES[name], (name, calls)
+        assert len(calls) == len(set(calls)), f"{name} calls one gate twice"
+        for call in calls:
+            assert set(call.split("|")) <= set(groups_script().GATES), (name, call)
+        assert "|" not in "".join(calls) or calls == [EVERY_GATE], name
+        assert body.index(GROUPS_CALL) < (
+            body.index("pcbkit check") if "pcbkit check" in body else len(body)
+        ), name
+
+
+def test_the_gate_scan_sees_a_missing_or_misnamed_gate() -> None:
+    text = f".venv/bin/python {GROUPS_CALL}sch\n{GROUPS_CALL}plce\n"
+    assert gate_calls(text) == ["sch", "plce"]
+    assert gate_calls("run groups.py kicad circuit") == []

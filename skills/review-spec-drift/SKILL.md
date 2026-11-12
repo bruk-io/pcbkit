@@ -39,22 +39,19 @@ it; the prose spec holds intent, behaviour and open questions.
 
 ## 2. Let code compare them
 
-Run only the checks whose inputs exist at this gate; one whose inputs do not exist yet
-is not a finding, and its claims are `cannot tell`. Switch on any group the first line
-says is off (it needs `kicad` and `circuit`; add `fab` and `copper` from placement and
-`outputs` at the order gate), then run the gate's selection and the listing:
+Run only the checks whose inputs exist at the gate the board is at (`sch`, `place`,
+`route` or, before an order, `order`); one whose inputs do not exist yet is not a
+finding, and its claims are `cannot tell`. The script names any group pcbkit.toml leaves
+off (switch it on in `[checks] groups`) and prints that gate's run with its caveats; run
+what it prints, adding `or test_<topic>` for each project check whose inputs exist, then
+the listing:
 
 ```
-.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
-.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"
-.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean or test_decoupling_caps_are_close or test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin"
-.venv/bin/pcbkit check -k "not test_outputs"
-.venv/bin/pcbkit check
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate sch|place|route|order
 .venv/bin/python "${CLAUDE_SKILL_DIR}/scripts/listing.py" spec-claims.json
 ```
 
-The selections are, in turn, the schematic, placement, route and order gates; add `or
-test_<topic>` for each project check whose inputs exist. A claim whose check passed, or
+A claim whose check passed, or
 that `listing.py` reports `matches`, matches; one whose check failed, or that it reports
 `differs` or `not in design`, differs, with the message or both values as evidence.
 

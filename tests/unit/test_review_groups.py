@@ -1,12 +1,15 @@
 """Unit tests for skills/board-workflow/scripts/groups.py.
 
 A review's ``-k`` selection over a check group that pcbkit.toml leaves off runs nothing
-and says nothing. The script names such groups before the first run.
+and says nothing. The script owns each gate's groups and selection, names the groups
+that are off before the first run, and prints the run for the gate.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -64,7 +67,9 @@ def test_a_name_that_is_not_a_group_is_refused(needed: list[str]) -> None:
     assert ", ".join(CHECK_GROUPS) in line
 
 
-def write_project(root: Path, groups_line: str | None) -> Path:
+def write_project(
+    root: Path, groups_line: str | None, specs: str | None = None
+) -> Path:
     """Write a pcbkit.toml with ``groups_line`` under [checks], or no [checks]."""
     root.mkdir()
     text = '[board]\nstem = "my_board"\ntitle = "My Board"\nrev = "A"\n'
@@ -72,28 +77,121 @@ def write_project(root: Path, groups_line: str | None) -> Path:
     if groups_line is not None:
         text += f"\n[checks]\ngroups = {groups_line}\n"
     (root / "pcbkit.toml").write_text(text, encoding="utf-8")
+    if specs is not None:
+        (root / "specs.py").write_text(specs, encoding="utf-8")
     return root
 
 
-def test_main_reads_the_projects_groups(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run the script inside ``root``, as the skills do."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+ALL = '["kicad", "outputs", "fab", "copper", "circuit", "esp32s3"]'
+
+
+def test_each_gate_owns_its_groups_and_its_selection() -> None:
+    """The set per gate, written out: a skill no longer spells either one."""
+    assert {g: v[0] for g, v in groups.GATES.items()} == {
+        "sch": ("kicad", "circuit"),
+        "place": ("kicad", "circuit", "fab", "copper"),
+        "route": ("kicad", "circuit", "fab", "copper"),
+        "order": ("kicad", "circuit", "fab", "copper", "outputs"),
+    }
+    assert {g: v[1] for g, v in groups.GATES.items()} == {
+        "sch": "test_circuit or test_esp32s3 or test_erc_clean",
+        "place": "test_circuit or test_esp32s3 or test_erc_clean or "
+        "test_decoupling_caps_are_close or "
+        "test_power_footprints_match_datasheet or "
+        "test_filter_caps_sit_by_the_adc_pin",
+        "route": "not test_outputs",
+        "order": None,
+    }
+
+
+def test_a_gate_prints_its_run_and_the_two_caveats(tmp_path: Path) -> None:
+    done = run(write_project(tmp_path / "my-board", ALL), "--gate", "sch")
+    assert done.returncode == 0, done.stdout
+    lines = done.stdout.splitlines()
+    assert lines[0] == "ON: kicad, circuit"
+    assert lines[1] == (
+        'RUN: .venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or '
+        'test_erc_clean"'
+    )
+    assert lines[2].startswith("NOTE: a group just switched on fails by name each")
+    assert lines[3].startswith("NOTE: a -k run is partial")
+    assert len(lines) == 4
+
+
+def test_the_order_gate_runs_every_check_and_says_no_partial_caveat(
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.chdir(write_project(tmp_path / "my-board", '["kicad", "circuit"]'))
-    assert groups.main(["circuit", "fab"]) == 1
-    assert capsys.readouterr().out.startswith("OFF: fab (pcbkit.toml [checks] groups")
+    done = run(write_project(tmp_path / "my-board", ALL), "--gate", "order")
+    lines = done.stdout.splitlines()
+    assert lines[:2] == [
+        "ON: kicad, circuit, fab, copper, outputs",
+        "RUN: .venv/bin/pcbkit check",
+    ]
+    assert len(lines) == 3 and "-k run is partial" not in done.stdout
 
 
-def test_main_uses_the_default_when_the_project_names_no_groups(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_devkit_board_needs_the_esp32s3_group_at_every_gate(tmp_path: Path) -> None:
+    """The group only a DevKit board has: off, a -k over it collects nothing."""
+    devkit = write_project(
+        tmp_path / "devkit", '["kicad", "circuit"]', specs='DEVKIT_REF = "U1"\n'
+    )
+    done = run(devkit, "--gate", "sch")
+    assert done.returncode == 1
+    assert done.stdout.splitlines()[0].startswith("OFF: esp32s3 (pcbkit.toml")
+    plain = write_project(tmp_path / "plain", '["kicad", "circuit"]', specs="X = 1\n")
+    assert run(plain, "--gate", "sch").stdout.splitlines()[0] == "ON: kicad, circuit"
+    on = write_project(
+        tmp_path / "on", '["kicad", "circuit", "esp32s3"]', specs='DEVKIT_REF = "U1"\n'
+    )
+    assert run(on, "--gate", "sch").stdout.splitlines()[0] == (
+        "ON: kicad, circuit, esp32s3"
+    )
+
+
+def test_the_default_groups_leave_the_gate_groups_off(tmp_path: Path) -> None:
+    done = run(write_project(tmp_path / "my-board", None), "--gate", "place")
+    assert done.returncode == 1
+    assert done.stdout.splitlines()[0] == (
+        "OFF: circuit, fab, copper (pcbkit.toml [checks] groups is kicad, outputs): "
+        "add them before the first run, since a group that is off collects no check "
+        "and a -k selection over it decides nothing"
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [[], ["--gate"], ["--gate", "build"], ["kicad", "circuit"], ["--gate", "sch", "x"]],
+)
+def test_an_unknown_gate_or_a_group_list_is_refused_with_the_usage(
+    tmp_path: Path, args: list[str]
 ) -> None:
-    monkeypatch.chdir(write_project(tmp_path / "my-board", None))
-    assert groups.main(["kicad", "outputs"]) == 0
-    assert capsys.readouterr().out == "ON: kicad, outputs\n"
+    done = run(write_project(tmp_path / "my-board", ALL), *args)
+    assert done.returncode == 2
+    assert done.stdout == "usage: groups.py --gate {sch|place|route|order}\n"
 
 
-def test_main_outside_a_project_exits_2(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_specs_file_that_cannot_be_imported_is_said_not_a_traceback(
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    assert groups.main(["kicad"]) == 2
-    assert capsys.readouterr().out.startswith("no board project: ")
+    root = write_project(tmp_path / "my-board", ALL, specs="raise RuntimeError\n")
+    done = run(root, "--gate", "sch")
+    assert done.returncode == 2
+    assert done.stdout.startswith("specs.py cannot be imported (RuntimeError)")
+    assert done.stderr == ""
+
+
+def test_outside_a_project_it_exits_2(tmp_path: Path) -> None:
+    done = run(tmp_path, "--gate", "sch")
+    assert done.returncode == 2
+    assert done.stdout.startswith("no board project: ")

@@ -7,10 +7,10 @@ files alone: it needs no pcbkit, no KiCad and no network, only a ``python3``.
 
 It reports a problem when
 
-* the Gerber zip, the BOM or the centroid is missing from ``out/fab/`` (or ``fab/``, the
-  older place), or older than any source of the board: ``pcbkit.toml``, every Python
-  module of the project except the ones that only the checks read, ``footprints/`` and
-  ``golden/``;
+* the Gerber zip, the BOM (CSV and XLSX) or the centroid is missing from ``out/fab/``
+  (or ``fab/``, the older place), or older than any source of the board:
+  ``pcbkit.toml``, every Python module of the project except the ones that only the
+  checks read, ``footprints/`` and ``golden/``;
 * ``out/checks/results.json`` is missing, older than any of those sources or than the
   checks' own inputs (``specs.py``, ``circuits.py``, ``checks/``), or records a failed
   check or a non-zero exit;
@@ -19,16 +19,16 @@ It reports a problem when
   what it lacks: a check group the project switched on that has no result at all, and a
   check of the project's own (``checks/test_*.py``, read as Python and never run) that
   has none;
-* the BOM or the centroid is not the file the sourcing review judged: ``sourcing.json``,
-  which ``skills/review-sourcing/scripts/stamp.py`` writes, is missing, unreadable, or
-  holds another sha256 for it. ``--before-sourcing`` leaves this out, for the sourcing
-  review's own first look at the files.
+* the BOM (CSV or XLSX) or the centroid is not the file the sourcing review judged:
+  ``sourcing.json``, which ``skills/review-sourcing/scripts/stamp.py`` writes, is
+  missing, unreadable, or holds another sha256 for it. ``--before-sourcing`` leaves this
+  out, for the sourcing review's own first look at the files;
+* the last run was cut short. ``pcbkit check -k EXPR`` (or ``-m``, or a deselect) writes
+  a ``selection`` block with ``complete`` false, even when every check it ran passed,
+  and ``partial`` refuses it. A results file from a pcbkit too old to write that block
+  is judged by what it lacks, as above.
 
-What it cannot see: a ``-k`` run that leaves a result in every group and for every
-project check (``-k "not drc"``, say) looks complete, because the results file does not
-say what was deselected. Recording the expression, or the count of deselected checks, is
-pcbkit's to do (pcbkit/check/plugin.py), and this script should then refuse such a run.
-Nor does it look for a check the module does not spell out as ``def test...`` (a
+What it cannot see: a check the module does not spell out as ``def test...`` (a
 ``unittest.TestCase`` class, a function made while the module loads).
 
 Exit codes: 0 every file is current, the checks passed and none of the above is
@@ -54,14 +54,14 @@ CHECK_ONLY = ("specs.py", "circuits.py", "mutants.py")
 CHECK_INPUTS = ("specs.py", "circuits.py")
 # Folders that are never sources of the board: generated, or the user's own notes.
 SKIP_DIRS = ("checks", "archive", "kicad", "out", "fab", "__pycache__")
-# The three files an order needs, by the suffix finalize gives them.
-FAB_FILES = ("_gerbers.zip", "_BOM.csv", "_centroid.csv")
+# The files an order needs, by the suffix finalize gives them.
+FAB_FILES = ("_gerbers.zip", "_BOM.csv", "_BOM.xlsx", "_centroid.csv")
 # What a line about missing results says to do, and how many checks it names.
 PARTIAL = "the last run was partial (pcbkit check -k?): run pcbkit check with no -k"
 SHOWN = 3
 # What the sourcing review leaves for the order to verify, and the files it judged.
 STAMP = "sourcing.json"
-JUDGED = ("_BOM.csv", "_centroid.csv")
+JUDGED = ("_BOM.csv", "_BOM.xlsx", "_centroid.csv")
 RESOURCE = "run the review-sourcing review on the files in it, which stamps them again"
 
 

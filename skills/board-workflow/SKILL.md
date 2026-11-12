@@ -39,10 +39,10 @@ result.
 `pcbkit check -k EXPR` runs only the checks it matches and replaces out/checks/results.json
 with them, so run `pcbkit check` with no `-k` before an order.
 
-The review skills run at gates in this loop. Each runs only the checks whose inputs
-exist at its gate (it gives the `-k` selection), once
-`${CLAUDE_SKILL_DIR}/scripts/groups.py` has said which of the check groups it needs are
-off in pcbkit.toml (a group that is off collects nothing). Each ends by writing what it
+The review skills run at gates in this loop. Each calls
+`${CLAUDE_SKILL_DIR}/scripts/groups.py --gate sch|place|route|order`, which owns that
+gate's check groups and `-k` selection: it names any group pcbkit.toml leaves off (a
+group that is off collects nothing) and prints the run. Each ends by writing what it
 settled into specs.py, so the next run is a check:
 
 - After `sch` is ERC-clean: `walk-fault-states` (any board that drives a load) and
@@ -92,11 +92,13 @@ then `finalize`.
 - Ordering from a fab house is started by the user with `/pcbkit:order-pcbway`, never by
   Claude. If asked to order, say so and point them to it: it begins by checking that the
   fab files and the check results are current. Before the user starts it, run the
-  order-gate reviews, every one, every time, in this order: first the reviews that edit
-  sources, `review-derating`, `plan-bringup`, and `review-spec-drift` if there is a
-  written spec; then `pcbkit finalize` (after build, route and promote if the board
-  changed); then `review-sourcing` on the files finalize wrote, which stamps them for the
-  order; then a full `pcbkit check`.
+  order-gate reviews, every one, every time, in this order: first `groups.py --gate
+  order`, switching on every group it names (an edit to pcbkit.toml), so that every
+  pcbkit.toml edit comes before `pcbkit finalize`; then the reviews that edit sources,
+  `review-derating`, `plan-bringup`, and `review-spec-drift` if there is a written spec;
+  then `pcbkit finalize` (after build, route and promote if the board changed); then
+  `review-sourcing` on the files finalize wrote, which stamps them for the order; then a
+  full `pcbkit check`.
 
 ## References
 

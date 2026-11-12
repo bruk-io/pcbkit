@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +21,14 @@ import pytest
 SKILLS = Path(__file__).resolve().parents[2] / "skills"
 STAMP = SKILLS / "review-sourcing" / "scripts" / "stamp.py"
 PREFLIGHT = SKILLS / "order-pcbway" / "scripts" / "preflight.py"
-FAB = ("my_board_gerbers.zip", "my_board_BOM.csv", "my_board_centroid.csv")
+FAB = (
+    "my_board_gerbers.zip",
+    "my_board_BOM.csv",
+    "my_board_BOM.xlsx",
+    "my_board_centroid.csv",
+)
+FINALIZED = 1_700_000_000  # when the fab files were written
+REVIEWED = FINALIZED + 600  # when the review was: later
 
 
 def make_project(root: Path, fab: str = "out/fab", review: bool = True) -> Path:
@@ -30,8 +38,10 @@ def make_project(root: Path, fab: str = "out/fab", review: bool = True) -> Path:
     (root / fab).mkdir(parents=True)
     for name in FAB:
         (root / fab / name).write_text(f"{name}\n", encoding="utf-8")
+        os.utime(root / fab / name, (FINALIZED, FINALIZED))
     if review:
         (root / "sourcing.md").write_text("# Sourcing review\n", encoding="utf-8")
+        os.utime(root / "sourcing.md", (REVIEWED, REVIEWED))
     return root
 
 
@@ -67,14 +77,16 @@ def test_the_stamp_records_the_sha256_of_the_bom_and_the_centroid(
     assert stamp == {
         "format": 1,
         "review": "sourcing.md",
+        "review_sha256": digest(project / "sourcing.md"),
         "files": {
             "out/fab/my_board_BOM.csv": digest(fab / "my_board_BOM.csv"),
+            "out/fab/my_board_BOM.xlsx": digest(fab / "my_board_BOM.xlsx"),
             "out/fab/my_board_centroid.csv": digest(fab / "my_board_centroid.csv"),
         },
     }
     assert done.stdout == (
         "OK: sourcing.json records out/fab/my_board_BOM.csv, "
-        "out/fab/my_board_centroid.csv\n"
+        "out/fab/my_board_BOM.xlsx, out/fab/my_board_centroid.csv\n"
     )
 
 
@@ -91,6 +103,7 @@ def test_the_older_fab_folder_is_stamped_when_there_is_no_out_fab(
     stamp = json.loads((project / "sourcing.json").read_text(encoding="utf-8"))
     assert sorted(stamp["files"]) == [
         "fab/my_board_BOM.csv",
+        "fab/my_board_BOM.xlsx",
         "fab/my_board_centroid.csv",
     ]
 
@@ -106,7 +119,7 @@ def test_no_stamp_without_a_written_review(tmp_path: Path) -> None:
     assert not (project / "sourcing.json").exists()
 
 
-@pytest.mark.parametrize("suffix", ["_BOM.csv", "_centroid.csv"])
+@pytest.mark.parametrize("suffix", ["_BOM.csv", "_BOM.xlsx", "_centroid.csv"])
 def test_no_stamp_when_a_judged_file_is_missing_or_doubled(
     project: Path, suffix: str
 ) -> None:
@@ -122,6 +135,43 @@ def test_no_stamp_when_a_judged_file_is_missing_or_doubled(
     (fab / f"b{suffix}").write_text("b\n", encoding="utf-8")
     assert "has 2 files ending" in run(STAMP, project).stdout
     assert not (project / "sourcing.json").exists()
+
+
+@pytest.mark.parametrize(
+    "name", ["my_board_BOM.csv", "my_board_BOM.xlsx", "my_board_centroid.csv"]
+)
+def test_a_review_older_than_a_judged_file_is_refused_by_name(
+    project: Path, name: str
+) -> None:
+    """A sourcing.md left from an earlier export must not vouch for a new one."""
+    path = project / "out" / "fab" / name
+    os.utime(path, (REVIEWED + 60, REVIEWED + 60))
+    done = run(STAMP, project)
+    assert done.returncode == 1
+    assert done.stdout.splitlines() == [
+        f"OUTDATED: sourcing.md is older than out/fab/{name}: the review judged an "
+        "earlier export; review the new files, rewrite sourcing.md, then stamp"
+    ]
+    assert not (project / "sourcing.json").exists()
+
+
+def test_a_review_written_after_every_judged_file_is_stamped(project: Path) -> None:
+    """Guard the guard: the refusal above is about age, not about any file."""
+    gerbers = project / "out" / "fab" / "my_board_gerbers.zip"
+    os.utime(gerbers, (REVIEWED + 60, REVIEWED + 60))  # not judged: no matter
+    assert run(STAMP, project).returncode == 0
+
+
+def test_the_preflight_refuses_a_bom_in_the_other_format_changed_later(
+    project: Path,
+) -> None:
+    assert run(STAMP, project).returncode == 0
+    xlsx = project / "out" / "fab" / "my_board_BOM.xlsx"
+    xlsx.write_text("another BOM\n", encoding="utf-8")
+    assert (
+        "UNREVIEWED: out/fab/my_board_BOM.xlsx changed after the sourcing review "
+        "judged it" in run(PREFLIGHT, project).stdout
+    )
 
 
 def test_outside_a_project_it_says_so_and_exits_2(tmp_path: Path) -> None:

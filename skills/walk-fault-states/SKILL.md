@@ -22,21 +22,16 @@ decides it; the review supplies intent, datasheet facts and the judgement on wha
 
 ## 1. Start from the checks that apply at this gate
 
-At the schematic gate only the netlist exists: the `kicad` and `circuit` groups apply
-(and `esp32s3` on an ESP32-S3 DevKit board), with project checks that read only the
-netlist. Switch on in `[checks] groups` of pcbkit.toml any group the first line says is
-off, then run:
+At the schematic gate only the netlist exists. The script names any group pcbkit.toml
+leaves off (switch it on in `[checks] groups`) and prints the gate's run with its
+caveats; run what it prints, adding `or test_<topic>` per project check that reads only
+the netlist (a previous run's `test_fault_states`):
 
 ```
-.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit
-.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean"
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate sch
 ```
 
-A group just switched on fails by name each table it lacks: write those first. Add
-`or test_<topic>` per such project check (a previous run's `test_fault_states`). A check
-whose inputs do not exist yet (`outputs`, DRC, `copper`) is not a finding; a `-k` run is
-partial, and the order gate runs all. Take as given, and report a failure rather than
-re-derive it:
+Take as given, and report a failure rather than re-derive it:
 
 - Floating and unconnected pins: `test_erc_clean`. An open pin with a no-connect flag
   in design.py was left open on purpose.

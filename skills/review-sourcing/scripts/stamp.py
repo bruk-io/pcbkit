@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Record which BOM and centroid the sourcing review judged, for the order to verify.
 
-``review-sourcing`` judges the BOM and the centroid in ``out/fab/`` (or ``fab/``, the
-older place). Run this from the project folder (or anywhere inside it) once its
-``sourcing.md`` is written: it writes ``sourcing.json`` beside ``pcbkit.toml`` with the
-sha256 of each of those two files. The order skill's ``preflight.py`` hashes the files
-again and refuses an order whose files are not the ones the review judged.
+``review-sourcing`` judges the BOM (the CSV and the XLSX ``pcbkit finalize`` writes
+from the same lines) and the centroid in ``out/fab/`` (or ``fab/``, the older place).
+Run this from the project folder (or anywhere inside it) once its ``sourcing.md`` is
+written: it writes ``sourcing.json`` beside ``pcbkit.toml`` with the sha256 of each of
+those three files, and of ``sourcing.md`` itself. The order skill's ``preflight.py``
+hashes the files again and refuses an order whose files are not the ones the review
+judged. A ``sourcing.md`` older than the BOM or the centroid is a review of an earlier
+export: the stamp refuses it, naming the file.
 
 ``sourcing.json`` is not a source of the board (not Python, not in ``footprints/`` or
 ``golden/``), so writing it makes nothing stale.
@@ -24,8 +27,9 @@ from pathlib import Path
 MARKER = "pcbkit.toml"
 STAMP = "sourcing.json"
 REVIEW = "sourcing.md"
-# The two files the review judges, by the suffix finalize gives them.
-JUDGED = ("_BOM.csv", "_centroid.csv")
+# The files the review judges, by the suffix finalize gives them: the BOM in both
+# formats (the order may upload either), and the centroid.
+JUDGED = ("_BOM.csv", "_BOM.xlsx", "_centroid.csv")
 FORMAT = 1
 
 
@@ -65,6 +69,22 @@ def judged_files(root: Path) -> tuple[list[Path], list[str]]:
     return found, problems
 
 
+def outdated(root: Path, files: list[Path]) -> list[str]:
+    """Return a line per judged file that is newer than ``sourcing.md``.
+
+    A review written before the last ``pcbkit finalize`` judged an earlier export, so
+    stamping the new files would vouch for lines nobody read.
+    """
+    written = (root / REVIEW).stat().st_mtime
+    return [
+        f"OUTDATED: {REVIEW} is older than {path.relative_to(root).as_posix()}: the "
+        "review judged an earlier export; review the new files, rewrite "
+        f"{REVIEW}, then stamp"
+        for path in files
+        if path.stat().st_mtime > written
+    ]
+
+
 def stamp(root: Path) -> list[str]:
     """Write the project's sourcing.json; return a line per reason it could not."""
     problems = []
@@ -77,9 +97,13 @@ def stamp(root: Path) -> list[str]:
     problems += missing
     if problems:
         return problems
+    problems += outdated(root, files)
+    if problems:
+        return problems
     data = {
         "format": FORMAT,
         "review": REVIEW,
+        "review_sha256": sha256(root / REVIEW),
         "files": {path.relative_to(root).as_posix(): sha256(path) for path in files},
     }
     (root / STAMP).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

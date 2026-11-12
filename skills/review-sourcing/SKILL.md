@@ -16,6 +16,7 @@ description: >-
 
 Can this board be bought and built as designed, in this batch, from this assembler?
 Gate: after `pcbkit finalize`, before `/pcbkit:order-pcbway`; `board-workflow` sequences it.
+Ratings are `review-derating`'s, connector choice `review-misplug`'s.
 
 ## Hard rules
 
@@ -28,15 +29,18 @@ Gate: after `pcbkit finalize`, before `/pcbkit:order-pcbway`; `board-workflow` s
 
 ## 1. Start from what the checks and the quote decide
 
-Review the files the fab receives in `out/fab/`. Switch on any group the first line says
-is off. If the preflight exits non-zero, the files or results are stale, partial or
+Review the files the fab receives in `out/fab/`. The script names any group pcbkit.toml
+leaves off. `board-workflow` switches every group on before `pcbkit finalize`; one that
+is off here, switched on now, needs `pcbkit finalize` only (not a new route), then start
+again. If the preflight exits non-zero, the files or results are stale, partial or
 failing: show what it printed and stop, as a review of stale files is worse than none.
 
 ```
-.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad outputs fab
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate order
 .venv/bin/pcbkit check
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/order-pcbway/scripts/preflight.py" --before-sourcing
 python3 "${CLAUDE_SKILL_DIR}/scripts/leadless.py"
+python3 "${CLAUDE_SKILL_DIR}/scripts/bomlines.py" --boards M --spare S
 ```
 
 Then take as given:
@@ -47,8 +51,10 @@ Then take as given:
 - `outputs` (`test_bom_complete`, `test_bom_matches_schematic`,
   `test_centroid_matches_board`, `test_job_file_stackup`) and `fab` (the PCBWay limits,
   `test_power_footprints_match_datasheet`): BOM, centroid and board agree, limits hold.
-- `parts/<part>.datasheet.json` from `pcbkit datasheet find`: a line that is not
-  `VERIFIED` or `CONFIRMED` has an unchecked footprint.
+- `bomlines.py` (M the boards to assemble, S the spare parts per line the assembler's
+  page asks for): each line's quantity to buy, and `unchecked`, the lines whose
+  `parts/<part>.datasheet.json` from `pcbkit datasheet find` is not `VERIFIED` or
+  `CONFIRMED`: an unchecked footprint.
 
 ## 2. Write the decidable rows, then run
 
@@ -87,34 +93,12 @@ Run `pcbkit check` in full again. A failed row is an assembly finding.
   `/pcbkit:order-pcbway` asks for. Never start the order: the user does.
 - Last, write `sourcing.md` (below), then stamp the BOM and centroid it judged with
   `python3 "${CLAUDE_SKILL_DIR}/scripts/stamp.py"`: the order refuses any other files.
-
-Ratings are `review-derating`'s, connector choice `review-misplug`'s.
+  It refuses a `sourcing.md` older than the BOM or the centroid, and stamps the BOM in
+  both formats.
 
 ## Output - fixed format
 
 Write it to `sourcing.md` in the project folder (never `out/` or `fab/`), replacing any
 earlier one, and show it in the reply.
 
-```markdown
-# Sourcing review: <board> rev <rev> - <date>
-Batch: <n> boards, <m> assembled, variants: <list>. Assembler: <name>.
-
-## BOM risk table
-| Line | Refs | Part number | Source checked (where, date) | Stock | Lifecycle | Alternate (compat, what changes) | Risk |
-Risk is HIGH / MED / LOW / UNVERIFIED, with a one-line reason. Sorted HIGH first.
-
-## Consolidation proposals
-- <lines to merge> -> <proposed part>. Saves <n> lines. Behaviour change: none / <what>. Deliberate? <answer>.
-
-## Assembly findings
-- [BLOCKER|COST|CHECK] <ref or line>: <finding>. Evidence: <file, field, page, or check>. Action: <fix>.
-
-## Variant matrix
-| Group | Refs | Variant A | Variant B | ... | Jumper/strap state | Safe and testable when absent? |
-
-## Unverified
-Everything not checked live, and why.
-
-## Written down
-- <file and table>: <rows added or changed>
-```
+The format, with each section's columns: [references/output.md](references/output.md).

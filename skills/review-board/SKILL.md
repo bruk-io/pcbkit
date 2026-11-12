@@ -47,5 +47,5 @@ user named a focus (region names, or a concern), it is here: $ARGUMENTS
    change it (layout.py for a position, routing.py for a hand route or keep-out). If you
    find nothing, say what you looked at. For a coupling, loop or current path no check
    measures, say that `review-current-paths` should write it into specs.py; for a
-   finding a check could decide from the board, name `add-check`. Do not paste image data or report listings into
-   the reply.
+   finding a check could decide from the board, name `add-check`. Do not paste image
+   data or report listings into the reply.

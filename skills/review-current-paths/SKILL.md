@@ -25,20 +25,19 @@ ground pour on the other side.
 
 ## 1. Start from the checks that apply at this gate
 
-It needs the `kicad`, `circuit`, `fab` and `copper` groups (and `esp32s3` on a DevKit
-board): switch on in `[checks] groups` of pcbkit.toml any the first line says is off. A
-group just switched on fails by name each table it lacks. Run one selection, placed or routed:
+The script names any group pcbkit.toml leaves off (switch it on in `[checks] groups`)
+and prints the gate's run with its caveats. Use the first for a placed board and the
+second once it is routed, and run what it prints:
 
 ```
-.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" kicad circuit fab copper
-.venv/bin/pcbkit check -k "test_circuit or test_esp32s3 or test_erc_clean or test_decoupling_caps_are_close or test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin"
-.venv/bin/pcbkit check -k "not test_outputs"
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate place
+.venv/bin/python "${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py" --gate route
 ```
 
 Placed: netlist and part-position checks, plus `or test_<topic>` for a project check
 that needs no tracks (`PART_SPACING`). Routed: every copper check too. Missing inputs
-are not findings; a `-k` run is partial, and the order gate runs all. Once routed these
-measure what this review writes; never judge by eye what they measure:
+are not findings. Once routed these measure what this review writes; never judge by
+eye what they measure:
 
 | Question | Check (group) | Table |
 |---|---|---|
