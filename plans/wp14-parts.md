@@ -417,10 +417,25 @@ blank line is a gap. `pcbkit.datasheet_find.page_texts` still runs pdftotext wit
 
 Measured on 151 facts from three public TI datasheets in `-layout` text, a value is
 accepted on the first quote about 87% of the time, after rewording the quote 7%, and
-never 6%; most of what is never accepted is a negative number whose dash has no
-certain role. Swapping each accepted value for a corrupted one (a digit, a sign, a
-decimal point, the neighbouring row) is refused except where the corruption is
-another number of the same quote: the roles blind spot, which the eval measures.
+never 6%; on a fourth datasheet it was not tuned on (28 facts) 24 / 3 / 1. Most of
+what is never accepted is a negative number whose dash has no certain role.
+
+Two corruption measurements on the accepted values of all four:
+
+- **Numbers.** Swapping a value for a corrupted one (a digit, a sign, a decimal point,
+  the neighbouring row) is refused except where the corruption is another number of
+  the same quote: the roles blind spot, which the eval measures.
+- **Units.** Swapping a value's unit or prefix for a neighbouring one ("4.5 A" for
+  "4.5 V", "6.8 nF" for "6.8 pF"): 27 of 225 swaps pass. Every one is a number with
+  no unit anywhere on its line: the unit is before the number ("kHz 500"), in a
+  column header, or the row has none ("±2000" under "V(ESD)"). Before a number took
+  its row's unit column, 96 passed; before units were compared at all, every one.
+
+**The unit must travel inside the value.** The check compares a unit only if the
+value it is given states one ("6.8 pF", "-0.3 V"). The part-file sketch below keeps
+`unit` as a field apart from `min`, `typ` and `max`; the caller must join them
+("6" and "V" into "6 V") before calling `check_citation`, or the unit is never
+compared.
 
 What it checks, what it refuses as unknown (right values included) and what no text
 check can detect are listed in the module docstring ("What is checked, refused and
