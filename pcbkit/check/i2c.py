@@ -36,7 +36,15 @@ def hexes(addresses: Iterable[int]) -> list[str]:
 def address_problem(address: Any) -> str | None:
     """Return what is wrong with an address, or None for a whole number 0 to 0x7F."""
     if isinstance(address, bool) or not isinstance(address, int):
-        return f"address {address!r} is not a whole number: write 0x40, not '0x40'"
+        problem = f"address {address!r} is not a whole number"
+        if isinstance(address, str):
+            try:
+                int(address.strip(), 0)
+            except ValueError:
+                return problem
+            # text that reads as a number: say to write it without the quotes
+            return f"{problem}: write {address.strip()}, not {address!r}"
+        return problem
     if not 0 <= address <= 0x7F:
         text = f"0x{address:02x}" if address >= 0 else str(address)
         return f"address {text} is not a 7-bit address"

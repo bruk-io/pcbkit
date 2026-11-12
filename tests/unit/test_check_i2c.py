@@ -119,13 +119,20 @@ def test_the_shape_refuses_an_address_that_is_not_a_whole_number_in_range(
         ),
         (
             [("SDA", "A", 64.0)],
-            "circuits.i2c_devices row 0 (A): address 64.0 is not a whole number: "
-            "write 0x40, not '0x40'",
+            "circuits.i2c_devices row 0 (A): address 64.0 is not a whole number",
         ),
         (
             [("SDA", "A", True)],
-            "circuits.i2c_devices row 0 (A): address True is not a whole number: "
-            "write 0x40, not '0x40'",
+            "circuits.i2c_devices row 0 (A): address True is not a whole number",
+        ),
+        (
+            [("SDA", "A", "0x3c")],
+            "circuits.i2c_devices row 0 (A): address '0x3c' is not a whole number: "
+            "write 0x3c, not '0x3c'",
+        ),
+        (
+            [("SDA", "A", "sensor")],
+            "circuits.i2c_devices row 0 (A): address 'sensor' is not a whole number",
         ),
         (
             [("SDA", "A", 0x80)],
@@ -142,7 +149,10 @@ def test_a_device_list_that_is_not_rows_of_net_name_address_is_named(
 ) -> None:
     """Say what circuits.i2c_devices gave, for each way it can be wrong."""
     clean, found = i2c.device_rows(rows, "circuits.i2c_devices")
-    assert found[0].startswith(problem)
+    if "row" in problem:
+        assert found[0] == problem
+    else:
+        assert found[0].startswith(problem)
     assert clean == []
 
 
@@ -167,6 +177,16 @@ def test_clashes_are_the_addresses_with_two_devices_in_found_order() -> None:
         "address 0x40 answers for two devices: A, B",
         "address 0x41 answers for two devices: D, E",
     ]
+
+
+def test_two_devices_reported_at_the_all_call_address_are_a_clash() -> None:
+    """Fail at 0x00 when two devices each answer the general call, as the docs say."""
+    found = i2c.found_on_bus(
+        [("SDA", "A", 0x40), ("SDA", "A", 0x00), ("SDA", "B", 0x41), ("SDA", "B", 0)],
+        "SDA",
+        [],
+    )
+    assert i2c.clash_problems(found) == ["address 0x00 answers for two devices: A, B"]
 
 
 def test_an_expected_address_listed_twice_is_named() -> None:
