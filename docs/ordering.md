@@ -224,14 +224,22 @@ It exits 0 when the Gerber zip, BOM and centroid exist and are newer than every 
 the board (`pcbkit.toml`, your Python modules except `specs.py`, `circuits.py` and
 `mutants.py`, `footprints/` and `golden/`), and `out/checks/results.json` is newer than those
 and than `specs.py`, `circuits.py` and `checks/`. The results must show every check passed,
-none left out, a result for every switched-on group and for every check of your own.
-Otherwise it exits 1 and prints one line per problem:
+none left out, a result for every switched-on group and for every check of your own. The
+BOM and centroid must also be the files the plugin's sourcing review judged: that review
+writes `sourcing.json` with the sha256 of each, and a file that is not stamped, or that
+changed after the review, is refused. Otherwise it exits 1 and prints one line per
+problem:
 
 ```
 STALE: out/fab/Blinky_revA_gerbers.zip is older than design.py: run pcbkit build, route, promote and finalize
+UNREVIEWED: out/fab/Blinky_revA_BOM.csv changed after the sourcing review judged it (its sha256 differs from sourcing.json): run the review-sourcing review on the files in it, which stamps them again
 STALE: the checks were run before design.py changed: run pcbkit check
 PARTIAL: the last pcbkit check run was cut short by -k 'test_led' (10 checks left out): run pcbkit check with no -k before ordering
 ```
+
+Without the plugin, run `skills/review-sourcing/scripts/stamp.py` the same way once you
+have checked the parts yourself and written `sourcing.md`: it stamps the files in
+`out/fab/`. `--before-sourcing` leaves the stamp out of the gate.
 
 It exits 2 when there is no `pcbkit.toml` here or above.
 

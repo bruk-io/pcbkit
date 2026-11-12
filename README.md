@@ -88,7 +88,9 @@ To type less, `uv tool install --from ~/src/pcbkit pcbkit` (or
 ## The Claude Code plugin
 
 This repository is also a Claude Code plugin. It has skills for starting a board, running
-the build loop, adding a check, reviewing a layout and ordering from PCBWay; two helper
+the build loop, adding a check, reviewing a layout and ordering from PCBWay; design
+reviews for the gates between schematic, placement and order (fault states, derating,
+current paths, mis-plugging, bring-up, sourcing and spec drift); two helper
 agents; and hooks that stop edits to the generated folders. Install it from the knowhere
 marketplace:
 

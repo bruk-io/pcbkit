@@ -26,6 +26,16 @@ grep -n '^def test_' "$(.venv/bin/python -c 'import pcbkit.check.builtin as m; p
 If one covers the hazard, switch its group on and fill in specs.py. Do not write a second
 check for the same thing.
 
+A review skill (`walk-fault-states`, `review-derating`, `review-current-paths`,
+`review-misplug`, `plan-bringup`, `review-sourcing`, `review-spec-drift`) hands over the
+rows it wrote to a specs.py table. If a built-in group reads that table, switch the group
+on. If the table is a proposed one with no built-in check yet (such as `FAULT_STATES`,
+`MATING` or `CONTACT_RATINGS`; "Proposed tables" in
+`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md` gives each one's shape and rule), write
+the project check that reads it, parametrised from the table, applying that rule exactly,
+and prove it fails. A `FAULT_STATES` check calls `Solution.floating` on each pad's net
+and fails a floating one whatever its window: the solver reads a floating net as 0 V.
+
 ## 2. Pin down the rule and its source
 
 State the hazard in one sentence. Give the limit as a number with a unit, and write its

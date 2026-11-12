@@ -3,7 +3,8 @@
 pcbkit ships a Claude Code plugin in the same repository: the repository root is the plugin
 root. It teaches Claude the pcbkit workflow, keeps Claude's edits out of the files pcbkit
 generates, and can fill in a PCBWay order, stopping at sign-in, at every upload and before
-payment. It has five skills, two agents and two hooks, and no server of its own: everything
+payment, and runs design reviews at the gates between schematic, placement and order. It
+has twelve skills, two agents and two hooks, and no server of its own: everything
 Claude does to a board is a `pcbkit` command you could type.
 
 ## Install
@@ -38,11 +39,69 @@ description at the top of it. You can also run one by name, with the plugin's na
 
 | Skill | What it is for | Claude loads it when you... |
 |---|---|---|
-| `board-workflow` | The build, route, promote, finalize and check loop. What to run when, how to read DRC and check failures, eco route or full route, which file to change for what. | ask to build, place, route, finalize or export a board, fix DRC or ERC findings, understand a failing check, or ask which file to change, in a folder that has a `pcbkit.toml`. |
+| `board-workflow` | The build, route, promote, finalize and check loop. What to run when, how to read DRC and check failures, eco route or full route, which file to change for what. | ask to build, place, route, finalize or export a board, fix DRC or ERC findings, understand a failing check, or ask which file to change, in a folder that has a `pcbkit.toml`; or ask to order boards, when it runs the order-gate reviews in turn and points you to `/pcbkit:order-pcbway`. |
 | `new-board` | Starting a board: it interviews you once, runs `pcbkit doctor`, `pcbkit new` and `pcbkit setup`, fills in `design.py`, `layout.py`, `specs.py` and `pcbkit.toml`, and gets the first `pcbkit build` clean. | ask to design or start a new board, or turn a circuit idea into a KiCad board, and there is no `pcbkit.toml` for it yet. |
 | `add-check` | Writing a design check with a sourced limit, and proving it fails: a planted mistake in `mutants.py` for a circuit check, or in a scratch copy for a copper or board check. It never loosens a limit to get a green run. | say "add a check", "make sure X can never happen" or "test that this stays under that", or want a datasheet limit or a layout rule enforced. |
-| `review-board` | A layout review from the pictures and the DRC report: signals under a switching regulator, pours cut into islands or thin necks, slivers. It returns findings only, most serious first and at most twelve, and edits nothing. | ask for a layout review or a second look at the routed board. With `/pcbkit:review-board`, anything you add after it (a region name, a concern) is the focus. |
+| `review-board` | A layout review from the pictures and the DRC report: signals under a switching regulator, fast tracks over a gap in their reference pour, pours cut into islands or thin necks, slivers. It returns findings only, most serious first and at most twelve, and edits nothing. | ask for a layout review or a second look at the routed copper (not where currents flow and return: that is `review-current-paths`). With `/pcbkit:review-board`, anything you add after it (a region name, a concern) is the focus. |
+| `walk-fault-states` | The fault-state walk: what every output and rail enable does with the controller absent, in reset, hung, on USB only, in a brownout, with a safety input open or another device back-feeding the board. A state table and findings. | ask whether a board is fail-safe or what happens when the controller dies, or reach the schematic gate on a board that drives a load. |
+| `review-derating` | Worst-case ratings: capacitance lost to DC bias, voltage margin against transients, current per connector contact, inductor saturation, fuse hold and inrush, peak-load budgets, dropout, set-point tolerance. An envelope, a derating table and findings, every stress and margin from a check or its `stress.py`. | ask whether a part, rail, connector or fuse is rated enough, or reach the schematic gate (and before every order, through `board-workflow`). |
+| `review-current-paths` | Where large and fast currents flow and return: hot loops, shared ground, switch nodes near sensitive inputs, heat, connector returns. | ask about current paths, return paths, grounding, hot loops, noise or converter placement, or reach the placement gate. |
+| `review-misplug` | What hands and cables do: reversed, wrong-port, offset, hot-plugged and unplugged connectors, tool shorts, reach inside the case, labels, pull-out loads. | ask about connector choice, pinouts, port layout or the enclosure, or reach the placement gate. |
+| `plan-bringup` | The first-power plan, written before ordering so that every probe point and isolation link it lacks is a finding. It writes `bringup.md` in the project. | ask for a bring-up or bench plan, or whether a board can be tested section by section; before an order, through `board-workflow`. |
+| `review-sourcing` | Whether the board can be bought and built: live stock and lifecycle per BOM line, second sources, consolidation, assembly cost and correctness, variants. It writes `sourcing.md`, dated, and stamps the BOM and centroid it judged in `sourcing.json`, which the order's preflight verifies. | ask whether the parts can be bought or have second sources, or before an assembly quote; before an order, through `board-workflow`. |
+| `review-spec-drift` | The spec against the design, both ways, with a question for every mismatch. | ask whether the design still matches its written spec, or reach a gate with one. |
 | `order-pcbway` | Filling in a PCBWay order from `pcbkit quote`, stopping at sign-in, at every upload and before payment. See [ordering](ordering.md). | **Only when you start it:** `/pcbkit:order-pcbway 5 2` (boards to make, boards to assemble). Claude cannot start it on its own. |
+
+### The reviews
+
+The seven reviews cover judgement a check cannot make: intent, datasheets and physical
+reasoning. Each runs in your conversation, because it asks you for intent, and each
+follows the same shape:
+
+1. It starts from what the checks already decide. A script (`groups.py --gate`) owns the
+   check groups and the `pcbkit check -k` selection of each gate: it names any group that
+   is off in `pcbkit.toml` (a group that is off collects nothing, so a selection over it
+   would decide nothing), prints the run for the gate and its two caveats, and the review
+   runs that, then reads `out/checks/results.json`. Where the checks stop short, a script
+   of its own prints the numbers (every part's stress, the design's listing), so Claude
+   never judges by eye or works out what code can. A check whose inputs do not exist yet
+   is not a finding.
+2. It reviews what is left, dispatching `parts-researcher` for every datasheet figure
+   and every stock level, and gives its findings in a fixed format.
+3. It ends by writing the intent it settled into `specs.py` (and `layout.py`, silk.py or
+   design.py where that is the home), so the next run is a check, not a review. Where no
+   built-in check reads a table yet, it writes rows into a proposed table and hands it to
+   `add-check`, which writes a project check that reads it.
+
+`board-workflow` says when each runs:
+
+| Gate | Reviews |
+|---|---|
+| After `pcbkit sch` is ERC-clean | `walk-fault-states`, `review-derating` |
+| After `pcbkit build`, before routing is final | `review-current-paths`, `review-misplug` |
+| After `pcbkit route`, before `pcbkit promote` | `review-board` |
+| After `pcbkit finalize`, before an order | every time: `review-derating`, `plan-bringup` and `review-spec-drift` (they may edit sources), then `pcbkit finalize` again, then `review-sourcing` on the files it wrote, then a full `pcbkit check`; then `/pcbkit:order-pcbway` |
+| Each gate, when the board has a written spec | `review-spec-drift` |
+
+What each writes:
+
+| Review | Tables it writes | Proposed tables it hands to `add-check` |
+|---|---|---|
+| `walk-fault-states` | `SUPPLY_PINS`; `STRAP_SCENARIO` (ESP32-S3); `scenario` keywords in circuits.py | `FAULT_STATES`, `POWER_PATHS` |
+| `review-derating` | `STRESS_SCENARIOS`, `CAP_VRATED`, `RESISTOR_POWER_W`, `SUPPLY_LIMITS`, `SUPPLY_PINS`, `COPPER_BUDGETS` | `CONTACT_RATINGS`, `SEMI_VRATED` |
+| `review-current-paths` | `COUPLING`, `SENSE_LOOPS`, `DECOUPLING`, `COPPER_SEGMENTS`, `SUPPLY_REGULATION`, `RESERVED_COPPER`; `[stitch] dense`; `SHOTS` | `PART_SPACING`, `HOT_LOOPS`, `REFERENCE_PLANES` |
+| `review-misplug` | `WIRE_PADS`, `GPIO_SCENARIOS` (ESP32-S3), `CONN_LABELS` in silk.py | `PIN_NETS` (its sockets), `MATING`, `NET_LIMITS` |
+| `plan-bringup` | `SUPPLY_PINS`, `dnp` in design.py, `SHOTS` | `TEST_POINTS`, `PROBE_KEEPAWAY`, `ENABLE_LINKS`, `I2C_EXPECTED`, `BRINGUP_STAGES` |
+| `review-sourcing` | `POWER_FOOTPRINTS`, `CAP_VRATED`; `sourcing.json`. A settled `mpn`, `dnp` or bom.py change sends the board back to `finalize` and the review runs again | `POLARITY_MARKS`, `FIDUCIALS`, `BOTTOM_PARTS` |
+| `review-spec-drift` | `spec-claims.json` (the spec's claims about what the design contains, compared by its `listing.py`); `SUPPLY_PINS`, `SUPPLY_LIMITS`, `I2C_BUSES`, `PINOUT`, `DEVKIT_GPIO`, `ANALOG_NETS` | `PIN_NETS`, `PORT_EDGES`, `EXCLUSIONS`, `POWER_PATHS`, `I2C_EXPECTED` |
+
+The tables of the built-in checks are in
+[Built-in groups and what they read](project-interface.md#built-in-groups-and-what-they-read),
+and the shapes of the proposed ones in
+[Proposed tables](project-interface.md#proposed-tables).
+A datasheet review joins them once part files are settled.
+
+### The forked review and the manual order
 
 Two of these behave differently from the rest:
 
@@ -67,7 +126,8 @@ by name.
 
 `new-board` uses `parts-researcher` for every part that needs a datasheet figure, and
 `add-check` uses it to find a limit's source and `check-writer` to write one check per
-hazard.
+hazard. The reviews use `parts-researcher` for datasheet figures, curves and live stock,
+and hand proposed tables to `add-check`.
 
 ## The guard hooks
 

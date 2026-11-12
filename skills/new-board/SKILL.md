@@ -60,3 +60,8 @@ user, and do not build the folder by hand.
 `pcbkit build` until it exits 0 (no ERC errors) and `missing` is empty. Read the ERC
 warnings it lists before changing anything: an unconnected pin is a decision, not noise. Then hand over to
 board-workflow for `route`, and to add-check for the hazards from the interview.
+
+Keep the interview's answers as the board's spec, a section of the project's README.md:
+`review-spec-drift` compares the design with it at every gate. Before layout, run the
+schematic-gate reviews: `walk-fault-states` for a board that drives anything, and
+`review-derating`, whose envelope starts from the interview's voltages and currents.

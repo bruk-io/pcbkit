@@ -9,6 +9,7 @@ folder.
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
 import os
@@ -122,13 +123,26 @@ def write_results(project: Path, data: object) -> None:
     os.utime(path, (CHECKED, CHECKED))
 
 
+FAB_NAMES = (
+    "board_gerbers.zip",
+    "board_BOM.csv",
+    "board_BOM.xlsx",
+    "board_centroid.csv",
+)
+JUDGED_NAMES = ("board_BOM.csv", "board_BOM.xlsx", "board_centroid.csv")
+
+
 def make_project(
     root: Path,
     fab: str = "out/fab",
     results: object = GOOD_RESULTS,
     check_module: str = CHECK_MODULE,
+    stamped: bool = True,
 ) -> Path:
-    """Build a project whose files are current: sources, then fab files, then checks."""
+    """Build a project whose files are current: sources, then fab files, then checks.
+
+    ``stamped`` also writes the sourcing.json a sourcing review leaves for those files.
+    """
     for name in ("pcbkit.toml", "design.py", "layout.py", "routing.py", "silk.py"):
         touch(root / name, SOURCES)
     touch(root / "blocks" / "power.py", SOURCES)
@@ -137,18 +151,30 @@ def make_project(
     for name in ("specs.py", "circuits.py"):
         touch(root / name, SOURCES)
     touch(root / "checks" / "test_led.py", SOURCES, check_module)
-    for name in ("board_gerbers.zip", "board_BOM.csv", "board_centroid.csv"):
-        touch(root / fab / name, FABRICATED)
+    for name in FAB_NAMES:
+        touch(root / fab / name, FABRICATED, f"{name}\n")
+    if stamped:
+        stamp_files(root, fab)
     if results is not None:
         text = results if isinstance(results, str) else json.dumps(results)
         touch(root / "out" / "checks" / "results.json", CHECKED, text)
     return root
 
 
-def run(root: Path) -> subprocess.CompletedProcess[str]:
+def stamp_files(root: Path, fab: str = "out/fab") -> None:
+    """Write the sourcing.json the review leaves: the sha256 of the BOM and centroid."""
+    files = {
+        f"{fab}/{name}": hashlib.sha256((root / fab / name).read_bytes()).hexdigest()
+        for name in JUDGED_NAMES
+    }
+    data = {"format": 1, "review": "sourcing.md", "files": files}
+    (root / "sourcing.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     """Run the script inside ``root``, as the skill does."""
     return subprocess.run(
-        [sys.executable, str(SCRIPT)],
+        [sys.executable, str(SCRIPT), *args],
         cwd=root,
         capture_output=True,
         text=True,
@@ -320,9 +346,7 @@ def test_a_link_that_leads_nowhere_is_not_a_source(project: Path) -> None:
 # --- files that are missing or ambiguous ----------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "name", ["board_gerbers.zip", "board_BOM.csv", "board_centroid.csv"]
-)
+@pytest.mark.parametrize("name", FAB_NAMES)
 def test_a_missing_order_file_is_reported(project: Path, name: str) -> None:
     (project / "out" / "fab" / name).unlink()
     done = run(project)
@@ -344,7 +368,7 @@ def test_no_fab_folder_at_all_is_reported_for_each_file(tmp_path: Path) -> None:
     (project / "out" / "fab").rmdir()
     done = run(project)
     assert done.returncode == 1
-    assert done.stdout.count("MISSING: fab/ has 0 files") == 3
+    assert done.stdout.count("MISSING: fab/ has 0 files") == 4
 
 
 def test_a_project_that_was_never_checked_is_reported(tmp_path: Path) -> None:
@@ -849,4 +873,93 @@ def test_the_script_imports_only_the_standard_library() -> None:
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
-    assert imported <= {"__future__", "ast", "json", "os", "sys", "pathlib"}, imported
+    assert imported <= {
+        "__future__",
+        "ast",
+        "hashlib",
+        "json",
+        "os",
+        "sys",
+        "pathlib",
+    }, imported
+
+
+# --- the sourcing stamp ---------------------------------------------------------------
+
+UNREVIEWED = (
+    "run the review-sourcing review on the files in it, which stamps them again"
+)
+
+
+def test_an_order_with_no_sourcing_stamp_is_refused(tmp_path: Path) -> None:
+    project = make_project(tmp_path / "my-board", stamped=False)
+    done = run(project)
+    assert done.returncode == 1, done.stdout
+    assert done.stdout.splitlines() == [
+        "UNREVIEWED: sourcing.json is missing, so no sourcing review judged out/fab/: "
+        + UNREVIEWED
+    ]
+
+
+@pytest.mark.parametrize("name", JUDGED_NAMES)
+def test_a_judged_file_that_changed_after_the_review_is_refused(
+    project: Path, name: str
+) -> None:
+    """Same size, same time: only the content says it is not the file judged."""
+    path = project / "out" / "fab" / name
+    path.write_text(path.read_text(encoding="utf-8").upper(), encoding="utf-8")
+    os.utime(path, (FABRICATED, FABRICATED))
+    done = run(project)
+    assert done.returncode == 1, done.stdout
+    assert done.stdout.splitlines() == [
+        f"UNREVIEWED: out/fab/{name} changed after the sourcing review judged it "
+        f"(its sha256 differs from sourcing.json): {UNREVIEWED}"
+    ]
+
+
+def test_a_stamp_for_other_files_is_refused(project: Path) -> None:
+    """A renamed board (a new fab_name) leaves a stamp that names the old files."""
+    stamp = json.loads((project / "sourcing.json").read_text(encoding="utf-8"))
+    stamp["files"] = {k.replace("board_", "old_"): v for k, v in stamp["files"].items()}
+    (project / "sourcing.json").write_text(json.dumps(stamp), encoding="utf-8")
+    done = run(project)
+    assert done.returncode == 1, done.stdout
+    assert done.stdout.splitlines()[0] == (
+        "UNREVIEWED: out/fab/board_BOM.csv is not a file the sourcing review judged "
+        "(sourcing.json names out/fab/old_BOM.csv, out/fab/old_BOM.xlsx, "
+        "out/fab/old_centroid.csv): " + UNREVIEWED
+    )
+
+
+@pytest.mark.parametrize("text", ["", "{}", '{"files": []}', '{"files": {"a": 1}}'])
+def test_an_unreadable_stamp_is_refused_not_trusted(project: Path, text: str) -> None:
+    (project / "sourcing.json").write_text(text, encoding="utf-8")
+    done = run(project)
+    assert done.returncode == 1, done.stdout
+    assert done.stdout.splitlines() == [f"UNREADABLE: sourcing.json: {UNREVIEWED}"]
+
+
+def test_the_stamp_is_read_beside_the_older_fab_folder(tmp_path: Path) -> None:
+    project = make_project(tmp_path / "old-board", fab="fab")
+    assert run(project).returncode == 0
+    (project / "fab" / "board_BOM.csv").write_text("changed\n", encoding="utf-8")
+    assert "UNREVIEWED: fab/board_BOM.csv changed" in run(project).stdout
+
+
+def test_before_sourcing_leaves_the_stamp_out_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """The sourcing review's own look runs before it has stamped anything."""
+    project = make_project(tmp_path / "my-board", stamped=False)
+    assert run(project, "--before-sourcing").returncode == 0
+    (project / "out" / "checks" / "results.json").unlink()
+    done = run(project, "--before-sourcing")
+    assert done.stdout.splitlines() == [
+        "MISSING: out/checks/results.json: run pcbkit check"
+    ]
+
+
+def test_an_unknown_argument_is_refused(project: Path) -> None:
+    done = run(project, "--skip-sourcing")
+    assert done.returncode == 2
+    assert done.stdout.startswith("unknown argument --skip-sourcing")

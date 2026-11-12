@@ -12,15 +12,17 @@ arguments: [make, assemble]
 # Ordering from PCBWay
 
 Boards to make: "$make". Boards to assemble: "$assemble". If either is empty, ask.
+Whether the parts can be bought is `review-sourcing`'s question, not this skill's: the
+preflight below refuses a BOM or centroid that review has not judged.
 Assembling fewer boards than you make is normal and allowed.
 
 ## Before the browser
 
 1. Run `python3 "${CLAUDE_SKILL_DIR}/scripts/preflight.py"` in the project folder. It
-   compares the fab files and the check results with every source of the board, and
-   looks for a check run that was cut short. If it exits non-zero they are stale, missing,
-   incomplete or failing: show the user what it printed and
-   stop. An order made from stale files is paid for.
+   compares the fab files and the check results with every source of the board, looks
+   for a check run that was cut short, and checks that the sourcing review judged these
+   very files. If it exits non-zero they are stale, missing, incomplete or failing: show
+   the user what it printed and stop. An order made from stale files is paid for.
 2. Ask what the assembler needs to know that the files do not say: parts the user supplies
    themselves, parts to leave unfitted, polarity beyond the assembly drawing, parts that
    must not be substituted. Write the answer, 600 characters at most, to `order-notes.txt`
