@@ -94,3 +94,35 @@ def test_cap_derate_is_described_as_the_docs_show_it() -> None:
 def test_the_default_is_the_ceiling() -> None:
     """Make the table able only to tighten: its ceiling is the default."""
     assert stress.CAP_DERATE_DEFAULT == 0.8
+
+
+def test_stress_attempts_go_on_past_a_scenario_that_cannot_be_solved() -> None:
+    """Give the error for scenario 1 and still solve scenario 2."""
+
+    def scenario(nl: Any, **kw: Any) -> FakeCircuit:
+        if kw.get("bad"):
+            raise RuntimeError("no convergence")
+        return FakeCircuit(kw)
+
+    rows = [{"v": 1}, {"bad": True}, {"v": 3}]
+    found = list(
+        stress.stress_attempts(
+            "nl",
+            SimpleNamespace(STRESS_SCENARIOS=rows),
+            SimpleNamespace(scenario=scenario),
+        )
+    )
+    assert [(i, s, type(e).__name__ if e else None) for i, s, e in found] == [
+        (0, {"v": 1}, None),
+        (1, None, "RuntimeError"),
+        (2, {"v": 3}, None),
+    ]
+    # stress_solutions ends with the exception at the same row
+    with pytest.raises(RuntimeError):
+        list(
+            stress.stress_solutions(
+                "nl",
+                SimpleNamespace(STRESS_SCENARIOS=rows),
+                SimpleNamespace(scenario=scenario),
+            )
+        )

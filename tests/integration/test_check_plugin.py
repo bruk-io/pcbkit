@@ -892,6 +892,7 @@ def _circuit_run(
     swaps: tuple[tuple[str, str], ...] = (),
     extra: str = "",
     only: str | None = None,
+    circuits: str = check_toy.CIRCUITS,
 ) -> Run:
     """Run the circuit group on a toy with the specs changed as ``swaps`` say."""
     specs = SPECS
@@ -899,7 +900,11 @@ def _circuit_run(
         assert old in specs, f"the toy specs no longer contain {old!r}"
         specs = specs.replace(old, new)
     root = check_toy.write_project(
-        tmp_path / name, toy or check_toy.good(), ["circuit"], specs=specs + extra
+        tmp_path / name,
+        toy or check_toy.good(),
+        ["circuit"],
+        specs=specs + extra,
+        circuits=circuits,
     )
     return run(root, only)
 
@@ -935,7 +940,14 @@ def test_every_resistor_capacitor_supply_pin_and_limit_is_recorded(
     assert power["R5"]["scenario"] == 1
     caps = result.entry("test_capacitor_voltage_derated")["numbers"]
     assert caps["capacitor voltage"] == {
-        "C1": {"v": 3.3, "rated": 10.0, "target": 0.8, "mpn": "CAP-10U", "scenario": 0}
+        "C1": {
+            "v": 3.3,
+            "rated": 10.0,
+            "target": 0.8,
+            "limit_v": 8.0,
+            "mpn": "CAP-10U",
+            "scenario": 0,
+        }
     }
     supply = result.entry("test_supply_pins_in_range")["numbers"]
     assert supply["supply pins"] == {"U1 pad 1": {"v": 3.3, "min": 2.7, "max": 5.5}}
@@ -1004,6 +1016,7 @@ def test_a_capacitor_with_no_rating_fails_as_before_and_every_cap_is_recorded(
         "v": 5.5,
         "rated": None,
         "target": 0.8,
+        "limit_v": None,
         "mpn": "TANT-10U",
         "scenario": 1,
     }
@@ -1044,6 +1057,7 @@ def test_a_tantalum_at_61_percent_passes_unless_cap_derate_tightens_it(
     assert control.outcome("test_capacitor_voltage_derated") == "passed"
     record = control.entry("test_capacitor_voltage_derated")["numbers"]
     assert record["capacitor voltage"]["C2"]["target"] == 0.8
+    assert record["capacitor voltage"]["C2"]["limit_v"] == 7.2
     tight = _circuit_run(
         tmp_path,
         "tight",
@@ -1056,6 +1070,7 @@ def test_a_tantalum_at_61_percent_passes_unless_cap_derate_tightens_it(
     assert entry["outcome"] == "failed"
     assert "{'C2': (5.5, 9.0)}" in entry["message"]
     assert entry["numbers"]["capacitor voltage"]["C2"]["target"] == 0.5
+    assert entry["numbers"]["capacitor voltage"]["C2"]["limit_v"] == 4.5
     # the other capacitor keeps 0.8
     assert entry["numbers"]["capacitor voltage"]["C1"]["target"] == 0.8
 
@@ -1099,3 +1114,147 @@ def test_a_cap_derate_row_with_no_cap_vrated_row_fails_naming_the_mpn(
     )
     # the existing capacitor is still recorded
     assert set(entry["numbers"]["capacitor voltage"]) == {"C1"}
+
+
+# a scenario with vin 13 cannot be solved
+UNSOLVABLE = check_toy.CIRCUITS.replace(
+    "    circuit = build(nl)\n",
+    "    if vin == 13.0:\n"
+    '        raise RuntimeError("no convergence")\n'
+    "    circuit = build(nl)\n",
+)
+THREE_SCENARIOS = (
+    (
+        'STRESS_SCENARIOS = [dict(vin=5.0, drive={"LED_DRV": 3.3}), dict(vin=5.5)]',
+        'STRESS_SCENARIOS = [dict(vin=5.0, drive={"LED_DRV": 3.3}), dict(vin=13.0), '
+        "dict(vin=5.5)]",
+    ),
+)
+
+
+def test_a_scenario_that_cannot_be_solved_after_a_reversal_is_recorded_as_unsolved(
+    tmp_path: Path,
+) -> None:
+    """Keep the message, and name scenario 1; the later scenario is still solved."""
+    assert UNSOLVABLE != check_toy.CIRCUITS
+    toy = check_toy.good()
+    _tantalum(toy, pos="GND", neg="VIN")
+    result = _circuit_run(
+        tmp_path,
+        "unsolved",
+        toy,
+        (TANT_VRATED, *THREE_SCENARIOS),
+        only="test_capacitor_voltage",
+        circuits=UNSOLVABLE,
+    )
+    entry = result.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert "C2 reverse biased (-5.00 V)" in entry["message"]
+    assert entry["numbers"]["unsolved scenarios"] == [1]
+    # scenario 2 (5.5 V) was solved after the one that was not
+    assert entry["numbers"]["capacitor voltage"]["C2"]["scenario"] == 2
+    assert entry["numbers"]["capacitor voltage"]["C2"]["v"] == 5.5
+
+
+def test_a_scenario_that_cannot_be_solved_before_any_reversal_still_raises(
+    tmp_path: Path,
+) -> None:
+    """Keep the old behaviour: no reversal found yet, so the error is the failure."""
+    result = _circuit_run(
+        tmp_path,
+        "raises",
+        swaps=THREE_SCENARIOS,
+        only="test_capacitor_voltage",
+        circuits=UNSOLVABLE,
+    )
+    entry = result.entry("test_capacitor_voltage_derated")
+    assert entry["outcome"] == "failed"
+    assert "RuntimeError: no convergence" in entry["message"]
+    assert "unsolved scenarios" not in entry["numbers"]
+
+
+def test_a_supply_limit_that_is_a_numpy_scalar_is_recorded_as_a_plain_number(
+    tmp_path: Path,
+) -> None:
+    """Record ``ok`` as true and the numbers as numbers, not as the text "True"."""
+    extra = (
+        "\nimport numpy as np\n"
+        "SUPPLY_LIMITS = [lambda nl: "
+        "('np row', np.float64(5.5), '<=', np.float32(6.0))]\n"
+        "SUPPLY_PINS = [('U1', 1, (np.float32(2.7), 5.5))]\n"
+    )
+    result = _circuit_run(
+        tmp_path, "numpy", extra=extra, only="test_supply_pins_in_range"
+    )
+    entry = result.entry("test_supply_pins_in_range")
+    assert entry["outcome"] == "passed", entry
+    row = entry["numbers"]["supply limits"]["np row"]
+    assert row["ok"] is True
+    assert row["value"] == 5.5 and row["limit"] == 6.0
+    assert isinstance(row["limit"], float)
+    assert isinstance(entry["numbers"]["supply pins"]["U1 pad 1"]["min"], float)
+
+
+def test_a_supply_limit_row_with_a_bad_operator_is_recorded_as_not_ok(
+    tmp_path: Path,
+) -> None:
+    """Keep the failure, and leave the row in the record."""
+    extra = '\nSUPPLY_LIMITS = [("good", 1.0, "<", 2.0), ("odd", 1.0, "==", 2.0)]\n'
+    result = _circuit_run(tmp_path, "operator", extra=extra, only="test_supply_pins")
+    entry = result.entry("test_supply_pins_in_range")
+    assert entry["outcome"] == "failed"
+    assert "SUPPLY_LIMITS: 'odd': operator '==' is not < or <=" in entry["message"]
+    limits = entry["numbers"]["supply limits"]
+    assert limits["good"]["ok"] is True
+    assert limits["odd"] == {"value": 1.0, "op": "==", "limit": 2.0, "ok": False}
+
+
+def test_capacitor_failures_come_in_a_fixed_order(tmp_path: Path) -> None:
+    """Report reverse bias, then a missing rating, then an unknown CAP_DERATE part
+    number, then a capacitor over its target, each only once the one before is fixed.
+    """
+    toy = check_toy.good()
+    toy.add(
+        "C2",
+        "10u",
+        "Device:C_Polarized",
+        {"1": ("GND", "+"), "2": ("VIN", "-")},
+        MPN="REV-1",
+    )
+    toy.add(
+        "C3", "1u", "Device:C", {"1": ("VIN", "~"), "2": ("GND", "~")}, MPN="NONE-1"
+    )
+    toy.add(
+        "C4",
+        "10u",
+        "Device:C_Polarized",
+        {"1": ("VIN", "+"), "2": ("GND", "-")},
+        MPN="TANT-10U",
+    )
+    rated = ("CAP_VRATED = {", 'CAP_VRATED = {"REV-1": 50.0, "TANT-10U": 9.0, ')
+    derate = '\nCAP_DERATE = {"TANT-10U": 0.5, "NO-SUCH": 0.5}\n'
+
+    def says(
+        name: str, toy: Toy, swaps: tuple[tuple[str, str], ...], extra: str
+    ) -> str:
+        run_ = _circuit_run(
+            tmp_path, name, toy, swaps, extra, only="test_capacitor_voltage"
+        )
+        entry = run_.entry("test_capacitor_voltage_derated")
+        assert entry["outcome"] == "failed"
+        return entry["message"]
+
+    assert "C2 reverse biased" in says("one", toy, (rated,), derate)
+    toy.pins["C2"] = {"1": ("VIN", "+"), "2": ("GND", "-")}
+    assert "no voltage rating on file for C3 (NONE-1)" in says(
+        "two", toy, (rated,), derate
+    )
+    both = (
+        "CAP_VRATED = {",
+        'CAP_VRATED = {"REV-1": 50.0, "TANT-10U": 9.0, "NONE-1": 50.0, ',
+    )
+    message = says("three", toy, (both,), derate)
+    assert "CAP_DERATE names ['NO-SUCH'], which have no row in CAP_VRATED" in message
+    assert "C4" not in message  # the capacitor over its target is not named yet
+    message = says("four", toy, (both,), '\nCAP_DERATE = {"TANT-10U": 0.5}\n')
+    assert "{'C4': (5.5, 9.0)}" in message

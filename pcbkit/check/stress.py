@@ -4,6 +4,9 @@
 yields ``(index, solution)``, so a check can say which scenario was the worst case.
 Nothing here imports pytest, so ``pcbkit specs`` can read ``TABLES``.
 
+``stress_attempts`` does the same but goes on past a scenario that cannot be solved,
+yielding the error instead, so a check can say which scenarios were left out.
+
 ``CAP_DERATE`` is the optional table of the capacitor check: ``{mpn: fraction}``, the
 share of the rated voltage that part may reach. It defaults to 0.8 and cannot be more,
 so the table can only tighten (a tantalum on a rail that can be hot-plugged: 0.5).
@@ -38,3 +41,21 @@ def stress_solutions(
     """
     for index, keywords in enumerate(specs.STRESS_SCENARIOS):
         yield index, circuits.scenario(nl, **keywords).solve()
+
+
+def stress_attempts(
+    nl: Any, specs: Any, circuits: Any
+) -> Iterator[tuple[int, Solution | None, Exception | None]]:
+    """Yield ``(index, solution, error)`` for each row of ``specs.STRESS_SCENARIOS``.
+
+    A scenario that cannot be built or solved gives ``(index, None, the exception)``
+    and the next row is tried, which ``stress_solutions`` does not do: its generator
+    ends with the exception.
+    """
+    for index, keywords in enumerate(specs.STRESS_SCENARIOS):
+        try:
+            solution = circuits.scenario(nl, **keywords).solve()
+        except Exception as error:  # noqa: BLE001 - the caller decides what it means
+            yield index, None, error
+        else:
+            yield index, solution, None
