@@ -87,6 +87,64 @@ def test_a_quote_never_joins_two_numbers_of_the_page() -> None:
     assert not citations.quote_on_page("Input voltage VIN -0.3 1 9 V", RATINGS)
 
 
+@pytest.mark.parametrize(
+    "quote, page",
+    [
+        # Ends inside "19".
+        ("Input voltage VIN -0.3 1", "Input voltage VIN –0.3 19 V\nEnable EN –0.3 6 V"),
+        # Starts after the sign of "-0.3": the sign would be lost.
+        ("0.3 19 V Enable EN", "Input voltage VIN –0.3 19 V\nEnable EN –0.3 6 V"),
+        # Ends inside "1.25".
+        ("Reference voltage 1.2", "Reference voltage 1.25 V\nFeedback pin"),
+        # Starts inside "19".
+        ("9 V Enable EN -0.3 6", "Input voltage VIN 19 V\nEnable EN –0.3 6 V"),
+        # Starts after a decimal point.
+        (".25 V Feedback pin now", "Reference voltage 1.25 V\nFeedback pin now"),
+        # Ends before the fraction of a number.
+        ("Reference voltage 1", "Reference voltage 1.25 V\nFeedback pin now"),
+    ],
+)
+def test_a_quote_cannot_start_or_end_inside_a_number_of_the_page(
+    quote: str, page: str
+) -> None:
+    """Refuse a quote cut out of the middle of a number, which can lose a sign."""
+    assert not citations.quote_on_page(quote, page)
+
+
+@pytest.mark.parametrize(
+    "quote, value, page",
+    [
+        ("Input voltage VIN -0.3 1", "-0.3 to 1 V", "Input voltage VIN –0.3 19 V"),
+        ("0.3 19 V Enable EN", "0.3 to 19 V", "VIN –0.3 19 V Enable EN –0.3 6 V"),
+        ("Reference voltage 1.2", "1.2 V", "Reference voltage 1.25 V"),
+        ("9 V Enable EN -0.3 6", "9 V", "VIN 19 V Enable EN –0.3 6 V"),
+    ],
+)
+def test_check_citation_refuses_a_value_the_cut_quote_would_have_passed(
+    quote: str, value: str, page: str
+) -> None:
+    """Refuse the four cut quotes whose numbers all pass the number rule."""
+    problem = check_citation(value, quote, 1, [page])
+    assert rule(problem) is Rule.QUOTE
+
+
+def test_a_quote_at_a_bad_boundary_and_a_good_one_is_accepted_on_the_good_one() -> None:
+    """Accept a quote that also occurs where it is not cut out of a number."""
+    page = "Reference voltage 1.25 V\nReference voltage 1.2 V typical"
+    assert citations.quote_on_page("Reference voltage 1.2", page)
+    assert not citations.quote_on_page(
+        "Reference voltage 1.2", "Reference voltage 1.25 V"
+    )
+
+
+def test_a_quote_may_start_after_a_range_dash_or_end_before_a_space_number() -> None:
+    """Keep a quote that starts after a range "3.0-5.5" dash, or ends before " 6"."""
+    assert citations.quote_on_page(
+        "5.5 V Supply current", "Supply 3.0-5.5 V Supply current"
+    )
+    assert citations.quote_on_page("Enable EN -0.3", RATINGS)
+
+
 def test_table_cells_on_their_own_lines_match_a_row() -> None:
     """Match a table row whose cells pdftotext put on separate lines."""
     assert (

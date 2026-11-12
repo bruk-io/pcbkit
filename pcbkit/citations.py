@@ -7,7 +7,9 @@ evidence against the PDF's own text, with no model and no judgement:
 - the page is one of the PDF's pages, counted from 1 in the file's own order;
 - the quote is at least ``MIN_QUOTE_CHARS`` long once normalised, so that "6 V" cannot
   match by accident;
-- the quote is on that page (``quote_on_page``);
+- the quote is on that page (``quote_on_page``), and does not start or end in the
+  middle of a number there ("1.2" is not on a page that says "1.25", "0.3" not on
+  one that says "-0.3");
 - every number in the value is a number in the quote (``missing_numbers``), unless the
   value is marked as worked out from the quote (an 8-bit address made 7-bit, a unit
   conversion), which a person then checks;
@@ -141,13 +143,45 @@ def normalise(text: str) -> str:
     return _SPACE.sub(_join, _LETTER_HYPHEN.sub("", fold(text)))
 
 
+def _starts_inside_number(page: str, start: int) -> bool:
+    """Say whether a match at ``start`` begins in the middle of a number of ``page``."""
+    if start == 0:
+        return False
+    before = page[start - 1]
+    if before.isdigit() or before == ".":
+        return True
+    # A "-" before the match is a sign unless a digit or point precedes it (a range).
+    return before == "-" and not (start >= 2 and (page[start - 2] in "0123456789."))
+
+
+def _ends_inside_number(page: str, end: int) -> bool:
+    """Say whether a match ending at ``end`` stops in the middle of a number."""
+    after = page[end : end + 2]
+    return after[:1].isdigit() or (after[:1] == "." and after[1:].isdigit())
+
+
 def quote_on_page(quote: str, page_text: str) -> bool:
     """Say whether ``quote`` is in ``page_text``, both normalised.
 
-    An empty quote is on no page.
+    A quote that starts or ends in the middle of a number of the page ("1.2" for
+    "1.25", "0.3" for "-0.3") is not there at that place; it counts if it is
+    somewhere else with whole numbers at both ends. An empty quote is on no page.
     """
     wanted = normalise(quote)
-    return bool(wanted) and wanted in normalise(page_text)
+    if not wanted:
+        return False
+    page = normalise(page_text)
+    check_start = wanted[0].isdigit() or wanted[0] == "."
+    check_end = wanted[-1].isdigit()
+    at = page.find(wanted)
+    while at != -1:
+        end = at + len(wanted)
+        if not (check_start and _starts_inside_number(page, at)) and not (
+            check_end and _ends_inside_number(page, end)
+        ):
+            return True
+        at = page.find(wanted, at + 1)
+    return False
 
 
 def pages_with(quote: str, pages: Sequence[str]) -> list[int]:
