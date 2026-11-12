@@ -89,6 +89,21 @@ def test_look_alike_characters_are_one_character(quote: str, page: int) -> None:
     assert citations.quote_on_page(quote, PAGES[page - 1])
 
 
+def test_the_ohm_sign_is_omega() -> None:
+    """Fold the ohm sign U+2126 to omega U+03A9, in quotes and in units.
+
+    The two look alike, so the cases are written with escapes: the fold table once
+    mapped omega to itself and left the ohm sign alone, and no test saw it.
+    """
+    ohm, omega = "\u2126", "\u03a9"
+    page = f"On resistance typical 200 m{ohm} max"
+    assert citations.quote_on_page(f"On resistance typical 200 m{omega}", page)
+    quote = f"On resistance typical 200 m{omega}"
+    assert check_citation(f"200 m{omega}", quote, 1, [page]) is None
+    assert check_citation(f"200 m{ohm}", quote, 1, [page]) is None
+    assert rule(check_citation(f"200 {omega}", quote, 1, [page])) is Rule.NUMBER
+
+
 def test_case_is_kept_because_ma_is_not_milliamps() -> None:
     """Refuse a quote whose only difference is case: mA and MA differ."""
     assert citations.quote_on_page("current source of 1.2 μA", PROSE)

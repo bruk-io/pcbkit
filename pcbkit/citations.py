@@ -270,7 +270,7 @@ _FOLD = str.maketrans(
         "º": "°",  # masculine ordinal, used as a degree sign
         "˚": "°",  # ring above, likewise
         "µ": "μ",  # micro sign to Greek mu
-        "Ω": "Ω",  # ohm sign to Greek omega
+        "\u2126": "\u03a9",  # ohm sign to Greek omega (escaped: they look alike)
     }
 )
 _COMPATIBLE = re.compile("[ﬀ-ﬆ！-～]")  # ligatures, full-width forms
