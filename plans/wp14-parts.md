@@ -383,8 +383,8 @@ more. The design that came out of them:
   "10K") is a code, because those letters name pins as often as units.
 - **Signs and units compared.** A sign in the value is never dropped: "±5" needs
   "±5" on the page, "+5" needs "+5" or "5". Where the value and the page both state a
-  unit or prefix, glued or after spaces on the same line, they must be the same ("10
-  Ω" is refused against "10 kΩ"); where either states none they are not compared.
+  unit or prefix, glued or after white space, they must be the same ("10 Ω" is
+  refused against "10 kΩ"); where either states none they are not compared.
 - **Signs only where certain.** A minus is a sign at the start, after an opener ("=",
   ":", "(", a bullet that starts its line) or after a function word ("to", "from"); a
   range dash only glued between ascending decimals not starting at 10. After a symbol

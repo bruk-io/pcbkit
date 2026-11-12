@@ -151,9 +151,11 @@ Context. A number is unknown when any of these touch it:
 A range whose one end is unknown makes the other unknown too.
 
 Units. A number's stated unit is the unit glued to it ("19V", "4.7k", "85%", "25°C")
-or the word right after it across spaces or tabs on the same line ("19 V", "45  µA"),
-when that word is a unit of ``_UNITS``, a prefix, or a prefix and a unit, or is "%"
-or "°" with "C", "F" or "K". Never across a line break. Where the value's number and
+or the word right after it across white space ("19 V", "45  µA", and a unit column
+that ``-layout`` put on the next line), when that word is a unit of ``_UNITS``, a
+prefix, or a prefix and a unit, or is "%" or "°" with "C", "F" or "K". Reading a
+unit across a line break only refuses more: measured on three datasheets, every unit
+found that way was the row's own. Where the value's number and
 the page's number both state a unit, the two must be the same text, after the
 folding above (micro sign and mu, ohm sign and omega) and with a "u" prefix read as
 micro: "10 Ω" is refused against "10 kΩ", "3.3 V" against "3.3 A", "100 nF" against
@@ -207,8 +209,8 @@ Write such a value derived, for a person to check.
 Blind, not detectable from the text at all:
 
 - A unit or prefix that only one side states is not compared: "1.25 mV" passes
-  against a bare "1.25" whose "V" is in another cell, on the next line or before the
-  number, and "10" passes against "10k".
+  against a bare "1.25" whose "V" is in another cell after other numbers or before
+  the number ("kHz 500"), and "10" passes against "10k".
 - A footnote digit glued to a number ("3.61" for 3.6 and footnote 1), and a power of
   ten that pdftotext flattened with no mark left ("106" for 10⁶, or "10 6" and
   "10\\n6" with plain white space): the text is a plain number.
@@ -387,8 +389,8 @@ class _Token:
     ``start`` takes the sign; ``end`` ends the number (before a glued unit).
     ``lump_start`` and ``lump_end`` widen the span over the glued unit and any unknown
     characters glued to it, none of which a quote may cut off. ``stated`` is the unit
-    the text states for the number, glued or after plain spaces on the same line
-    ("" for none), with a "u" prefix read as micro.
+    the text states for the number, glued or after white space ("" for none), with a
+    "u" prefix read as micro.
     """
 
     kind: _Kind
@@ -643,8 +645,8 @@ def _stated_unit(lexemes: Sequence[_Lexeme], token: _Token) -> str:
     """Return the unit the text states for a number: glued, or after plain spaces.
 
     A unit is a word of the closed list (``_is_unit``), "%", or "°" and "C", "F" or
-    "K". It may be glued ("19V", "85%", "25°C") or follow after spaces or tabs on the
-    same line ("19 V", "45  µA"), never across a line break. A "u" prefix is micro.
+    "K". It may be glued ("19V", "85%", "25°C") or follow after white space of any
+    kind ("19 V", "45  µA", "1.22\\n   V"). A "u" prefix is micro.
     """
     if token.kind not in _SIGNABLE:
         return ""
@@ -653,8 +655,6 @@ def _stated_unit(lexemes: Sequence[_Lexeme], token: _Token) -> str:
         at = token.word + 1
         between = _get(lexemes, at)
         if between is not None and between.lex is _Lex.SPACE:
-            if any(c not in " \t" for c in between.text):
-                return ""
             at += 1
         following = _get(lexemes, at)
         if following is None:

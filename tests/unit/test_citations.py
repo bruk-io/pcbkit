@@ -516,6 +516,7 @@ def test_hex_that_starts_with_a_letter_is_text_only() -> None:
         ("10 kohm", "Pull-up resistor R1 = 10 kΩ"),  # "ohm" and "Ω" are not folded
         ("10 kΩ", "Pull-up resistor R1 = 10 KΩ"),  # nor "k" and "K"
         ("-0.3 to 19 mV", "Input voltage range: –0.3 19 V"),
+        ("1.22 mV", "Enable high threshold 0.5 0.9 1.22\n        V"),  # next line
     ],
 )
 def test_a_unit_stated_on_both_sides_must_be_the_same(value: str, quote: str) -> None:
@@ -533,8 +534,9 @@ def test_a_unit_stated_on_both_sides_must_be_the_same(value: str, quote: str) ->
         ("85%", "Shutdown threshold 85 % falling", None),
         ("125 °C", "Shutdown threshold 125°C rising", None),
         ("45 μA", "Quiescent current IQ  45  μA", None),
+        ("1.22 V", "Enable high threshold 0.5 0.9 1.22\n        V", None),
         # Either side states none: as before, not compared.
-        ("1.25 mV", "Reference voltage 1.25", "Reference voltage 1.25\nmV typical"),
+        ("0.9 mV", "Enable high threshold 0.5 0.9 1.22\n        V", None),
         ("1.25", "Reference voltage 1.25 V typical", None),
         ("500 kHz", "Switching frequency kHz 500", None),  # unit before the number
         ("-0.3 to 19 V", "Input voltage range: –0.3 19 V", None),
@@ -1140,6 +1142,8 @@ def test_w1_a_dash_after_a_word_and_a_cell_gap_is_a_sign(value: str, page: str) 
         ("-0.3 V", "Input voltage VIN\n        –0.3 19 V"),
         # A grouping space in the run: no gap.
         ("-0.3 V", "Input voltage VIN \u00a0 –0.3 19 V"),
+        ("-0.3 V", "Input voltage VIN  \u00a0–0.3 19 V"),
+        ("-0.3 V", "Input voltage VIN\u00a0\u00a0  –0.3 19 V"),
         # After a number (M2 of the third review), a unit, an exponent letter or "x".
         ("-3.6 V", "Supply voltage 2.7     –3.6 V"),
         ("-3.6 V", "Supply voltage 2.7 V     –3.6 V"),
