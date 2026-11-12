@@ -747,3 +747,68 @@ exceptions to multi-pad parts changes nothing, because multi-pad parts tie only 
 fitted jumpers or 0 ohm pack elements, which no exception covers; and reversing every
 two-pad diode is an equivalent mutant, because a path counts in either direction of
 current, so a reversed diode gives the same verdict.
+
+## Fault states (A) and semiconductor voltage (F) built (2026-11-12)
+
+Both checks are in the `power` group, gate `sch`, each with its own `BUILTIN_GROUPS`
+row, a row in the frozen gate table, its table moved from `tables.PROPOSED` to its
+engine's `TABLES`, its docs row moved into the `power` block, an engine under
+`pcbkit/check/` (`faults.py`, `semis.py`), a module under `builtin/` (`test_faults.py`,
+`test_semis.py`), unit tests and a toy test. Neither touches `dc.py`, `netlist.py`,
+`plugin.py` or `stress.py`; `semis` reads the stress circuits through `Solution.c`.
+
+Where the code differs from the plan:
+
+- **A is more than "driven and in the window".** "Driven" (`Solution.floating`) only
+  says some modelled path reaches a fixed net. A pin with a pull-down and a `Device:D`
+  from a rail into it reads 0 V and is driven, yet the diode `dc.build` skips would lift
+  it. So A also fails when any pad on the nets that set the pin's level (its net and
+  every net reached through any circuit element, stopping at fixed nets) belongs to a
+  part the circuit does not hold elements for on the nets of all its pads, unless it is
+  a `Device` capacitor or a listed pin. The way out for an absent controller's pin is to
+  list it in the condition's pins with its own window. A pin left to nothing but
+  unmodelled parts is floating and names them. Two further fail-safe rules: a level
+  that moves by more than 50 mV when the leak is made 1000 times smaller (held through a
+  gigaohm) fails, and a condition with no pins fails. Records: `pins` as planned, plus
+  `not modelled`.
+- **F's set of judged parts is wider than "pins named G/D/S or A/K, or `pins` in the
+  row".** That rule would silently pass a bipolar transistor, a dual part, and a diode
+  whose symbol names no pins. F judges a part whose pins read as one FET or diode, whose
+  pins are all named for one family's terminals (G/D/S, A/K, B/C/E, with numbers), that
+  comes from a `Diode` or `Transistor` library or is a `Device` `D`, `LED`, `D_*`,
+  `LED_*` or `Q_*` symbol, whose MPN has a row, or that a stress circuit holds a diode or
+  FET element for; anything in that set it cannot read fails by name. The library rule
+  reads symbol names, which can only add failures, never passes: the owner should say
+  whether that is acceptable under "no guessing from names". It also fails a judged
+  part the circuit does not model on each judged pad's net (`Device:D`, zeners and
+  generic FETs must be added in `circuits.scenario` by reference), a judged pad floating
+  in a scenario, and a set of scenarios that solves nothing. A diode is held to
+  `|V(K) - V(A)|`, either way. Records: `semiconductor voltage`, `not judged`,
+  `unsolved scenarios`.
+- **Every LED needs a `SEMI_VRATED` row**, and every GPIO that drives a judged part needs
+  a level (or a pull) in every `STRESS_SCENARIOS` row: the toy's own second stress row
+  leaves the LED's GPIO undriven, and F fails it as floating.
+
+Owner's calls left open:
+
+- **`SEMI_VRATED` describes one element per MPN.** A dual diode (`BAV99`, `BAT54C`) or a
+  dual FET fails by name with no way out. A row that holds a list of elements would fix
+  it; the shape is signed off, so it was not changed here.
+- **No breakdown in `dc`.** A zener or TVS meant to conduct in reverse is judged as if it
+  blocked, so a zener clamp fails. Its row's `vrrm` is documented as the reverse voltage
+  it may hold without conducting.
+- **A bipolar transistor is written as a FET row** (`vds` its VCEO, `vgs` its VEBO,
+  `pins` base, collector, emitter as g, d, s) and modelled as a `circuit.fets` entry. That
+  works with the signed-off shape, but a `vceo`/`vebo` row would say what it means.
+
+What `dc.py` changes would remove false failures (not made: out of scope):
+
+- `build` models only `Device:R`, `R_Pack04`, `R_Shunt`, `LED`, `D_Schottky` and three
+  FETs. `Device:R_Small`, `R_US`, `Device:D`, `D_Zener` (forward only) and the generic
+  `Q_NMOS_*`/`Q_PMOS_*` symbols are common; each one today has to be added by hand in
+  `circuits.scenario`, or A and F fail it (A: as a part left out on a pin's nets, or the
+  pin as floating; F: as not modelled). The `2N7002` has no body diode in `build`.
+- `Solution.floating` does not count a current source (`Circuit.inject`) as a drive, so
+  a pin held only by one fails A as floating (the plan's risk, unchanged).
+- Neither check needed `dc.py` changed to be fail-safe: "not modelled" is worked out
+  from the circuit's own elements (`faults.element_nets`).
