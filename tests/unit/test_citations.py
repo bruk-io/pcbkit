@@ -1008,11 +1008,38 @@ def test_a_derived_value_is_not_read() -> None:
     assert check_citation("½ VDD", quote, 1, [quote], derived=True) is None
 
 
-def test_the_short_message_says_digit_spaces_count() -> None:
-    """Say that a space kept between digits counts towards the quote's length."""
+def test_the_short_message_says_how_spaces_count() -> None:
+    """Say that each run of white space counts as one character (W3).
+
+    Changed on purpose: before W3 only a space between two digits counted.
+    """
     problem = check_citation("6 V", "-0.3 6 V", 1, PAGES)
     assert rule(problem) is Rule.SHORT
-    assert "a space between two digits stays and counts" in problem.message  # type: ignore[union-attr]
+    assert "each run of white space between words as one" in problem.message  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    "quote, short",
+    [
+        ("VIN 4.5 28 V", False),  # 12 with its spaces; 9 without
+        ("VIN    4.5    28    V", False),  # a run of spaces is one
+        ("IQ 45 µA max", False),
+        ("VIN 4.5 28 V\n", False),
+        ("VIN 4.5 28", True),  # 10
+        ("  VIN 4.5 28  ", True),  # the ends count nothing
+        ("VIN\u200b 4.5 28", True),  # nor an invisible character
+        ("-0.3 6 V", True),
+        ("SW –2 32 V", True),  # 10
+    ],
+)
+def test_w3_each_white_space_run_counts_one_toward_the_minimum(
+    quote: str, short: bool
+) -> None:
+    """Count a quote's length with each white-space run as one character."""
+    page = "Supply VIN 4.5 28 V max\nVIN    4.5    28    V\nIQ 45 µA max\nSW –2 32 V"
+    page += "\nVIN\u200b 4.5 28"
+    problem = check_citation("4.5", quote, 1, [page + "\n" + quote])
+    assert (rule(problem) is Rule.SHORT) is short
 
 
 def test_rule_names_say_what_failed() -> None:
@@ -1149,6 +1176,40 @@ def test_w2_three_digits_across_a_cell_gap_are_not_a_group(
 )
 def test_w2_still_refuses_a_possible_group(value: str, page: str) -> None:
     """Refuse halves of a possible group: one space, one line break, a thin space."""
+    assert rule(check_citation(value, page, 1, [page])) is Rule.NUMBER
+
+
+# A bullet "•" at the start of a line opens like "(": nothing before it can be a
+# range's first end or be subtracted from, and it is not a mark on the number.
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("60 V", "•    60-V VDS(MAX) rating"),
+        ("60 V", "Features\n  • 60-V VDS(MAX) rating"),
+        ("60 V", "Features\n•60-V VDS(MAX) rating"),
+        ("-40 °C", "Features\n• –40°C to 125°C ambient"),
+        ("-40 °C", "Features\n\t•\t–40°C to 125°C ambient"),
+    ],
+)
+def test_a_bullet_at_the_start_of_a_line_is_an_opener(value: str, page: str) -> None:
+    """Accept a number after a line-start bullet, and a sign after it."""
+    assert check_citation(value, page, 1, [page]) is None
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("60 V", "Rating x • 60-V VDS(MAX) rating"),  # mid-line: unknown
+        ("60 V", "Rating x •60-V VDS(MAX) rating"),
+        ("40 °C", "Features\n• –40°C to 125°C ambient"),  # the sign stays
+        ("60 V", "Features\n∙ 60-V VDS(MAX) rating"),  # a bullet operator: unknown
+        ("-40 °C", "Rating x • –40°C to 125°C ambient"),
+    ],
+)
+def test_a_bullet_inside_a_line_is_still_unknown(value: str, page: str) -> None:
+    """Refuse a number next to a bullet inside a line, or another bullet character."""
     assert rule(check_citation(value, page, 1, [page])) is Rule.NUMBER
 
 

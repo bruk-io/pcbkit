@@ -5,8 +5,12 @@ evidence: a short verbatim quote and the page it is on. Everything here checks t
 evidence against the PDF's own text, with no model and no judgement:
 
 - the page is one of the PDF's pages, counted from 1 in the file's own order;
-- the quote is at least ``MIN_QUOTE_CHARS`` long once normalised, so that "6 V" cannot
-  match by accident;
+- the quote is at least ``MIN_QUOTE_CHARS`` long, counting each run of white space
+  between words as one character (W3), so that "6 V" cannot match by accident. Why
+  counting spaces is safe: the minimum plays no part in checking the value, only in
+  how likely a quote is to be found by chance, and a space between two words is as
+  much a part of a phrase as a letter. It also stops the rule pushing an extractor
+  into quotes that span two table rows, which is where values of the wrong row leak;
 - the quote is on that page (``quote_on_page``), and neither end of it cuts a number
   of the page;
 - every number of the value is a *known* number of the page inside the quote, of the
@@ -75,7 +79,8 @@ it is one token of exactly one kind, never split:
 Signs. A "-" glued to the front of a number is read only where its role is certain:
 
 - a sign, when it starts the text, or follows (glued, or after white space) one of
-  ``_OPENERS`` ("(", "=", ":", "<", ...), or follows a word of ``_FUNCTION_WORDS``
+  ``_OPENERS`` ("(", "=", ":", "<", ...) or a bullet "•" that starts its line (only
+  spaces or tabs before it on the line), or follows a word of ``_FUNCTION_WORDS``
   ("to", "from", "and", ...) after white space: none of those can be a range's first
   end or the left side of a subtraction;
 - a sign, when it follows a cell gap (two or more plain spaces or a tab on one line,
@@ -110,7 +115,11 @@ number 10 makes both numbers unknown: it may be a power of ten flattened onto th
 
 Context. A number is unknown when any of these touch it:
 
-- glued before it: anything but white space, a sign as above, or ``_SAFE_BEFORE``;
+- glued before it: anything but white space, a sign as above, a line-start bullet,
+  or ``_SAFE_BEFORE``. A line-start "•" opens a list item: nothing before it on the
+  line can be a range's first end or be subtracted from, and it is no footnote or
+  power mark on the number, so it is known. A "•" inside a line, and every other
+  bullet character ("∙", "◦", "‣", ...), has no rule and is unknown;
 - glued after it: anything but white space, "-" (a range or a hyphen, judged from the
   other side), or ``_SAFE_AFTER``; a code or hex number glued to a dash and a digit is
   unknown too ("2N7002-7");
@@ -291,10 +300,11 @@ _LEADING_DIGITS = re.compile(r"\d+")
 
 
 class _Lex(Enum):
-    """What a lexeme is: a word, a run of white space or one other character."""
+    """What a lexeme is: a word, white space, a line-start bullet or a character."""
 
     WORD = "word"
     SPACE = "space"
+    BULLET = "bullet"
     CHAR = "char"
 
 
@@ -541,6 +551,13 @@ def _word_end(text: str, start: int) -> int:
     return end
 
 
+def _starts_line(text: str, at: int) -> bool:
+    """Say whether only spaces and tabs stand between ``at`` and the line's start."""
+    while at > 0 and text[at - 1] in " \t":
+        at -= 1
+    return at == 0 or text[at - 1] in "\n\r\f\v"
+
+
 def _lex(text: str) -> list[_Lexeme]:
     """Return the lexemes of read text: words, white-space runs and characters."""
     found: list[_Lexeme] = []
@@ -556,6 +573,9 @@ def _lex(text: str) -> list[_Lexeme]:
         elif _is_word_char(character) or (character == "." and _is_digit(after)):
             end = _word_end(text, at)
             found.append(_Lexeme(_Lex.WORD, text[at:end], at, end))
+        elif character == "•" and _starts_line(text, at):
+            end = at + 1
+            found.append(_Lexeme(_Lex.BULLET, character, at, end))
         else:
             end = at + 1
             found.append(_Lexeme(_Lex.CHAR, character, at, end))
@@ -638,6 +658,13 @@ def _get(lexemes: Sequence[_Lexeme], index: int) -> _Lexeme | None:
 def _is_char(lexeme: _Lexeme | None, characters: frozenset[str] | str) -> bool:
     """Say whether ``lexeme`` is one character from ``characters``."""
     return lexeme is not None and lexeme.lex is _Lex.CHAR and lexeme.text in characters
+
+
+def _is_opener(lexeme: _Lexeme | None) -> bool:
+    """Say whether a dash after ``lexeme`` is a sign: an opener or a bullet."""
+    return _is_char(lexeme, _OPENERS) or (
+        lexeme is not None and lexeme.lex is _Lex.BULLET
+    )
 
 
 def _is_foreign(lexeme: _Lexeme | None) -> bool:
@@ -738,7 +765,7 @@ def _dash_role(
     if before.lex is _Lex.SPACE:
         previous_index = _past_space(lexemes, dash - 1, -1)
         previous = _get(lexemes, previous_index)
-        if previous is None or _is_char(previous, _OPENERS):
+        if previous is None or _is_opener(previous):
             return _Role.SIGN, -1
         if previous.lex is _Lex.WORD and previous.text in _FUNCTION_WORDS:
             return _Role.SIGN, -1
@@ -747,7 +774,7 @@ def _dash_role(
         return _Role.UNKNOWN, previous_index if previous_index in at else -1
     if _is_char(before, "/") and _is_char(_get(lexemes, dash - 2), "+"):
         return _Role.PLUS_MINUS, -1
-    if _is_char(before, _OPENERS):
+    if _is_opener(before):
         return _Role.SIGN, -1
     left = _range_left(lexemes, dash, at)
     if left == -1:
@@ -1027,6 +1054,15 @@ def quote_on_page(quote: str, page_text: str) -> bool:
     return bool(_occurrences(quote, _read_page(page_text)))
 
 
+def _quote_length(quote: str) -> int:
+    """Return a quote's length for ``MIN_QUOTE_CHARS``: each white-space run is one.
+
+    Invisible characters count nothing, and white space at the ends nothing (W3).
+    """
+    read = _INVISIBLE_RUN.sub("", _read_text(quote))
+    return len(_SPACE.sub(" ", read).strip())
+
+
 def _pages_with(quote: str, pages: Sequence[str]) -> list[int]:
     """Return the pages, counted from 1, that ``quote`` is on."""
     return [
@@ -1122,12 +1158,12 @@ def check_citation(
             f"page {page} is not a page of the PDF: it has pages 1 to {len(pages)}, "
             "counted in the file's own order, not the numbers printed on them",
         )
-    if len(_normalise(quote)) < MIN_QUOTE_CHARS:
+    if _quote_length(quote) < MIN_QUOTE_CHARS:
         return Problem(
             Rule.SHORT,
-            f"the quote {quote!r} is under {MIN_QUOTE_CHARS} characters once white "
-            "space is taken out (a space between two digits stays and counts), short "
-            "enough to match by accident: quote the whole table row or sentence",
+            f"the quote {quote!r} is under {MIN_QUOTE_CHARS} characters, counting "
+            "each run of white space between words as one, short enough to match by "
+            "accident: quote the whole table row or sentence",
         )
     missing = _missing(value, quote, pages[page - 1])
     if missing is None:
