@@ -58,9 +58,17 @@ it is one token of exactly one kind, never split:
 - exponent: ``<mantissa>[eE][-+]?\\d+``, compared exactly as written.
 - power: ``<mantissa>^[-+]?\\d+``, written with a caret, compared exactly as written.
 - code: any other word with a digit: "2N7002", "4k7", "3V3", "VIN1", "1F", "12h",
-  "1010b". A code backs only the identical code. An integer followed by only the
-  letters A-F (and an optional h), such as "1F", "2A", "10dB" or "70h", is a code and
-  not a number with a unit, because it is also bare hex, a pin name or hours.
+  "1010b", "1G", "2Ah". A code backs only the identical code. An integer followed by
+  only the letters A-F (and an optional h), such as "1F", "2A", "10dB" or "70h", is a
+  code and not a number with a unit, because it is also bare hex, a pin name of a
+  74-series part ("1A", "2B") or hours. So is an integer followed by one upper-case G,
+  S, K, M, H or W alone: those letters name pins as often as units ("1G" output
+  enable, "2S", "1K" clear), so "1G" is not 1 giga and "10K" is not 10 kilo; a value
+  must write "1M" or "10K" as the page does, and "10K" does not back "10 kΩ". "V" and
+  the lower-case prefixes ("1k", "100n") stay a number with a unit. Digits and "Ah"
+  ("2Ah") are a code: hex 0x2A or 2 ampere-hours, and the text cannot say which.
+  Hex that starts with a letter ("FFh", "FEh") has no digit-led word at all: it is no
+  token, so "0xFF" is refused against it and it can be cited only as ``text_only``.
 - grouped: digits with a comma ("1,000", "5,5"): unknown.
 
 Signs. A "-" glued to the front of a number is read only where its role is certain:
@@ -236,6 +244,11 @@ _UNITS = frozenset(
 _MANTISSA = r"(?:\d+(?:\.\d+)?|\.\d+)"
 _MANTISSA_E = re.compile(_MANTISSA + "[eE]")
 _HEX = re.compile(r"0[xX]([0-9A-Fa-f]+)|([0-9][0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)[hH]")
+# Digits and "Ah": hex ("2Ah" is 0x2A) or ampere-hours ("2 Ah"). Neither: a code.
+_AMPERE_HOURS = re.compile(r"\d+Ah")
+# One upper-case letter after an integer is a pin name as often as a unit or prefix:
+# "1G" (output enable), "2S", "1K", "3M", "4H", "1W". Such a word is a code.
+_PIN_LETTERS = frozenset("GSKMHW")
 _EXPONENT = re.compile(_MANTISSA + r"[eE][-+]?\d+")
 _POWER = re.compile(r"\d+(?:\.\d+)?\^[-+]?\d+")
 _DECIMAL = re.compile(r"(\d+(?:\.\d+)?|\.\d+)(.*)")
@@ -526,6 +539,8 @@ def _is_unit(suffix: str) -> bool:
 
 def _read_word(word: str) -> tuple[_Kind, str, str]:
     """Return a word's kind, its number (without a glued unit) and that unit."""
+    if _AMPERE_HOURS.fullmatch(word):
+        return _Kind.CODE, word, ""
     if _HEX.fullmatch(word):
         return _Kind.HEX, word, ""
     if "," in word:
@@ -539,8 +554,10 @@ def _read_word(word: str) -> tuple[_Kind, str, str]:
         number, suffix = decimal[1], decimal[2]
         if not suffix:
             return _Kind.DECIMAL, number, ""
-        hex_like = "." not in number and _HEX_LETTERS.fullmatch(suffix)
-        if _is_unit(suffix) and not hex_like:
+        integer = "." not in number
+        hex_like = integer and _HEX_LETTERS.fullmatch(suffix)
+        pin_like = integer and suffix in _PIN_LETTERS
+        if _is_unit(suffix) and not hex_like and not pin_like:
             return _Kind.DECIMAL, number, suffix
     return _Kind.CODE, word, ""
 

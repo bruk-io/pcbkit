@@ -315,7 +315,9 @@ def test_a_number_of_the_value_must_be_a_number_of_the_quote(
         ("3.0 to 5.5 V", "Supply voltage 3.0-5.5 V"),  # a range, not -5.5
         ("4.5 V to 17 V", "4.5-V to 17-V Input"),
         ("0x70", "Default address 0x70."),
-        ("0x7a", "Default address 7Ah."),  # a letter digit makes "h" hex
+        # A letter digit makes "h" hex. Changed on purpose: this was "7Ah", which
+        # may also be 7 ampere-hours, and is now a code (see the "2Ah" cases).
+        ("0x7b", "Default address 7Bh."),
         ("0x7f", "Mask 0x7F"),  # hex digits are not case-sensitive
         ("10 MHz", "fSW TPS54331 10 MHz"),  # digits inside a name are not numbers
     ],
@@ -421,6 +423,64 @@ def test_a_sign_in_the_value_needs_the_same_sign_on_the_page(
 ) -> None:
     """Refuse a value's "±", "+/-" or "+" unless the page's sign backs it."""
     assert (check_citation(value, quote, 1, [quote]) is None) is accepted
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        # F2 of the fourth review: pin names read as a number and a unit or prefix.
+        ("2", "Pin 15 2G enable input"),
+        ("2S", "Output enable pin 2G active low"),
+        ("1M", "Output enable pin 1G active low"),
+        ("1", "Pin 9 1K clear input"),
+        ("1S", "Pin 9 1K clear input"),
+        ("3V", "Pin 9 1K clear input"),
+        ("1M", "Pin 9 1K clear input"),
+        ("1", "Pin 4 1S select input"),
+        ("1", "Pin 4 1M mode input"),
+        ("1", "Pin 4 1H hold input"),
+        ("1", "Pin 4 1W write input"),
+        ("10 kΩ", "Pull-up resistor 10K to VDD"),
+        ("1 MΩ", "Bleed resistor 1M to ground"),
+        # Digits and "Ah": hex or ampere-hours, so neither.
+        ("0x2A", "Battery capacity 2Ah nominal"),
+        ("2 Ah", "Battery capacity 2Ah nominal"),
+        ("2", "Battery capacity 2Ah nominal"),
+        ("0x12A", "Battery capacity 12Ah nominal"),
+        ("0x7a", "Default address 7Ah."),
+    ],
+)
+def test_an_integer_and_a_pin_letter_or_ah_is_a_code(value: str, quote: str) -> None:
+    """Refuse a number read out of "1G", "2S", "1K", "1M", "1H", "1W" or "2Ah"."""
+    assert rule(check_citation(value, quote, 1, [quote])) is Rule.NUMBER
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("2G", "Pin 15 2G enable input"),
+        ("10K", "Pull-up resistor 10K to VDD"),
+        ("1M", "Bleed resistor 1M to ground"),
+        ("2Ah", "Battery capacity 2Ah nominal"),
+        ("0x1FA", "Register value 1FAh at reset"),  # hex: "1F" is no number
+        ("3 V", "Output rail 3V regulated"),  # "V" stays a unit
+        ("100 n", "Bypass capacitor 100n ceramic"),  # lower case stays a prefix
+        ("4.7 K", "Pull-up resistor 4.7K to VDD"),  # not an integer: no pin name
+    ],
+)
+def test_a_code_backs_itself_and_other_suffixes_stay_units(
+    value: str, quote: str
+) -> None:
+    """Accept the code written whole, and "3V", "100n", "4.7K" as numbers."""
+    assert check_citation(value, quote, 1, [quote]) is None
+
+
+def test_hex_that_starts_with_a_letter_is_text_only() -> None:
+    """Refuse "0xFF" against "FFh", which has no digit; accept "FFh" as text."""
+    quote = "Device ID register FFh at reset"
+    assert rule(check_citation("0xFF", quote, 1, [quote])) is Rule.NUMBER
+    assert rule(check_citation("FFh", quote, 1, [quote])) is Rule.VALUE
+    assert check_citation("FFh", quote, 1, [quote], text_only=True) is None
 
 
 def test_units_are_not_checked_a_known_blind_spot() -> None:
