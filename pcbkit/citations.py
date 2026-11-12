@@ -172,8 +172,23 @@ the folding above (micro sign and mu, ohm sign and omega) and with a "u" prefix 
 as micro: "10 Ω" is refused against "10 kΩ", "3.3 V" against "3.3 A", "100 nF"
 against "100 µF" or "100-µF". Nothing else is equated: "K" is not "k" (it may be
 kelvin) and "ohm" is not "Ω", so those are refused. Where either side states none
-("1.25" against "1.25 V", or a page whose unit is in another cell after other
-numbers or before the number, as in "kHz 500") the units are not compared.
+("1.25" against "1.25 V", or a page whose unit is before the number, as in "kHz
+500", or only in a column header) the units are not compared.
+
+Row units. In a table row most numbers state no unit: only the last before the UNIT
+column does ("VIN    4.5    28    V"). A number with no unit of its own takes its
+row's unit column: a unit standing apart, after white space, from the last number of
+a run of numbers on the same line, with only spaces, tabs and numbers stating no unit
+between ("= 100 mV 5.8 6.6 7.7 V" gives 5.8 and 6.6 the "V", and 100 keeps its
+"mV"; a second unit column starts a new run: "456 684 kHz 1.75 2.2 MHz"). A unit
+glued or joined by a hyphen to its own cell ("22uF", "6.8-pF", "93%") is not a column
+and is not passed on. This only refuses more. Its cost: a row of cells in different
+units with a spaced unit after the last ("500  5  73.2  10  3.3  22 µF") gives every
+cell that unit, so "73.2 kΩ" is refused there; on three datasheets and TLV62569 (179
+facts) it refused no right value. Before it, a unit swapped on an accepted value
+("4.5 A" for "4.5 V" in "VIN 4.5 28 V") was accepted 96 times in 225; with it, 27
+times, every one a number with no unit anywhere on its line ("kHz 500", "±2000"
+under a header).
 
 Values. The value is read like a page, with the same rules, and every number in it must
 be known. A value with an unknown character anywhere, or with no number at all, is
@@ -220,8 +235,11 @@ Write such a value derived, for a person to check.
 Blind, not detectable from the text at all:
 
 - A unit or prefix that only one side states is not compared: "1.25 mV" passes
-  against a bare "1.25" whose "V" is in another cell after other numbers or before
-  the number ("kHz 500"), and "10" passes against "10k".
+  against a "1.25" whose "V" is before it ("kHz 500"), in a column header, or past a
+  word or mark on its line; "10" passes against "10k". Measured: of 225 unit swaps
+  on accepted values from four datasheets, 27 pass, every one of this kind. The
+  value's unit must be inside the value ("6.8 pF", not "6.8" with the unit kept
+  elsewhere), or it is never compared.
 - A footnote digit glued to a number ("3.61" for 3.6 and footnote 1), and a power of
   ten that pdftotext flattened with no mark left ("106" for 10⁶, or "10 6" and
   "10\\n6" with plain white space): the text is a plain number.
@@ -1088,7 +1106,40 @@ def _read(text: str) -> _Reading:
                 stated=_stated_unit(lexemes, token),
             )
         )
-    return _Reading(text, tuple(lexemes), tuple(tokens))
+    return _Reading(text, tuple(lexemes), tuple(_row_units(text, tokens)))
+
+
+def _row_units(text: str, tokens: list[_Token]) -> list[_Token]:
+    """Give each number with no unit the unit column of its row.
+
+    A row's unit column is a unit standing apart, after white space, from the last
+    number of a run of numbers on one line: "VIN 4.5 28 V" gives 4.5 the "V" of 28,
+    and "= 100 mV 5.8 6.6 7.7 V" gives 5.8 and 6.6 the "V". A number with no unit
+    takes it when only spaces or tabs, and numbers that state no unit, stand between
+    them. A unit glued or joined by a hyphen to its number ("22uF", "6.8-pF", "93%")
+    is that cell's own and is not passed on. Only the signable kinds chain.
+    """
+    result = list(tokens)
+    column = ""
+    for i in range(len(result) - 1, -1, -1):
+        here = result[i]
+        if i + 1 < len(result):
+            after = result[i + 1]
+            between = text[here.lump_end : after.start]
+            joined = (
+                here.kind in _SIGNABLE
+                and after.kind in _SIGNABLE
+                and bool(between)
+                and all(c in " \t" for c in between)
+            )
+            if not joined:
+                column = ""
+        if here.stated:
+            apart = here.kind in _SIGNABLE and text[here.end : here.end + 1].isspace()
+            column = here.stated if apart else ""
+        elif column:
+            result[i] = replace(here, stated=column)
+    return result
 
 
 def _read_page(page_text: str) -> _Page:

@@ -518,6 +518,7 @@ def test_hex_that_starts_with_a_letter_is_text_only() -> None:
         ("10 kΩ", "Pull-up resistor R1 = 10 KΩ"),  # nor "k" and "K"
         ("-0.3 to 19 mV", "Input voltage range: –0.3 19 V"),
         ("1.22 mV", "Enable high threshold 0.5 0.9 1.22\n        V"),  # next line
+        ("0.9 mV", "Enable high threshold 0.5 0.9 1.22\n        V"),  # its column
     ],
 )
 def test_a_unit_stated_on_both_sides_must_be_the_same(value: str, quote: str) -> None:
@@ -536,8 +537,9 @@ def test_a_unit_stated_on_both_sides_must_be_the_same(value: str, quote: str) ->
         ("125 °C", "Shutdown threshold 125°C rising", None),
         ("45 μA", "Quiescent current IQ  45  μA", None),
         ("1.22 V", "Enable high threshold 0.5 0.9 1.22\n        V", None),
-        # Either side states none: as before, not compared.
-        ("0.9 mV", "Enable high threshold 0.5 0.9 1.22\n        V", None),
+        # Either side states none: as before, not compared. Changed on purpose:
+        # this row had "V" on the next line, which is now its unit column.
+        ("0.9 mV", "Enable high threshold 0.5 0.9 1.22", None),
         ("1.25", "Reference voltage 1.25 V typical", None),
         ("500 kHz", "Switching frequency kHz 500", None),  # unit before the number
         ("-0.3 to 19 V", "Input voltage range: –0.3 19 V", None),
@@ -548,6 +550,65 @@ def test_a_unit_stated_on_one_side_only_is_not_compared(
 ) -> None:
     """Accept the same unit however it is spelt, and a unit only one side states."""
     assert check_citation(value, quote, 1, [quote if page is None else page]) is None
+
+
+# Follow-up 1 of the fifth review: a number with no unit takes its row's unit column,
+# a unit standing apart after the last of a run of numbers on the same line.
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("4.5 A", "Input voltage VIN 4.5 28 V"),
+        ("-0.3 mV", "Input voltage VIN    –0.3    32    V"),
+        ("80 mA", "Operating quiescent current    80    130    µA"),
+        ("5.8 mV", "Threshold VIN = 100 mV 5.8 6.6 7.7 V"),  # after another unit
+        ("6.6 mV", "Threshold VIN = 100 mV 5.8 6.6 7.7 V"),
+        ("100 V", "Threshold VIN = 100 mV 5.8 6.6 7.7 V"),  # its own unit wins
+        ("-17 V", "Reverse threshold VAK    –17    –11    –2    mV"),
+        ("456 MHz", "Switching frequency    456    570    684    kHz"),
+        ("1.75 kHz", "Clock    456    684    kHz    1.75    2.2    MHz"),  # 2 columns
+        ("1 mA", "Supply current, –40°C to 85°C    1    4    μA"),
+    ],
+)
+def test_a_number_takes_its_rows_unit_column(value: str, page: str) -> None:
+    """Refuse a unit other than the row's unit column for a number with none."""
+    assert rule(check_citation(value, page, 1, [page])) is Rule.NUMBER
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("4.5 V", "Input voltage VIN 4.5 28 V"),
+        ("5.8 V", "Threshold VIN = 100 mV 5.8 6.6 7.7 V"),
+        ("100 mV", "Threshold VIN = 100 mV 5.8 6.6 7.7 V"),
+        ("-17 mV", "Reverse threshold VAK    –17    –11    –2    mV"),
+        ("684 kHz", "Clock    456    684    kHz    1.75    2.2    MHz"),
+        ("1.75 MHz", "Clock    456    684    kHz    1.75    2.2    MHz"),
+        ("1 μA", "Supply current, –40°C to 85°C    1    4    μA"),
+        # A unit glued or joined to its cell is that cell's own, not a column.
+        ("73.2 kΩ", "Design    500    5    73.2    10    3.3    22uF × 1"),
+        ("3.3 µH", "Design    500    5    73.2    10    3.3    22uF × 1"),
+        ("90 %", "Duty ratio    90    93%"),
+        ("5 V", "Design    5    6.8-pF    here"),
+        # The column does not reach across a line break, a word or another mark.
+        ("4.5 mA", "Input voltage VIN 4.5\n28 V"),
+        ("4.5 mA", "Input voltage VIN 4.5 to 28 V"),
+        ("1.8 µs", "Internal soft-start    ms    1.8"),  # a unit before: none
+    ],
+)
+def test_a_rows_unit_column_backs_its_numbers_and_no_others(
+    value: str, page: str
+) -> None:
+    """Accept the row's unit, a cell's own unit, and units the column cannot reach."""
+    assert check_citation(value, page, 1, [page]) is None
+
+
+def test_a_row_of_cells_in_different_units_is_refused_a_known_cost() -> None:
+    """Pin the cost: a spaced unit after mixed cells is taken by all of them."""
+    page = "Design    500    5    73.2    10    3.3    22 µF"
+    assert rule(check_citation("73.2 kΩ", page, 1, [page])) is Rule.NUMBER
+    assert check_citation("73.2", page, 1, [page]) is None
 
 
 CAPACITANCE = "6.8-pF capacitance is recommended for R2 of 100-kΩ resistance"
@@ -1389,11 +1450,20 @@ def test_real_layout_rows_refuse_wrong_and_uncertain_values(
 
 
 def test_real_layout_rows_show_the_unit_and_role_blind_spots() -> None:
-    """Pin the blind spots on real rows: a unit in another cell, a neighbour's role."""
+    """Pin the row unit and the blind spots on real rows: a neighbour's role, no unit.
+
+    Changed on purpose: "570 MHz" was pinned as passing (its unit in another cell)
+    until a number took its row's unit column.
+    """
     quote = "Switching frequency VIN = 12 V, 25°C 456 570 684 kHz"
-    assert check_citation("570 MHz", quote, 1, [TPS54331]) is None  # unit not stated
+    assert rule(check_citation("570 MHz", quote, 1, [TPS54331])) is Rule.NUMBER
+    assert check_citation("570 kHz", quote, 1, [TPS54331]) is None
     assert check_citation("684 kHz", quote, 1, [TPS54331]) is None  # max, not typ
     assert rule(check_citation("684 MHz", quote, 1, [TPS54331])) is Rule.NUMBER
+    quote = "Voltage reference 0.772 0.8 0.828 V"
+    assert rule(check_citation("0.8 mV", quote, 1, [TPS54331])) is Rule.NUMBER
+    quote = "Error amplifier DC gain(1) VSENSE = 0.8 V 800 V/V"
+    assert check_citation("800 V", quote, 1, [TPS54331]) is None  # "/V" not read
 
 
 # Blind spots, pinned: each passes, and no text check can tell it from a right value.
