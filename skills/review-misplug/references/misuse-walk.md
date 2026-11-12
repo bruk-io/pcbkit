@@ -2,8 +2,8 @@
 
 The questions to ask at each step of the walk, and the physical reasoning behind
 them. The answers need the parts, the cables and the enclosure; where a question
-reduces to "which net lands on which pin", that is a check's job (`MATING` with
-`PIN_NETS`, proposed) and this review starts from its answer.
+reduces to "which net lands on which pin", that is a check's job (`MATING`, proposed,
+read with the netlist's pad nets) and this review starts from its answer.
 
 ## Contents
 
@@ -41,8 +41,8 @@ reduces to "which net lands on which pin", that is a check's job (`MATING` with
 
 - Is reversal mechanically possible? Polarised housing, shroud with notch,
   latch on one face, or nothing.
-- If possible: write the pin-by-pin result. Name the voltage that reaches each
-  wire of the plugged device, and what that device does with it.
+- If possible: the mating check gives the pin-by-pin result. Name what the
+  plugged device does with the voltage that reaches each wire.
 - The harmless reversal: a symmetric pinout where the power pin sits in the
   middle and reversal only swaps signal and ground. Ask what current flows
   through the signal driver when it becomes the device's ground return.
@@ -51,7 +51,8 @@ reduces to "which net lands on which pin", that is a check's job (`MATING` with
 
 ## Wrong port
 
-- For each `fits` or `forced` cell: pin by pin, what drives what. Look for
+- For each `fits` or `forced` cell the mating check lands the plug pin by pin;
+  judge what drives what. Look for
   supply onto an output, a higher voltage onto a lower-voltage input, two
   outputs fighting, and a safety loop closed by something that is not the
   safety device.
@@ -106,12 +107,10 @@ reduces to "which net lands on which pin", that is a check's job (`MATING` with
 - Clearance in front of every mating face for the plug body plus the cable's
   strain relief or bend, plus a finger and thumb to grip the plug.
 - Latching families (latch on top) need room above the plug to press the latch.
-- Stacked boards: a board above on standoffs closes the space above right-angle
-  connectors on the board below. Compare the standoff height with plug height
-  plus grip room. Is the upper board's edge set back from the lower board's
-  connector row?
-- Case wall: does the cut-out line up with the mating face once the board sits on
-  its standoffs, and is the wall thin enough for the plug to seat fully?
+- Anything above the connector row (a lid, a shelf, another board) closes the
+  space a plug and a hand need. Compare the gap with plug height plus grip room.
+- Case wall: does the cut-out line up with the mating face once the board is
+  mounted, and is the wall thin enough for the plug to seat fully?
 
 ## Cables leaving the case
 
@@ -131,7 +130,7 @@ reduces to "which net lands on which pin", that is a check's job (`MATING` with
 
 - Reset and boot reachable with the case closed: through a hole, a light pipe or
   a flexure button printed into the case.
-- Programming port reachable with the case closed and the board stacked.
+- Programming port reachable with the case closed and the board mounted.
 - Test points needed during bring-up reachable without removing the upper board.
 - Can a button be pressed by accident when gripping the case or mating a nearby
   connector?
