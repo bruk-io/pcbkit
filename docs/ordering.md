@@ -55,6 +55,18 @@ them through. The fix is to give the part an `mpn=` (and `mfr=`) in `design.py`.
 whose value is in pcbkit's default table of Yageo 0603 parts gets one without being told: see
 [what the BOM lists](project-interface.md#what-the-bom-lists).
 
+### Stock
+
+`pcbkit parts stock [--qty N] [--max-age HOURS] [--offline]` asks Mouser whether each BOM line is
+in stock, and prints one JSON object per line: its `status` (`ok`, `short`, `not-active`,
+`not-found`, `ambiguous`, `no-mpn`, `not-asked` or `unreadable`), the stock, lead time, lifecycle,
+price breaks and the unit price at the quantity you need (`--qty` boards times the quantity per
+board). It needs `MOUSER_API_KEY` unless the answers are cached, reads `design.py` and `bom.py`
+and no board file, so it runs anywhere. Answers are cached for 24 hours by default (`--max-age`),
+and `--offline` takes the cache at any age; each row says when its answer was fetched. The exit
+status is 0 when every line is `ok`, 1 when any is not, and 2 when Mouser could not be asked and
+the cache had nothing. The API key never appears in the output.
+
 ### bom.py: when the BOM should say something else
 
 Most boards need no `bom.py`. It is for when what the schematic says is not what you buy: a
