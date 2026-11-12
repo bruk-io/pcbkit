@@ -122,10 +122,12 @@ is meant to change.
 
 ## Rules
 
-- Two tiers. Tier 1 (new, doctor, setup, sch, quote, shots) runs anywhere. Tier 2 (build,
-  route, promote, finalize, check, mutants, compare) needs `pcbnew`, so its first line must
-  be `pcbkit.kicad.env.require_pcbnew()`. The stubs do not call it yet, so they say "not
-  implemented yet"; whoever implements a tier 2 command adds the call.
+- Two tiers. Tier 1 (new, doctor, setup, sch, quote, shots, and `check --gate sch`) runs
+  anywhere. Tier 2 (build, route, promote, finalize, mutants, compare, and `check` with no
+  gate or any later gate) needs `pcbnew`, so its first line must be
+  `pcbkit.kicad.env.require_pcbnew()`; `check` calls it unless the gate is `sch`. The
+  stubs do not call it yet, so they say "not implemented yet"; whoever implements a tier 2
+  command adds the call.
 - Style: uv for everything, ruff (black profile, 88 columns), click, type hints on every
   function, imperative docstrings (D401), plain functions and data (classes only for real
   state).
