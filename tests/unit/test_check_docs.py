@@ -143,6 +143,63 @@ def table_rows(text: str) -> dict[str, list[str]]:
     return rows
 
 
+# The group whose block holds the row of each table that has its own check.
+TABLE_GROUP = {
+    "CAP_DERATE": "circuit",
+    "PIN_NETS": "ports",
+    "ENABLE_LINKS": "power",
+    "I2C_EXPECTED": "bringup",
+}
+
+
+def table_row_names(text: str) -> list[str]:
+    """Return the table name of every ``| `NAME` | ... |`` row of ``text``, in order."""
+    return [
+        line.strip().strip("|").split("|")[0].strip().strip("`")
+        for line in text.splitlines()
+        if line.startswith("| `")
+    ]
+
+
+def group_block(group: str) -> str:
+    """Return the doc's block for ``group``: from its ``**`group`**`` paragraph on."""
+    section = checks_section()
+    found = re.search(rf"^\*\*`{group}`\*\*", section, re.MULTILINE)
+    assert found, f"no block for the {group} group"
+    after = re.search(r"^\*\*`", section[found.end() :], re.MULTILINE)
+    end = found.end() + after.start() if after else len(section)
+    return section[found.start() : end]
+
+
+def test_every_built_table_has_one_row_and_it_is_in_its_groups_block() -> None:
+    """Hold a built table to exactly one row outside the proposed block, in its group.
+
+    A table row is found by name; an early correct copy elsewhere in the section used
+    to shadow a wrong real row.
+    """
+    from pcbkit.check import tables
+
+    built = sorted(
+        n
+        for n in tables.registry()
+        if n not in tables.EXISTING and n not in tables.PROPOSED
+    )
+    assert built == sorted(TABLE_GROUP), "name each built table's group above"
+    outside = checks_section().replace(proposed_block(), "")
+    names = table_row_names(outside)
+    for name in built:
+        assert names.count(name) == 1, f"{name}: {names.count(name)} rows, want 1"
+        assert name in table_row_names(group_block(TABLE_GROUP[name])), (
+            f"{name} is not in the {TABLE_GROUP[name]} block"
+        )
+
+
+def test_the_row_finder_sees_a_duplicate_and_a_row_in_the_wrong_block() -> None:
+    """Count two rows of one name, so a shadowing copy cannot hide."""
+    text = "| `A` | x | y |\ntext\n| `B` | x |\n| `A` | q | r |\n"
+    assert table_row_names(text) == ["A", "B", "A"]
+
+
 def test_every_registered_table_that_is_not_an_existing_one_has_a_generated_row() -> (
     None
 ):
@@ -162,10 +219,13 @@ def test_every_registered_table_that_is_not_an_existing_one_has_a_generated_row(
     assert not missing, f"no row in the proposed-tables block for {missing}"
     stale = sorted(set(proposed) - set(tables.PROPOSED))
     assert not stale, f"rows in the proposed-tables block for tables built: {stale}"
-    rows = table_rows(checks_section())
     for name, shape in new.items():
-        assert name in rows, f"no row for {name} in the checks section"
-        cells = proposed[name] if name in proposed else rows[name]
+        if name in proposed:
+            cells = proposed[name]
+        else:
+            block = table_rows(group_block(TABLE_GROUP[name]))
+            assert name in block, f"no row for {name} in the checks section"
+            cells = block[name]
         assert len(cells) == 3, f"{name}: a row is name | shape | read by"
         assert cells[1] == f"`{tables.describe(shape)}`", name
 

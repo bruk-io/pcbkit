@@ -5,9 +5,12 @@ from the schematic. What the project gives, in ``specs.py``:
 
 * ``ENABLE_LINKS``: ``{enable net: [(regulator ref, enable pad)]}``, in the pad numbers
   the netlist writes. Each regulator on the shared net ``enable net`` must reach it
-  through a link of its own: a two-pin 0 ohm ``Device:R`` or a part from a ``Jumper``
-  library, between the regulator's own enable net and the shared one. ``{}`` says no
-  enable is shared.
+  through a link of its own: a two-pin 0 ohm (or DNP) ``Device:R``, ``R_Small`` or
+  ``R_US`` or a part from a ``Jumper`` library, between the regulator's own enable net
+  and the shared one. With the link taken out, the enable net must reach neither the
+  shared net nor another listed regulator's own enable net (``links.bypass`` walks the
+  parts between, and not through ground or a supply net). ``{}`` says no enable is
+  shared.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ def test_each_regulator_on_a_shared_enable_has_its_own_link(
 ) -> None:
     """Join each regulator to the shared enable through a link no other one uses.
 
+    Fails, naming the path, when the regulator is still enabled with its link removed.
     Records ``enable links``: ``{net: {ref: link ref or None}}``, before any failure is
     raised.
     """

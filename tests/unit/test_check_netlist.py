@@ -567,7 +567,9 @@ def test_in_a_resistor_pack_value_the_part_after_the_x_is_the_value() -> None:
     assert parse_value("4x4k7") == pytest.approx(4700.0, rel=1e-12)
 
 
-@pytest.mark.parametrize("text", ["abc", "k", "N/A", "DNP", "~", "4x", "1.2.3"])
+@pytest.mark.parametrize(
+    "text", ["abc", "k", "N/A", "DNP", "~", "4x", "1.2.3", "", "  ", "\t\n"]
+)
 def test_parse_value_raises_value_error_for_text_that_is_not_a_value(
     text: str,
 ) -> None:

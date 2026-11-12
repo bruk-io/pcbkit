@@ -159,9 +159,13 @@ def parse_value(v: str) -> float:
     """Return a component value as a number: ``2.2k`` is 2200, ``4k7`` is 4700.
 
     Only the first word counts (``10u 25V`` is 1e-5), and in ``4x220`` the part after
-    the ``x`` is the value. Raise ValueError for text that is not a value.
+    the ``x`` is the value. Raise ValueError for text that is not a value, and for
+    empty or blank text.
     """
-    v = v.strip().split()[0]
+    words = v.split()
+    if not words:
+        raise ValueError(f"cannot parse value {v!r}")
+    v = words[0]
     if "x" in v:
         v = v.split("x", 1)[1]
     m = re.fullmatch(r"(\d+)([pnumkMµ])(\d+)", v)

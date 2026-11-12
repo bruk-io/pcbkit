@@ -9,6 +9,7 @@ the message that says why.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,73 @@ def test_a_jumper_is_a_link_too(tmp_path: Path) -> None:
     result = go(tmp_path, "jumper", toy)
     assert result.outcome(CHECK) == "passed"
     assert result.entry(CHECK)["numbers"]["enable links"]["EN_ALL"]["U2"] == "JP1"
+
+
+def plant_zero_ohms_between_enables(toy: Toy) -> None:
+    """Short the enables together downstream of their links."""
+    check_toy.resistor(toy, "R9", "0", "EN_U2", "EN_U3")
+
+
+def plant_ten_k_between_enables(toy: Toy) -> None:
+    """Bridge the enables with 10k."""
+    check_toy.resistor(toy, "R9", "10k", "EN_U2", "EN_U3")
+
+
+def plant_parallel_resistor(toy: Toy) -> None:
+    """Put 10k in parallel with the link."""
+    check_toy.resistor(toy, "R9", "10k", "EN_U2", "EN_ALL")
+
+
+def plant_second_path_through_two_parts(toy: Toy) -> None:
+    """Join EN_U2 to EN_ALL through two 0 ohm parts."""
+    check_toy.resistor(toy, "R9", "0", "EN_U2", "MID")
+    check_toy.resistor(toy, "R10", "0", "MID", "EN_ALL")
+
+
+@pytest.mark.parametrize(
+    ("plant", "path"),
+    [
+        (plant_zero_ohms_between_enables, "EN_U2 - R9 - EN_U3"),
+        (plant_ten_k_between_enables, "EN_U2 - R9 - EN_U3"),
+        (plant_parallel_resistor, "EN_U2 - R9 - EN_ALL"),
+        (plant_second_path_through_two_parts, "EN_U2 - R9 - MID - R10 - EN_ALL"),
+    ],
+)
+def test_a_second_path_around_a_link_fails_naming_the_path(
+    tmp_path: Path, plant: Callable[[Toy], None], path: str
+) -> None:
+    """Fail each bypass, though every regulator has a link, and name the path."""
+    toy = board()
+    plant(toy)
+    result = go(tmp_path, "bypass", toy)
+    entry = result.entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert (
+        "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches"
+        in (entry["message"])
+    )
+    assert f"({path})" in entry["message"]
+    assert entry["numbers"]["enable links"] == {"EN_ALL": {"U2": "R7", "U3": "R8"}}
+    assert result.done.returncode == 1
+
+
+def test_pulls_and_other_link_kinds_on_a_right_design_still_pass(
+    tmp_path: Path,
+) -> None:
+    """Pass with a pull-down and a pull-up on each enable net and odd links."""
+    toy = board()
+    for n, ref in enumerate(("EN_U2", "EN_U3", "EN_ALL")):
+        check_toy.resistor(toy, f"R2{n}", "100k", ref, "GND")
+    check_toy.resistor(toy, "R30", "100k", "EN_U2", "VIN")
+    check_toy.resistor(toy, "R31", "100k", "EN_U3", "+3V3")
+    del toy.parts["R7"], toy.pins["R7"]
+    toy.add("R7", "0R0", "Device:R_Small", {"1": ("EN_U2", "~"), "2": ("EN_ALL", "~")})
+    toy.parts["R8"] = ("DNP", "Device", "R_US", toy.parts["R8"][3])
+    result = go(tmp_path, "right", toy)
+    assert result.outcome(CHECK) == "passed", result.entry(CHECK)
+    assert result.entry(CHECK)["numbers"]["enable links"] == {
+        "EN_ALL": {"U2": "R7", "U3": "R8"}
+    }
 
 
 def test_a_shared_net_that_is_not_in_the_design_fails_by_name(tmp_path: Path) -> None:

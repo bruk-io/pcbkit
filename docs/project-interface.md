@@ -965,14 +965,27 @@ the `sch` gate:
 
 | Name | Shape | Holds |
 |---|---|---|
-| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net, so each can be brought up alone at bring-up. Each `(ref, pad)` must reach the shared net through a link of its own: its enable pad is on a net of its own, and one two-pin part joins that net to the shared one, a `Device:R` whose value reads as 0 (`0`, `0R`) or a part from a library whose name starts with `Jumper`. No two regulators may share a link. |
+| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net, so each can be brought up alone at bring-up. Each `(ref, pad)` must reach the shared net through a link of its own: its enable pad is on a net of its own, and one two-pin part joins that net to the shared one, a `Device:R`, `Device:R_Small`, `Device:R_US` or `Device:R_Small_US` whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or a part from a library whose name starts with `Jumper`. A link marked DNP (the value `DNP` or `DNF`) is still a link: its footprint is there to fit at bring-up. A resistor-pack element is not a link. No two regulators may share a link, and with the link taken out the regulator's enable net must reach neither the shared net nor another listed regulator's own enable net (see below). A pad listed twice fails as a duplicate row. |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key) fails naming
 each regulator whose enable pad is wired straight to the shared net, has no link (and,
 when a part such as a 10 k resistor does join the two nets, which one and its value), has
-more than one link in parallel, or shares its link with another regulator. It records
-`enable links`, `{net: {ref: link ref or None}}`, before it fails (a regulator listed on
-two pads is keyed `"U3 pad 4"`).
+more than one link in parallel, or shares its link with another regulator. It then takes
+each regulator's link out and walks from its enable net, and fails naming the path
+(`EN_U2 - R9 - MID - R10 - EN_ALL`) if it still reaches the shared net or another
+listed regulator's own enable net. The walk goes through any two-pin part but a
+capacitor (resistors of any value, ferrite beads, diodes, switches, fuses), every pad of
+a `Jumper` part, the elements of a `Device:R_Pack*` (pad *n* to pad *N+1-n*) and a
+`Device:R_Network*` (every pad to pad 1). It does not cross a ground or supply net, so a
+pull-down or pull-up on an enable net is fine: a net named `GND`, `AGND`, `VSS`, `VIN`,
+`VCC`, `VDD`, `VBUS`, `VBAT`, `VSYS`, `VEE` or `VREF` (or starting with one of them), or
+starting with `+` or `-`, or with a ground or supply pin on it, is one. Parts with three
+or more pins that are not a pack or a jumper (a transistor, a gate, a regulator) are not
+walked through, so a path through an active part is not found, and a net that is a supply
+by name only on this board is walked through. The check reads the netlist, which does not
+tell it a part is marked DNP, so a part fitted at some builds only (a DNP resistor with a
+real value) counts as a path. It records `enable links`, `{net: {ref: link ref or None}}`,
+before it fails (a regulator listed on two pads is keyed `"U3 pad 4"`).
 
 **`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
 name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the
