@@ -53,16 +53,18 @@ the listing:
 
 A claim whose check passed, or
 that `listing.py` reports `matches`, matches; one whose check failed, or that it reports
-`differs` or `not in design`, differs, with the message or both values as evidence.
+`differs` or `not in design`, differs, with the message or both values as evidence. It
+compares strings exactly: for a string `differs`, look at both values before calling it
+drift.
 
 ## 3. Judge what code cannot
 
 - **Behavioural claims**: which listed parts and nets each refers to (`listing.py`
   prints the pads on every net, so a chain is a lookup), and whether the chain does what
   the claim says.
-- **What no claim covers**: every part and net in the listing that no claim names is
-  `not in spec`: scope creep, or a spec never updated? When a part changed, re-check
-  every claim that mentioned it and anything it fed.
+- **What no claim covers**: judge only the `unclaimed` parts and nets `listing.py`
+  prints, each `not in spec`: scope creep, or a spec never updated? When a part
+  changed, re-check every claim that mentioned it and anything it fed.
 - **Open questions**: does the design now answer each, silently assume an answer, or
   leave it open? Answered or assumed is `differs` until the spec records the answer.
 - Never decide which side is right, and never edit the spec or the design during the

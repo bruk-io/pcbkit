@@ -77,12 +77,13 @@ Ask for what is missing and say what it blocks; review the rest.
   `review-derating`.
 - `RESERVED_COPPER` for an antenna or a region under an inductor or a sensitive part,
   with the matching keep-out in routing.py; `[stitch] dense` boxes under converters.
-- `PART_SPACING`, `HOT_LOOPS` (the loop's pads in order around it) and
-  `REFERENCE_PLANES` (each fast net and the side its return runs on): proposed tables,
-  which no built-in check reads yet; shapes in "Proposed tables" in
-  `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`. Hand each to `add-check`.
+- `PART_SPACING` and `REFERENCE_PLANES` (each fast net and the side its return runs
+  on): proposed tables, which no built-in check reads yet; shapes in "Proposed tables"
+  in `${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`. Hand each to `add-check`.
+  `HOT_LOOPS` (the loop's pads in order around it) is written for the record only: no
+  check can read it before four-layer boards, and `add-check` writes none for it.
 
-Run the selection again: decoupling and filter-capacitor distances are decided when
+Run the gate's run again: decoupling and filter-capacitor distances are decided when
 placed; on a routed board the copper checks decide the rest now, and after every route.
 
 ## 4. Judge the placement

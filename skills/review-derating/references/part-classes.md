@@ -24,7 +24,7 @@ House targets below are starting defaults. Where the user has set a different ta
 - **Voltage:** VDS, VGS and diode VRRM against the worst-case net voltage including transients, not the nominal supply. Hot-plugging a supply through a long cable into low-ESR ceramic input capacitance can ring well above the supply (up to nearly twice in the undamped case): USB-C and 24 V industrial inputs are the usual victims. An inductive load switched off kicks its node above the rail unless a clamp or freewheeling path takes the energy.
 - **Current and heat:** RDS(on) rises with junction temperature; use the datasheet's normalised RDS(on) versus temperature curve at the expected junction temperature, not the 25 C figure. Check the SOA curve for linear-mode use (inrush limiting, hot-swap).
 - **Target:** worst-case voltage at most 80% of rating. If the transient is unknown, the verdict is `UNSTATED` and the fix is a TVS, bulk damping capacitor, or a measurement on the bench.
-- **Written to:** `SEMI_VRATED` (proposed: `add-check` writes the check until pcbkit has it); the transient as a `STRESS_SCENARIOS` row. `stress.py` prints each FET's Vds and Vgs and each diode's reverse voltage at every row.
+- **Written to:** `SEMI_VRATED` (proposed: `add-check` writes the check until pcbkit has it); the transient as a `STRESS_SCENARIOS` row. `stress.py` solves every row and prints, for each FET's Vds and Vgs and each diode's reverse voltage, the worst value and the row it occurs at.
 
 ## Connectors, headers and wire
 

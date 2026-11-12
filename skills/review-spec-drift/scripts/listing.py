@@ -15,22 +15,35 @@ netlist, design.py, layout.py and pcbkit.toml:
 * ``part.<ref>.<field>`` for ``category``, ``kind``, ``value``, ``footprint``, ``mpn``,
   ``pads`` (how many pads are on a net) and ``dnp`` (design.py);
 * ``parts.<category>``: the references in each category (``connector``, ``ic``,
-  ``switch``, ``jumper``, ``test point``, ``other``);
+  ``switch``, ``jumper``, ``test point``, ``other``). A ``connector`` is a part whose
+  symbol library starts ``Connector`` or whose reference letters are ``J``, unless it is
+  a test point (letters ``TP``, or a library starting ``TestPoint``) or a jumper
+  (letters ``JP``, or a library starting ``Jumper``): the definition ``PIN_NETS`` in
+  docs/project-interface.md gives;
 * ``net.<name>``: the pads on each net, ``REF.pad``, so the parts a rail or an enable
   reaches is a lookup, not a trace.
 
 ``CLAIMS`` is a JSON file the review writes from the spec, before it looks at the
 design: ``{fact key: the value the spec states}``. Each claim is then ``matches``,
 ``differs`` (with both values) or ``not in design``, under ``claims``. Numbers match
-within 1e-6; a list matches another holding the same items in any order.
+within 1e-6; a list matches another holding the same items in any order; strings match
+exactly, so a ``differs`` between two strings (``10k`` and ``10 kOhm``) is for the
+review to read both values of, not yet drift.
+
+With a claims file it also prints ``unclaimed``: the ``parts`` (references) and ``nets``
+that no claim names, in a key (``part.<ref>.<field>``, ``net.<name>``) or in a value (a
+list of references, or of ``REF.pad`` pads). The review judges those, and only those,
+as ``not in spec``.
 
 Exit codes: 0 printed and every claim matches (or none was given), 1 a claim does not
-match, 2 no board project, no schematic, or a claims file that is not a JSON table.
+match, 2 no board project, no schematic, a claims file that is not a JSON table, or a
+fact that JSON cannot hold.
 """
 
 from __future__ import annotations
 
 import json
+import numbers
 import re
 import sys
 import tempfile
@@ -125,6 +138,40 @@ def compare(claims: dict[str, Any], found: dict[str, Any]) -> list[dict[str, Any
     return rows
 
 
+def unclaimed(claims: dict[str, Any], found: dict[str, Any]) -> dict[str, list[str]]:
+    """Return the references and nets of the design that no claim names."""
+    refs = {key.split(".")[1] for key in found if key.startswith("part.")}
+    nets = {key[len("net.") :] for key in found if key.startswith("net.")}
+    named_refs: set[str] = set()
+    named_nets: set[str] = set()
+    for key, value in claims.items():
+        if key.startswith("part."):
+            named_refs.add(key.split(".")[1])
+        if key.startswith("net."):
+            named_nets.add(key[len("net.") :])
+        for item in value if isinstance(value, list) else [value]:
+            if isinstance(item, str):
+                named_refs.add(item.split(".", 1)[0])
+                named_nets.add(item)
+    return {
+        "parts": sorted(refs - named_refs, key=natural),
+        "nets": sorted(nets - named_nets, key=natural),
+    }
+
+
+def plain(value: Any) -> Any:
+    """Return a number as a plain int or float; refuse anything JSON cannot hold.
+
+    Used as ``json.dumps``'s ``default``: a value it cannot write is an error, never a
+    string that would read as a different fact.
+    """
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        return float(value)
+    raise TypeError(f"{type(value).__name__} {value!r} is not a JSON value")
+
+
 def main(argv: list[str]) -> int:
     """Print the design's facts and the claims compared; return the exit code."""
     from pcbkit.check.netlist import fresh_netlist
@@ -169,7 +216,14 @@ def main(argv: list[str]) -> int:
         },
     )
     rows = compare(claims, found)
-    print(json.dumps({"facts": found, "claims": rows}, indent=1, default=str))
+    printed: dict[str, Any] = {"facts": found, "claims": rows}
+    if argv:
+        printed["unclaimed"] = unclaimed(claims, found)
+    try:
+        print(json.dumps(printed, indent=1, default=plain))
+    except TypeError as err:
+        print(f"cannot print the listing: {err}")
+        return 2
     return 1 if any(row["status"] != "matches" for row in rows) else 0
 
 

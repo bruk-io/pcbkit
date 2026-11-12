@@ -47,7 +47,7 @@ The built-in checks record only the four most stressed parts
 and judge supply pins at `SUPPLY_SCENARIO` alone. `stress.py` solves every
 `STRESS_SCENARIOS` row and prints, as JSON, each capacitor, resistor and FET or diode
 with its worst stress, the scenario, its rating on file, margin and verdict against the
-house target, each `SUPPLY_PINS` row at every scenario and each `SUPPLY_LIMITS` row's
+house target (a `SEMI_VRATED` row's own `derate` for a semiconductor), each `SUPPLY_PINS` row at every scenario and each `SUPPLY_LIMITS` row's
 margin. Quote it; never work a number out again.
 
 ## 2. Settle the envelope

@@ -15,19 +15,23 @@ It prints JSON:
   ``STRESS_SCENARIOS`` index it happens at, the rating on file (``CAP_VRATED`` by MPN,
   ``RESISTOR_POWER_W``, ``SEMI_VRATED`` by MPN), the stress over the rating, the margin
   ``(rating - stress) / rating``, and a verdict against the house target (80 % for
-  capacitors and semiconductors, 50 % for resistors): ``OK``, ``FAIL``, ``NO RATING``,
+  capacitors and semiconductors, 50 % for resistors; a ``SEMI_VRATED`` row's own
+  ``derate``, at most 80 %, replaces it for that part): ``OK``, ``FAIL``, ``NO RATING``,
   or ``REVERSED`` for a polarised capacitor reverse biased beyond 0.3 V;
 * ``supply_pins``: each ``SUPPLY_PINS`` row's voltage at every stress scenario and at
   ``SUPPLY_SCENARIO`` (``"supply"``), and whether all of them sit in its window;
 * ``supply_limits``: each ``SUPPLY_LIMITS`` row as the check evaluates it, with its
   margin ``(limit - value) / limit``.
 
-Exit codes: 0 printed, 2 no board project, no schematic, or no ``STRESS_SCENARIOS``.
+Exit codes: 0 printed, 2 no board project, no schematic, no ``STRESS_SCENARIOS``, a
+``SEMI_VRATED`` ``derate`` that is not a fraction in (0, 0.8], or a value JSON
+cannot hold.
 """
 
 from __future__ import annotations
 
 import json
+import numbers
 import sys
 import tempfile
 from pathlib import Path
@@ -62,6 +66,42 @@ def worse(table: dict[str, dict[str, Any]], key: str, value: float, row: int) ->
     """Keep ``value`` as ``table[key]``'s worst if it is higher than the one kept."""
     if key not in table or value > table[key]["worst"]:
         table[key] = {"worst": value, "scenario": row}
+
+
+class RowError(ValueError):
+    """A row of specs.py that the review cannot judge by."""
+
+
+def semi_target(part: str, entry: dict[str, Any]) -> float:
+    """Return the share of its rating a semiconductor may see: the row's ``derate``.
+
+    ``SEMI_VRATED`` rows may carry ``derate``, a fraction of the rating, at most
+    ``SEMI_TARGET``. A row that asks for more is refused, as the check would.
+    """
+    if "derate" not in entry:
+        return SEMI_TARGET
+    derate = entry["derate"]
+    if isinstance(derate, bool) or not isinstance(derate, (int, float)):
+        raise RowError(f"SEMI_VRATED[{part!r}] derate {derate!r} is not a number")
+    if not 0 < derate <= SEMI_TARGET:
+        raise RowError(
+            f"SEMI_VRATED[{part!r}] derate {derate} is not a fraction in (0, "
+            f"{SEMI_TARGET}]"
+        )
+    return float(derate)
+
+
+def plain(value: Any) -> Any:
+    """Return a number as a plain int or float; refuse anything JSON cannot hold.
+
+    Used as ``json.dumps``'s ``default``: a value it cannot write is an error, never a
+    string that would read as a different fact.
+    """
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        return float(value)
+    raise TypeError(f"{type(value).__name__} {value!r} is not a JSON value")
 
 
 def mpn(nl: Any, ref: str) -> str:
@@ -107,8 +147,9 @@ def stress(nl: Any, specs: Any, circuits: Any) -> dict[str, Any]:
     semi_rated = dict(getattr(specs, "SEMI_VRATED", {}))
     for key, row in semis.items():
         ref, what = key.split(" ")
-        rating = semi_rated.get(mpn(nl, ref), {}).get(what)
-        row.update(mpn=mpn(nl, ref), **judged(row["worst"], rating, SEMI_TARGET))
+        entry = semi_rated.get(mpn(nl, ref), {})
+        target = semi_target(mpn(nl, ref), entry)
+        row.update(mpn=mpn(nl, ref), **judged(row["worst"], entry.get(what), target))
     for table in (caps, res, semis):
         for row in table.values():
             row["worst"] = rounded(row["worst"])
@@ -190,7 +231,16 @@ def main() -> int:
         )
         return 2
     nl = fresh_netlist(schematic, Path(tempfile.mkdtemp(prefix="pcbkit_stress_")))
-    print(json.dumps(stress(nl, specs, circuits), indent=1, default=str))
+    try:
+        table = stress(nl, specs, circuits)
+    except RowError as err:
+        print(f"specs.py: {err}")
+        return 2
+    try:
+        print(json.dumps(table, indent=1, default=plain))
+    except TypeError as err:
+        print(f"cannot print the stress table: {err}")
+        return 2
     return 0
 
 

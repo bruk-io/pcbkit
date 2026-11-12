@@ -58,13 +58,14 @@ The seven reviews cover judgement a check cannot make: intent, datasheets and ph
 reasoning. Each runs in your conversation, because it asks you for intent, and each
 follows the same shape:
 
-1. It starts from what the checks already decide. It names the check groups it needs
-   and runs a script that says which are off in `pcbkit.toml` (a group that is off
-   collects nothing, so a selection over it would decide nothing), then runs the checks
-   whose inputs exist at its gate (a `pcbkit check -k` selection it gives) and reads
-   `out/checks/results.json`. Where the checks stop short, a script of its own prints
-   the numbers (every part's stress, the design's listing), so Claude never judges by eye
-   or works out what code can. A check whose inputs do not exist yet is not a finding.
+1. It starts from what the checks already decide. A script (`groups.py --gate`) owns the
+   check groups and the `pcbkit check -k` selection of each gate: it names any group that
+   is off in `pcbkit.toml` (a group that is off collects nothing, so a selection over it
+   would decide nothing), prints the run for the gate and its two caveats, and the review
+   runs that, then reads `out/checks/results.json`. Where the checks stop short, a script
+   of its own prints the numbers (every part's stress, the design's listing), so Claude
+   never judges by eye or works out what code can. A check whose inputs do not exist yet
+   is not a finding.
 2. It reviews what is left, dispatching `parts-researcher` for every datasheet figure
    and every stock level, and gives its findings in a fixed format.
 3. It ends by writing the intent it settled into `specs.py` (and `layout.py`, silk.py or

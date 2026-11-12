@@ -67,19 +67,31 @@ MATING = {
 }
 ```
 
-The check failed three landings, all of the flow meter: reversed in J4 (its `+5V` wire
-on `FLOW_IN`, over the 3.6 V limit), offset by one in J4 (its `+5V` wire on `GND`, a
-source fight), and in J3 (its `+5V` wire on `RAIN_IN`). It passed every landing of the
-rain sensor, and recorded `+5V` beside `GND` on J4. What it cannot see: the rain
-sensor's two wires are joined by its own contact, so in J4 at pads 1-2 it shorts `+5V`
-to `GND`. Nor does it see across connectors: `VAC2` on J1 sits 3 mm from `+5V` on J4.
+By the `MATING` rule (wire k lands on pad k+offset; each plug straight and reversed, at
+every offset up to one column overhanging either end), the check fails eight landings:
+
+| Plug | Socket | Landing | What meets what |
+|---|---|---|---|
+| flow meter | J4 | reversed, offset 0 | its `+5V` wire on `FLOW_IN`, over the 3.6 V limit |
+| flow meter | J4 | straight, offset +1 | its `+5V` wire on `GND`, a source fight |
+| flow meter | J4 | straight, offset -1 | its `GND` wire on `+5V`, a source fight |
+| flow meter | J4 | reversed, offset -1 | `GND` on `+5V` and `+5V` on `GND` |
+| flow meter | J3 | straight, offset 0 | its `+5V` wire on `RAIN_IN`, over the limit |
+| flow meter | J3 | reversed, offset -1 | its `+5V` wire on `GND` |
+| rain sensor | J4 | straight, offset -1 | its `GND` wire on `+5V` |
+| rain sensor | J4 | reversed, offset 0 | its `GND` wire on `+5V` |
+
+The rain sensor passes every landing in J3 and the others in J4, and the check records
+`+5V` beside `GND` on J4. What it cannot see: the rain sensor's two wires are joined by
+its own contact, so in J4 at pads 1-2 (offset 0, which it passes) it shorts `+5V` to
+`GND`. Nor does it see across connectors: `VAC2` on J1 sits 3 mm from `+5V` on J4.
 
 ## Findings
 
 | # | Connector | Misuse | Consequence | Suggested change |
 |---|---|---|---|---|
 | 1 | J4 | flow meter plugged in reversed or one pin off | 5 V straight onto U1's `FLOW_IN` pin, or the meter's supply into ground. A damaged input, or a rail that collapses. | Design-out: a keyed 3-pin housing. Protection: a series resistor and clamp on `FLOW_IN`. |
-| 2 | J4 | rain sensor plugged into the flow port at pads 1-2 | The closed contact shorts `+5V` to `GND`: the rail collapses and the controller resets in a loop. Smoke if the rail has no limit. | Design-out: the rain and flow ports in different families, or the flow port's supply on pad 2 so no 2-pin plug spans supply and ground. Protection: a polyfuse on `+5V` to J4. |
+| 2 | J4 | rain sensor plugged into the flow port at pads 1-2 | The closed contact shorts `+5V` to `GND`: the rail collapses and the controller resets in a loop. Smoke if the rail has no limit. | Design-out: the rain and flow ports in different families. Protection: a polyfuse on `+5V` to J4. |
 | 3 | J3 | flow meter plugged into the rain port | 5 V onto `RAIN_IN`. | As finding 1: keyed housings of different pin counts. |
 | 4 | J5 | a PoE patch cable plugged in | Up to 57 V onto the RS-485 transceiver. Smoke. | Design-out: a different connector for RS-485 (a 3-pin terminal block). Protection: TVS diodes rated for the PoE voltage. |
 | 5 | J1, J4 | a stray strand of transformer wire bridging to the flow header | 24 V AC onto the 5 V rail. Smoke. | Design-out: J1 and J2 at the far end of the edge from J3 and J4, with a gap a strand cannot cross. |

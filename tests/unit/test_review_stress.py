@@ -9,6 +9,11 @@ FET and a reverse-biased diode.
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
+from fractions import Fraction
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -188,3 +193,166 @@ def test_a_reverse_biased_polarised_capacitor_is_marked() -> None:
     result = stress.stress(nl, specs(), flipped)
     assert result["capacitors"]["C1"]["verdict"] == "REVERSED"
     assert result["capacitors"]["C1"]["reverse"] == -24.0
+
+
+# --- a semiconductor row's own derate ---------------------------------------------
+
+
+def test_a_semiconductor_row_may_carry_its_own_derate() -> None:
+    """The diode sees 24 V of 40 V: 60 %, under 80 %, over a row's 50 %."""
+    rows = {"FET-60V": {"vds": 60.0, "vgs": 20.0}, "DIODE-40V": {"vrrm": 40.0}}
+    strict = {**rows, "DIODE-40V": {"vrrm": 40.0, "derate": 0.5}}
+    default = stress.stress(netlist(), specs(SEMI_VRATED=rows), CIRCUITS)
+    own = stress.stress(netlist(), specs(SEMI_VRATED=strict), CIRCUITS)
+    assert default["semiconductors"]["D1 vrrm"]["verdict"] == "OK"
+    assert default["semiconductors"]["D1 vrrm"]["target"] == 0.8
+    diode = own["semiconductors"]["D1 vrrm"]
+    assert (diode["target"], diode["ratio"], diode["verdict"]) == (0.5, 0.6, "FAIL")
+    # The other part's row has no derate, so it keeps the house target.
+    assert own["semiconductors"]["Q1 vds"]["target"] == 0.8
+
+
+@pytest.mark.parametrize("derate", [0.9, 0, -0.1, True, "0.5"])
+def test_a_derate_the_check_would_refuse_is_refused_here_too(derate: Any) -> None:
+    rows = {"FET-60V": {"vds": 60.0}, "DIODE-40V": {"vrrm": 40.0, "derate": derate}}
+    with pytest.raises(stress.RowError, match=r"SEMI_VRATED\['DIODE-40V'\] derate"):
+        stress.stress(netlist(), specs(SEMI_VRATED=rows), CIRCUITS)
+
+
+def test_a_value_json_cannot_hold_fails_instead_of_becoming_a_string() -> None:
+    assert stress.plain(3) == 3 and isinstance(stress.plain(3), int)
+    assert stress.plain(Fraction(1, 4)) == 0.25
+    with pytest.raises(TypeError, match="Netlist"):
+        stress.plain(netlist())
+
+
+# --- main, through the real entry point -------------------------------------------
+
+FAKE_KICAD_CLI = """\
+#!/bin/sh
+if [ "$1" = "--version" ]; then echo "10.0.6"; exit 0; fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then out="$2"; fi
+  shift
+done
+cp "$NETLIST_FIXTURE" "$out"
+"""
+CIRCUITS_PY = """\
+from pcbkit.check.dc import build
+
+
+def scenario(nl, vin, **_note):
+    return build(nl).fix("VIN", vin).fix("GND", 0.0).fix("GATE", 0.0)
+"""
+TOML = '[board]\nstem = "my_board"\ntitle = "My Board"\nrev = "A"\n'
+TOML += 'fab_name = "My_Board_revA"\n'
+SPECS_PY = """\
+STRESS_SCENARIOS = [{"vin": 12.0}, {"vin": 24.0}]
+CAP_VRATED = {"CAP-25V": 25.0}
+RESISTOR_POWER_W = {"default": 0.25}
+SEMI_VRATED = {
+    "FET-60V": {"vds": 60.0, "vgs": 20.0},
+    "DIODE-40V": {"vrrm": 40.0, "derate": 0.5},
+}
+"""
+
+
+def netlist_file(folder: Path) -> Path:
+    """Write the test circuit's netlist into ``folder``; return the file."""
+    comps = []
+    for ref, kind, value, mpn in PARTS:
+        lib, symbol = kind.split(":")
+        comps.append(
+            f'(comp (ref "{ref}") (value "{value}") '
+            f'(fields (field (name "MPN") "{mpn}")) '
+            f'(libsource (lib "{lib}") (part "{symbol}")))'
+        )
+    nets = []
+    for code, (name, pins) in enumerate(NETS.items(), start=1):
+        nodes = " ".join(
+            f'(node (ref "{r}") (pin "{p}"))' for r, p in (x.split(".") for x in pins)
+        )
+        nets.append(f'(net (code "{code}") (name "/{name}") {nodes})')
+    path = folder / "board.net"
+    path.write_text(
+        '(export (version "E") (design (tool "Eeschema 10.0.6")) '
+        f"(components {' '.join(comps)}) (nets {' '.join(nets)}))",
+        encoding="utf-8",
+    )
+    return path
+
+
+def run_main(root: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """Run stress.py in ``root`` with a kicad-cli that writes the test netlist."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    cli = bin_dir / "kicad-cli"
+    cli.write_text(FAKE_KICAD_CLI, encoding="utf-8")
+    cli.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["NETLIST_FIXTURE"] = str(netlist_file(tmp_path))
+    return subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def make_project(root: Path, specs_py: str = SPECS_PY) -> Path:
+    """Write a throwaway board project the script can run in."""
+    (root / "kicad").mkdir(parents=True)
+    (root / "kicad" / "my_board.kicad_sch").write_text("", encoding="utf-8")
+    (root / "pcbkit.toml").write_text(TOML, encoding="utf-8")
+    (root / "specs.py").write_text(specs_py, encoding="utf-8")
+    (root / "circuits.py").write_text(CIRCUITS_PY, encoding="utf-8")
+    return root
+
+
+def test_main_prints_the_table_for_a_project(tmp_path: Path) -> None:
+    done = run_main(make_project(tmp_path / "my-board"), tmp_path)
+    assert done.returncode == 0, done.stdout + done.stderr
+    table = json.loads(done.stdout)
+    assert table["scenarios"] == [{"vin": 12.0}, {"vin": 24.0}]
+    assert table["capacitors"]["C1"]["verdict"] == "FAIL"
+    diode = table["semiconductors"]["D1 vrrm"]
+    assert (diode["target"], diode["verdict"]) == (0.5, "FAIL")
+
+
+def test_main_refuses_a_derate_over_the_house_target(tmp_path: Path) -> None:
+    bad = SPECS_PY.replace('"derate": 0.5', '"derate": 0.95')
+    done = run_main(make_project(tmp_path / "my-board", bad), tmp_path)
+    assert done.returncode == 2
+    assert done.stdout.startswith("specs.py: SEMI_VRATED['DIODE-40V'] derate 0.95")
+    assert done.stderr == ""
+
+
+def test_main_without_scenarios_or_a_schematic_or_a_project_exits_2(
+    tmp_path: Path,
+) -> None:
+    bare = make_project(tmp_path / "bare", "X = 1\n")
+    assert run_main(bare, tmp_path).stdout.startswith("specs.STRESS_SCENARIOS and ")
+    no_sch = make_project(tmp_path / "no-sch")
+    (no_sch / "kicad" / "my_board.kicad_sch").unlink()
+    assert "not found: run pcbkit sch first" in run_main(no_sch, tmp_path).stdout
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    done = run_main(outside, tmp_path)
+    assert (done.returncode, done.stdout[:17]) == (2, "no board project:")
+
+
+def test_main_fails_loudly_on_a_value_json_cannot_hold(tmp_path: Path) -> None:
+    """A Decimal in a scenario once printed as the string "1": a different fact."""
+    odd = SPECS_PY.replace(
+        '[{"vin": 12.0}, {"vin": 24.0}]',
+        '[{"vin": 12.0, "tag": Decimal("1")}, {"vin": 24.0}]',
+    )
+    odd = "from decimal import Decimal\n" + odd
+    done = run_main(make_project(tmp_path / "my-board", odd), tmp_path)
+    assert done.returncode == 2
+    assert done.stdout == (
+        "cannot print the stress table: Decimal Decimal('1') is not a JSON value\n"
+    )

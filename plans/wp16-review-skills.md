@@ -215,6 +215,19 @@ maximum output capacitance is a `SUPPLY_LIMITS` row. It writes `PINOUT`, `SUPPLY
    groups; the order gate runs every review, source-editing ones before `finalize` and
    `review-sourcing` after; the "(WP17, --gate ...)" notes removed; `test_plugin.py`
    holds the cited check names, the selections and the must-never sentences.
+5c. Third audit fixes. Done: `groups.py --gate sch|place|route|order` owns each gate's
+   check groups and `-k` selection (and adds `esp32s3` when `specs.DEVKIT_REF` exists)
+   and prints the run with its two caveats, so each review keeps one line and
+   `test_plugin.py` pins the selections in the script, against the plan and against the
+   groups each selection really collects; group switching moves before `pcbkit
+   finalize` in the order sequence (SF1); `stamp.py` refuses a `sourcing.md` older than
+   the BOM or centroid, stamps the BOM in both formats and records the review's sha256
+   (SF2), and `preflight.py` judges the XLSX; `stress.py` reads a `SEMI_VRATED` row's
+   `derate` (SF5); `listing.py` prints `unclaimed` parts and nets (SF6); `bomlines.py`
+   prints each line's quantity to buy and its datasheet status; the misplug example's
+   landings follow the `MATING` rule (SF4); `HOT_LOOPS` is for the record only; one
+   connector definition for `PIN_NETS` and `listing.py`; the entry points of
+   `stress.py` and `listing.py` are tested; JSON output no longer falls back to `str`.
 6. Eval cases for the reviews (`evals/`): at least that `walk-fault-states` loads for "is
    this fail-safe" and that a review reads results.json instead of re-measuring. Not
    started; the plugin test pins four cases today.
@@ -224,12 +237,13 @@ maximum output capacitance is a `SUPPLY_LIMITS` row. It writes `PINOUT`, `SUPPLY
 
 What the skills work around today and WP17's pcbkit code replaces.
 
-- `pcbkit check --gate sch|place|route|order`: replaces the `-k` selections in every
-  review. Today they are, exactly: schematic
+- `pcbkit check --gate sch|place|route|order`: replaces the `-k` selections that
+  `skills/board-workflow/scripts/groups.py --gate` prints for every review. Today they
+  are, exactly: schematic
   `test_circuit or test_esp32s3 or test_erc_clean`; placement
   `test_circuit or test_esp32s3 or test_erc_clean or test_decoupling_caps_are_close or test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin`;
-  route `not test_outputs`; order, no `-k`. `tests/unit/test_plugin.py` holds the skills
-  to these.
+  route `not test_outputs`; order, no `-k`. `tests/unit/test_plugin.py` holds the
+  script to these, and the groups each collects.
 - Built-in checks for the proposed tables, starting with A to G, and V (the bring-up
   readings check, `BRINGUP_STAGES`).
 - Every part's stress at every `STRESS_SCENARIOS` row in results.json (today the
