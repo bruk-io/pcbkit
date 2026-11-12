@@ -138,17 +138,18 @@ def test_every_registered_table_that_is_not_an_existing_one_has_a_generated_row(
 
     new = {n: s for n, s in tables.registry().items() if n not in tables.EXISTING}
     assert new, "no proposed tables: the test would pass vacuously"
-    rows = {
-        line.split("|")[1].strip(" `"): line
-        for line in proposed_block().splitlines()
-        if line.startswith("| `")
-    }
+    rows = {}
+    for line in proposed_block().splitlines():
+        if line.startswith("| `"):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            rows[cells[0].strip("`")] = cells
     missing = sorted(set(new) - set(rows))
     assert not missing, f"no row in the proposed-tables block for {missing}"
     stale = sorted(set(rows) - set(new))
     assert not stale, f"rows for tables that are not registered: {stale}"
     for name, shape in new.items():
-        assert f"`{tables.describe(shape)}`" in rows[name], name
+        assert len(rows[name]) == 3, f"{name}: a row is name | shape | read by"
+        assert rows[name][1] == f"`{tables.describe(shape)}`", name
 
 
 def test_every_existing_table_with_a_shape_is_named_in_the_docs() -> None:
@@ -169,3 +170,23 @@ def test_the_docs_have_a_table_shapes_paragraph_that_names_the_command() -> None
     section = checks_section()
     assert "### Table shapes" in section
     assert "`pcbkit specs`" in section
+
+
+def test_the_docs_say_what_a_pad_shape_cannot_tell_and_give_a_number() -> None:
+    """Say that a pin name passes the shape, and give the example error a number."""
+    section = checks_section()
+    assert "cannot tell a pin name from a pad label" in section
+    assert "the check that reads the table reports a" in section.replace("\n", " ")
+    assert "got ('U2', 5)" in section
+    assert "'EN')" not in section
+
+
+def test_troubleshooting_has_a_bad_table_row_beside_missing_spec() -> None:
+    """List ``bad-table`` in the table of messages, with a section it links to."""
+    text = (ROOT / "docs" / "troubleshooting.md").read_text(encoding="utf-8")
+    lines = text.splitlines()
+    missing = next(i for i, line in enumerate(lines) if "`missing-spec`" in line)
+    bad = next(i for i, line in enumerate(lines) if "`bad-table`" in line)
+    assert bad == missing + 1
+    assert "(#a-table-in-specspy-has-the-wrong-shape)" in lines[bad]
+    assert "\n## A table in specs.py has the wrong shape\n" in text

@@ -15,6 +15,7 @@ to do. The examples use the blinky board, and paths in them are shortened.
 | `DRC is not clean: nothing was exported` | [DRC errors after you edit the design](#drc-errors-after-you-edit-the-design) |
 | `WARNING: ... is older than ...`, `STALE`, `no fab outputs` | [Stale fab outputs](#stale-fab-outputs) |
 | `... is not defined in .../specs.py`, `missing-spec` | [A check fails on a missing spec](#a-check-fails-on-a-missing-spec) |
+| `specs.NAME[...]: expected ..., got ...`, `bad-table` | [A table in specs.py has the wrong shape](#a-table-in-specspy-has-the-wrong-shape) |
 | Lines from KiCad that look like errors | [Noise from KiCad](#noise-from-kicad) |
 | Where is the report? | [Where logs and reports live](#where-logs-and-reports-live) |
 
@@ -416,6 +417,24 @@ Some cases that look alike are not errors, or are another error:
 
 Never loosen a check to make a gap go away: fill in the number, with its source beside it.
 [Writing checks](writing-checks.md) says how.
+
+## A table in specs.py has the wrong shape
+
+A table has a *shape* (the [project interface](project-interface.md#table-shapes) says how to
+read one), and a check that reads its table through `pcbkit.check.tables.read` fails, naming
+every wrong value by its path, when the table does not have it:
+
+```
+specs.PIN_NETS["J1"][1]: expected net or None, got 5
+specs.PIN_NETS["J 2"]: expected ref, got 'J 2'
+```
+
+A check that runs once per row of the table fails once, called `bad-table` in its name, as in
+`test_x::test_each[bad-table]`; a check that reads the table in its body fails itself. Neither
+shows a traceback. Fix each line (it starts with where the value is), or run `pcbkit specs`,
+which checks every table it knows a shape for without running any check and prints the same
+lines. A name that is not defined at all is a different error: see
+[A check fails on a missing spec](#a-check-fails-on-a-missing-spec).
 
 ## Noise from KiCad
 

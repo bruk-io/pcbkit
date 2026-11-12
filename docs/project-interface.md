@@ -879,11 +879,11 @@ description with a space in it), judged after bom.py's overrides.
 
 | Name | Holds |
 |---|---|
-| `PCBWAY` | The fab house's limits in mm: `min_annular`, `min_drill`, `min_plated_slot`, `silk_min_height`, `silk_min_stroke`, `min_track_2oz`, `min_space_2oz`. |
+| `PCBWAY` | The fab house's limits in mm, all seven needed (the checks read each): `min_annular`, `min_drill`, `min_plated_slot`, `silk_min_height`, `silk_min_stroke`, `min_track_2oz`, `min_space_2oz`. |
 | `WIRE_PADS` | `{ref: (positive pad, negative pad)}` for bare pads that take a wire; each needs a "+" and a "-" on the silkscreen nearer its own pad. `{}` for none. |
 | `DECOUPLING` | Rows `(ic, pin, (capacitor refs), limit mm)`: a listed capacitor must have a pad that close to the pin. |
 | `POWER_FOOTPRINTS` | One dict per part whose pads must match its datasheet: a `ref`, and any of `tab_pad` (the largest pad is this one) with `tab_net`, `smaller` (pairs `(small pad, large pad)`) and `drill_mm` (`{pad: drill}`). |
-| `I2C_BUSES` | `{bus: (sda net, scl net, speed Hz, off-board devices)}`, devices as `(name, 7-bit address, pin capacitance pF)` (the rise-time model counts every device at `I2C_PIN_C`; the third value is kept for your own reference). |
+| `I2C_BUSES` | `{bus: (sda net, scl net, speed Hz, off-board devices)}`, devices as `(name, 7-bit address, pin capacitance pF)` (the rise-time model counts every device at `I2C_PIN_C`; the third value is kept for your own reference and may be `None`). |
 | `I2C_TR_MAX`, `I2C_PIN_C`, `TRACE_C_PER_MM`, `I2C_CABLE_LEN`, `I2C_CABLE_C_PER_M` | The I2C rise-time model: limit per speed (s), capacitance per device pin and per mm of trace (F), cable length (m) and its capacitance per metre (F). |
 | `I2C_PULLUP_NET`, `I2C_DEVICE_PREFIXES` | Optional: the pull-up rail (default `"+3V3"`) and the reference prefixes that count as devices on a bus (default `"UA"`). |
 | `ASSEMBLY_TEXT_EXEMPT` | Optional: references whose pin labels may sit over their own through-hole pins on the assembly drawing. |
@@ -893,10 +893,10 @@ description with a space in it), judged after bom.py's overrides.
 
 | Name | Holds |
 |---|---|
-| `RESERVED_COPPER` | Rows `(name, layer, x0, y0, x1, y1, allowed nets)`: a region (layout mm, layer "top" or "bottom") only the nets named, spelled as KiCad does ("/GND"), may put copper in. Add the keep-out to `routing.py` too: the router only keeps clear of a region it is told about. |
+| `RESERVED_COPPER` | Rows `(name, layer, x0, y0, x1, y1, allowed nets)`: a region (layout mm, layer "top" or "bottom") only the nets named, spelled as KiCad does ("/GND"), may put copper in. Give the allowed nets as a list; a single string is accepted but is tested as a substring, so a list is the intended form. Add the keep-out to `routing.py` too: the router only keeps clear of a region it is told about. |
 | `COUPLING` | Sensitive signals beside high-current or switching copper (the basis is in `pcbkit/check/coupling.py`): `classes` (class to (noise budget V, victim source ohm, dI/dt A/s)), `sensitive` (class to nets), `aggressors` (name to `{"nets": [...], "kind": "bar"/"current"/"switch", "region": (x0, y0, x1, y1)}`), any physical constant to change (`c_per_mm`, `dv_dt`, `dv_sw`, `cn_default`, `cn_net`, `bar_min_w`, `bar_w_cap`, `res`), and optional `filters`: `{net: {"t_edge": s, "pin_ref": ref, "max_mm": mm}}` for a node with an RC filter whose capacitor must sit near its pin. |
-| `SENSE_LOOPS` | Optional: measurement pairs judged by the area they enclose: dicts with `name`, `nets` (the pair), `from_ref`, `to_ref`, `to_pads` and `max_mm2`. |
-| `COPPER_SEGMENTS`, `COPPER_BUDGETS` | The high-current copper: each segment has a `name`, a `net`, `terminals` as `(ref, pad, share[, role])` (the share of the test current that enters at that pad, negative for leaving; the last terminal is the 0 V reference) and `heating` (False for a segment judged on its voltage drop alone). `COPPER_BUDGETS`: `i_cont` (A, judged on the IPC-2221 rise), `i_peak` (A, judged on the drop), `segment_drop_max_v`, `max_rise_c`. |
+| `SENSE_LOOPS` | Optional: measurement pairs judged by the area they enclose: dicts with `name`, `nets` (the pair), `from_ref`, `to_ref`, `to_pads` (pad numbers as text, `"1"`: they are compared with the board's pad numbers as text, so the int `1` is refused here) and `max_mm2`. |
+| `COPPER_SEGMENTS`, `COPPER_BUDGETS` | The high-current copper: each segment has a `name`, a `net`, `terminals` as `(ref, pad, share[, role])` (the share of the test current that enters at that pad, negative for leaving; the last terminal is the 0 V reference) and `heating` (False for a segment judged on its voltage drop alone). `COPPER_BUDGETS`: `i_cont` (A, judged on the IPC-2221 rise), `i_peak` (A, judged on the drop), `segment_drop_max_v`, all three needed, `i_cont` and `i_peak` above 0 (the drop scales by `i_peak / i_cont`); and `max_rise_c`, needed by a segment that heats. `heating` may also be 0 or 1. |
 | `SUPPLY_REGULATION` | Optional: what the farthest load loses to supply sag and ground lift: `supply` and `ground` (segment names), `label`, `nominal_v` and `max_fraction`; terminals with the role `"source"` and `"load"` say where. |
 | `GROUND_NET`, `STITCH_BASIS` | Optional: the ground net (default `"GND"`), and `{"f_hz": ..., "er_fr4": ...}` for the stitching limit (default the top of the 2.4 GHz Wi-Fi band in FR4). |
 
@@ -932,7 +932,7 @@ Every table the built-in checks read has a *shape*, defined in one place
 (`pcbkit/check/tables.py`) and checked by code, so a table with a wrong row is reported
 with the path of the row. `pcbkit specs` imports your `specs.py` and checks each table
 it has a shape for, printing one line per problem (`specs.FAULT_STATES["c"]["pins"][1]:
-expected (ref, pad, (min V, max V)), got ('U2', 'EN')`) and exiting 1 if there is any.
+expected (ref, pad, (min V, max V)), got ('U2', 5)`) and exiting 1 if there is any.
 It needs neither pcbnew nor kicad-cli. Names pcbkit has no shape for, and `COUPLING`
 (which `pcbkit/check/coupling.py` validates), are left alone.
 
@@ -940,14 +940,19 @@ The shapes of the tables above are as permissive as the checks are: a row may be
 or a list, a pad number an int or a str, and a key a check does not read is ignored. The
 built-in checks still read their tables as before, so `pcbkit specs` is where a wrong
 one is reported. A table read with `tables.read` (as the checks of the proposed tables
-will) that has the wrong shape fails its check by name, with the id `bad-table`.
+will) that has the wrong shape fails its check by name. Read while a check is being
+parametrised, it fails that check once, with the id `bad-table`; read in a check's body,
+it fails that check, with the path of each wrong value as the message and no traceback.
 
 Reading a shape: `{key: value}` is a dict, `[item]` a list (a tuple or set is accepted
 too), `(a, b)` a row of fixed length, `X or Y` either, `X or None` a value that may be
 None, `"key": X (optional)` a key that may be left out (`default` says what it then
 means), and `...` that other keys are ignored. A `pad` is a pad number as the netlist
-writes it, never a pin name; `1` and `"1"` are the same pad. `V`, `A`, `ohm`, `mm` and
-`mm2` are plain numbers in those units.
+writes it, never a pin name: `pcbkit specs` cannot tell a pin name from a pad label (`"EN"`
+passes the shape, as `"A1"` and `"MP"` must), so the check that reads the table reports a
+pad that is not in the netlist; `1` and `"1"` are the same pad, except in `SENSE_LOOPS`
+`to_pads`, which is compared as text. `V`, `A`, `ohm`, `mm` and `mm2` are plain numbers in
+those units, and `True or False` is written as Python writes it.
 
 ### Proposed tables (validated, no built-in check yet)
 
@@ -959,11 +964,11 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 |---|---|---|
 | `CAP_DERATE` | `{mpn: fraction in (0, 0.8]}` | `circuit` capacitor derating: a fraction per MPN, 0.8 when absent, so it can only tighten |
 | `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | fault-state pins (`power`) |
-| `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]}, "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count |
+| `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count; the nets a path names should be members of `nets` (the check says so, this shape does not) |
 | `PIN_NETS` | `{ref: {pad: net or None}}` | port map and mis-plug (`ports`) |
-| `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": true or false, "rows": 1 or 2 (optional)}}` | mis-plug (`ports`) |
+| `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": True or False, "rows": 1 or 2 (optional, default 1)}}` | mis-plug (`ports`) |
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
-| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} or {"a": pad, "k": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} or {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
+| `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
 | `I2C_EXPECTED` | `{bus: [7-bit address]}` | exact bus scan (`bringup`); the buses should be keys of `I2C_BUSES` (the check says so, this shape does not) |
 | `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | enable links (`power`) |
 | `TEST_POINTS` | `[(net, max ground mm)]` | test points (later) |
