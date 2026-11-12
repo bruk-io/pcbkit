@@ -29,7 +29,11 @@ STRAPPED = CIRCUITS.replace(
 
 
 def go(
-    tmp_path: Path, name: str, toy: Toy | None = None, specs: str = SPECS + TABLE
+    tmp_path: Path,
+    name: str,
+    toy: Toy | None = None,
+    specs: str = SPECS + TABLE,
+    circuits: str = STRAPPED,
 ) -> Run:
     """Run only this module's checks, with the ``bringup`` group on."""
     assert STRAPPED != CIRCUITS
@@ -38,7 +42,7 @@ def go(
         toy or check_toy.good(),
         ["bringup"],
         specs=specs,
-        circuits=STRAPPED,
+        circuits=circuits,
     )
     return run(root, "test_i2c_expected")
 
@@ -54,6 +58,7 @@ def test_the_control_passes_and_records_the_scan(tmp_path: Path) -> None:
         "found": ["0x3c", "0x40"],
         "missing": [],
         "extra": [],
+        "devices": {"0x3c": ["DISPLAY"], "0x40": ["SENSOR"]},
     }
     assert (entry["gate"], entry["group"]) == ("sch", "bringup")
     assert len(result.checks) == 1
@@ -74,6 +79,7 @@ def test_an_address_strap_moved_to_the_other_rail_fails(tmp_path: Path) -> None:
         "found": ["0x3c", "0x41"],
         "missing": ["0x40"],
         "extra": ["0x41"],
+        "devices": {"0x3c": ["DISPLAY"], "0x41": ["SENSOR"]},
     }
 
 
@@ -159,3 +165,77 @@ def test_a_board_that_has_not_switched_the_group_on_is_untouched(
     result = run(root)
     assert not [k for k in result.checks if "test_i2c_expected" in k]
     assert "bringup" not in result.results["groups"]
+
+
+def devices_returning(rows: str) -> str:
+    """Return the toy's circuits with ``i2c_devices`` returning ``rows`` (Python)."""
+    return CIRCUITS.replace(
+        'return [(nl.net("U1", 3), "SENSOR", 0x40)]', f"return {rows}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    [
+        ('[("SDA", "SENSOR", "0x40")]', "address '0x40' is not a whole number"),
+        ("None", "circuits.i2c_devices returned None, expected a list of"),
+        ('[("SDA", "SENSOR", 0x80)]', "address 0x80 is not a 7-bit address"),
+        ('[("SDA", "SENSOR")]', "row 0 is ('SDA', 'SENSOR'), expected (sda net"),
+    ],
+)
+def test_a_device_list_that_cannot_be_read_fails_naming_the_function(
+    tmp_path: Path, rows: str, message: str
+) -> None:
+    """Fail with a message, not a TypeError, and record only what was expected."""
+    result = go(tmp_path, "bad-rows", circuits=devices_returning(rows))
+    entry = result.entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert "circuits.i2c_devices" in entry["message"]
+    assert message in entry["message"]
+    assert "TypeError" not in entry["message"]
+    assert entry["numbers"] == {"expected": ["0x3c", "0x40"]}
+
+
+def test_two_devices_at_one_address_fail_here_without_the_circuit_group(
+    tmp_path: Path,
+) -> None:
+    """Fail naming both devices, though ``circuit`` is off; record who answers."""
+    rows = '[(nl.net("U1", 3), "SENSOR", 0x3C)]'
+    result = go(
+        tmp_path,
+        "clash",
+        circuits=devices_returning(rows),
+        specs=SPECS + "\nI2C_EXPECTED = {'main': [0x3C]}\n",
+    )
+    entry = result.entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert (
+        "bus main: address 0x3c answers for two devices: SENSOR, DISPLAY"
+        in (entry["message"])
+    )
+    assert entry["numbers"]["devices"] == {"0x3c": ["SENSOR", "DISPLAY"]}
+    assert entry["numbers"]["missing"] == [] and entry["numbers"]["extra"] == []
+
+
+def test_an_address_listed_twice_in_the_expected_table_fails_by_name(
+    tmp_path: Path,
+) -> None:
+    """Name the address, though the set of addresses matches."""
+    specs = SPECS + "\nI2C_EXPECTED = {'main': [0x3C, 0x40, 0x40]}\n"
+    entry = go(tmp_path, "twice", specs=specs).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert "specs.I2C_EXPECTED['main'] lists 0x40 twice" in entry["message"]
+    assert entry["numbers"]["missing"] == [] and entry["numbers"]["extra"] == []
+
+
+def test_an_sda_net_written_with_a_slash_fails_saying_so(tmp_path: Path) -> None:
+    """Say the net is not in the design, and that names carry no leading slash."""
+    specs = SPECS.replace('("SDA", "SCL"', '("/SDA", "SCL"') + TABLE
+    assert specs != SPECS + TABLE
+    entry = go(tmp_path, "slash", specs=specs).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert (
+        "SDA net /SDA is not in the design (net names carry no leading slash: "
+        "write SDA)" in entry["message"]
+    )
+    assert entry["numbers"]["missing"] == ["0x40"]

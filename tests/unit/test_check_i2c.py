@@ -94,3 +94,100 @@ def test_the_shape_refuses_an_address_that_is_not_a_whole_number_in_range(
     )
     assert len(found) == 1
     assert found[0].startswith('specs.I2C_EXPECTED["main"][0]: expected 7-bit address')
+
+
+# ------------------------------------------------------------ devices that are wrong
+@pytest.mark.parametrize(
+    ("rows", "problem"),
+    [
+        (None, "circuits.i2c_devices returned None, expected a list of "),
+        (5, "circuits.i2c_devices returned int, expected a list of "),
+        ("abc", "circuits.i2c_devices returned str, expected a list of "),
+        (
+            [("SDA", "A")],
+            "circuits.i2c_devices row 0 is ('SDA', 'A'), expected (sda net, name, "
+            "address)",
+        ),
+        (
+            [("SDA", "A", 0x40), "SDA"],
+            "circuits.i2c_devices row 1 is 'SDA', expected (sda net, name, address)",
+        ),
+        (
+            [("SDA", "A", "0x40")],
+            "circuits.i2c_devices row 0 (A): address '0x40' is not a whole number: "
+            "write 0x40, not '0x40'",
+        ),
+        (
+            [("SDA", "A", 64.0)],
+            "circuits.i2c_devices row 0 (A): address 64.0 is not a whole number: "
+            "write 0x40, not '0x40'",
+        ),
+        (
+            [("SDA", "A", True)],
+            "circuits.i2c_devices row 0 (A): address True is not a whole number: "
+            "write 0x40, not '0x40'",
+        ),
+        (
+            [("SDA", "A", 0x80)],
+            "circuits.i2c_devices row 0 (A): address 0x80 is not a 7-bit address",
+        ),
+        (
+            [("SDA", "A", -1)],
+            "circuits.i2c_devices row 0 (A): address -1 is not a 7-bit address",
+        ),
+    ],
+)
+def test_a_device_list_that_is_not_rows_of_net_name_address_is_named(
+    rows: object, problem: str
+) -> None:
+    """Say what circuits.i2c_devices gave, for each way it can be wrong."""
+    clean, found = i2c.device_rows(rows, "circuits.i2c_devices")
+    assert found[0].startswith(problem)
+    assert clean == []
+
+
+def test_good_rows_pass_and_the_first_problem_per_row_only() -> None:
+    """Return the rows as tuples and no problem, for the shapes a project writes."""
+    clean, found = i2c.device_rows(
+        [["SDA", "A", 0x40], ("SDA", "B", 0x7F), ("SDA", "C", 0)], "x"
+    )
+    assert found == []
+    assert clean == [("SDA", "A", 0x40), ("SDA", "B", 0x7F), ("SDA", "C", 0)]
+
+
+def test_clashes_are_the_addresses_with_two_devices_in_found_order() -> None:
+    """Name both devices at an address; a device alone is no clash."""
+    found = i2c.found_on_bus(
+        [("SDA", "A", 0x40), ("SDA", "B", 0x40), ("SDA", "D", 0x41)],
+        "SDA",
+        [("C", 0x3C), ("E", 0x41)],
+    )
+    assert i2c.clashes(found) == {0x40: ["A", "B"], 0x41: ["D", "E"]}
+    assert i2c.clash_problems(found) == [
+        "address 0x40 answers for two devices: A, B",
+        "address 0x41 answers for two devices: D, E",
+    ]
+
+
+def test_an_expected_address_listed_twice_is_named() -> None:
+    """Name the repeated address, once however often it repeats."""
+    assert i2c.expected_duplicates([0x40, 0x3C, 0x40, 0x40]) == [0x40]
+    assert i2c.expected_duplicates([0x40, 0x3C]) == []
+
+
+def test_names_per_address_are_keyed_by_the_hex_address() -> None:
+    """Give ``{"0x3c": ["DISPLAY"]}`` for the record, lowest first."""
+    found = i2c.found_on_bus(ON_BOARD, "SDA", OFF_BOARD)
+    assert i2c.devices_record(found) == {"0x3c": ["DISPLAY"], "0x40": ["SENSOR"]}
+    assert list(i2c.devices_record(found)) == ["0x3c", "0x40"]
+
+
+def test_an_sda_net_that_is_not_in_the_design_says_names_carry_no_slash() -> None:
+    """Say the net is missing, and why when the only difference is a slash."""
+    nets = {"SDA": []}
+    assert i2c.sda_problem("SDA", nets) is None
+    assert i2c.sda_problem("/SDA", nets) == (
+        "SDA net /SDA is not in the design (net names carry no leading slash: "
+        "write SDA)"
+    )
+    assert i2c.sda_problem("SDX", nets) == "SDA net SDX is not in the design"

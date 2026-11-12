@@ -920,8 +920,8 @@ that has its own check does):
 | `CAP_DERATE` | `{mpn: fraction in (0, 0.8]}` | The share of its rated voltage a part may reach, per MPN, where 0.8 is too much (a tantalum on a rail that can be hot-plugged: `{"TANT-10U": 0.5}`). 0.8 when the MPN is absent, and a fraction above 0.8 is refused, so the table can only tighten. Every MPN named must have a `CAP_VRATED` row, or the capacitor check fails naming it. |
 
 Every `circuit` check records before it asserts, so `results.json` holds each part's
-numbers even when the check fails (`pcbkit report` writes a table of more than eight
-entries as `(N entries: see results.json)`):
+numbers even when the check fails (`pcbkit report` writes any recorded value of more than eight
+entries as `(N entries: see results.json)`, the older records too):
 
 | Check | Records |
 |---|---|
@@ -995,7 +995,7 @@ name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_device
 
 | Name | Shape | Holds |
 |---|---|---|
-| `I2C_EXPECTED` | `{bus: [7-bit address]}` | The addresses a scan of each bus must show, the spec's bring-up expectation. The buses must be keys of `I2C_BUSES` (a bus that is not fails, naming it). The addresses found are those of the on-board devices `circuits.i2c_devices(nl)` reports on the bus's SDA net plus the bus's off-board devices from `I2C_BUSES`; a device that answers an all-call or general-call address must be reported at that address as well, or the scan will not match. |
+| `I2C_EXPECTED` | `{bus: [7-bit address]}` | The addresses a scan of each bus must show, the spec's bring-up expectation. The buses must be keys of `I2C_BUSES` (a bus that is not fails, naming it). The addresses found are those of the on-board devices `circuits.i2c_devices(nl)` reports on the bus's SDA net plus the bus's off-board devices from `I2C_BUSES`; a device that answers an all-call or general-call address must be reported at that address as well, or the scan will not match. `circuits.i2c_devices` must return rows `(sda net, name, address)` with a whole address from 0 to 0x7F (0x80 or above is "not a 7-bit address"), or the check fails naming it. The bus's SDA net must be in the design, written without a leading slash. An address listed twice fails by name. |
 
 `test_i2c_bus_answers_exactly_the_expected_addresses[bus]` (one per key) fails naming the
 addresses that are missing and those that are extra (with the devices that answer
