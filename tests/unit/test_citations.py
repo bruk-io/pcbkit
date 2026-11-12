@@ -81,6 +81,33 @@ def test_words_broken_at_a_line_end_match_however_they_are_copied(
     assert citations.quote_on_page(quote, PAGES[page - 1])
 
 
+@pytest.mark.parametrize(
+    "quote, page",
+    [
+        ("Specification of the regulator", "Speciﬁcation of the regulator"),  # fi
+        ("Input voltage 19 V maximum", "Input voltage １９ Ｖ maximum"),  # full-width
+        ("Speciﬁcation of the regulator", "Specification of the regulator"),
+    ],
+)
+def test_ligatures_and_full_width_forms_are_the_plain_characters(
+    quote: str, page: str
+) -> None:
+    """Match a ligature or a full-width form to its plain letters (NFKC)."""
+    assert citations.quote_on_page(quote, page)
+    assert citations.numbers("１９ Ｖ") == ["19"]
+
+
+def test_a_superscript_is_not_a_digit_of_the_number_before_it() -> None:
+    """Refuse "106" for "10⁶ cycles", and "mm2" for "mm²", on the quote and the page."""
+    assert citations.missing_numbers("106 cycles", "Endurance 10⁶ cycles") == ["106"]
+    assert citations.missing_numbers("10 cycles", "Endurance 10⁶ cycles") == []
+    assert citations.numbers("Leakage 10⁻⁶ A") == ["10", "-6"]
+    assert citations.quote_on_page("Endurance 10⁶ cycles", "Endurance 10⁶ cycles")
+    assert not citations.quote_on_page("Endurance 106 cycles", "Endurance 10⁶ cycles")
+    assert not citations.quote_on_page("Pad area 4 mm2 each", "Pad area 4 mm² each")
+    assert not citations.quote_on_page("Pad area 4 mm² each", "Pad area 4 mm2 each")
+
+
 def test_a_quote_never_joins_two_numbers_of_the_page() -> None:
     """Refuse "-0.36 V" for a page with "-0.3 6 V": spacing between digits counts."""
     assert not citations.quote_on_page("Enable EN -0.36 V", RATINGS)

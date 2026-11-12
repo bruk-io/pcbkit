@@ -23,8 +23,9 @@ Normalisation (``normalise``), the same for the quote and the page:
 
 1. Look-alike characters are folded (``_FOLD``): every dash and minus sign becomes
    "-", curly quotes and primes straight ones, the micro sign mu, the ohm sign omega;
-   soft hyphens and zero-width characters go. Then Unicode NFKC (ligatures such as
-   "fi", superscripts, full-width forms).
+   soft hyphens and zero-width characters go. Superscript digits and signs become "^"
+   and the plain character ("10⁶" is "10^6", not "106", which NFKC alone would make,
+   and "mm²" is "mm^2"). Then Unicode NFKC (ligatures such as "fi", full-width forms).
 2. A hyphen between two letters goes, with the line break after it if there is one.
    pdftotext joins a word broken at a line end and drops its hyphen ("regu-" + "lator"
    becomes "regulator", but "pull-" + "up" becomes "pullup" too), and with ``-layout``
@@ -97,6 +98,8 @@ _FOLD = str.maketrans(
         "﻿": None,  # byte order mark
     }
 )
+_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺", "0123456789-+")
+_SUPERSCRIPT_RUN = re.compile("[⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+")
 _LETTER_HYPHEN = re.compile(r"(?<=[^\W\d_])-(?:[ \t]*\r?\n\s*)?(?=[^\W\d_])")
 _SPACE = re.compile(r"\s+")
 _TOKEN = re.compile(
@@ -127,8 +130,14 @@ class Problem:
 def fold(text: str) -> str:
     """Return ``text`` with look-alike characters folded and NFKC applied.
 
+    A run of superscripts becomes "^" and the plain characters ("10⁻⁶" is "10^-6")
+    before NFKC, which would otherwise write them as digits of the number before.
+
     Spacing and case are kept.
     """
+    text = _SUPERSCRIPT_RUN.sub(
+        lambda match: "^" + match[0].translate(_SUPERSCRIPTS), text
+    )
     return unicodedata.normalize("NFKC", text.translate(_FOLD)).translate(_FOLD)
 
 
