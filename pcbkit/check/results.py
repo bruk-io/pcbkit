@@ -53,6 +53,7 @@ BUILTIN_GROUPS = {
     "test_copper": "copper",
     "test_circuit": "circuit",
     "test_esp32s3": "esp32s3",
+    "test_ports": "ports",
 }
 
 # The design gates, earliest first. A gated run keeps the checks up to its own gate.

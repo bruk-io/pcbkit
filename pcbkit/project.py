@@ -40,7 +40,7 @@ GENERATED_DIRS = ("kicad", "out", "golden", "fab")
 
 # Check groups a project can switch on. pcbkit.check owns the checks themselves; this
 # is only the list of names a pcbkit.toml may use.
-CHECK_GROUPS = ("kicad", "outputs", "fab", "copper", "circuit", "esp32s3")
+CHECK_GROUPS = ("kicad", "outputs", "fab", "copper", "circuit", "esp32s3", "ports")
 
 # Fab profiles pcbkit has code for.
 FAB_PROFILES = ("pcbway",)

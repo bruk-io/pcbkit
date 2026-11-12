@@ -79,6 +79,7 @@ def test_the_modules_are_found() -> None:
         "test_fab.py",
         "test_kicad.py",
         "test_outputs.py",
+        "test_ports.py",
         "esp32s3.py",
     ]
 

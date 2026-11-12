@@ -244,7 +244,7 @@ def test_dict_of_with_required_keys_names_the_missing_one() -> None:
 
 def test_describe_renders_the_shapes_the_docs_show() -> None:
     """Spell out a few shapes exactly."""
-    assert tables.describe(tables.PROPOSED["PIN_NETS"]) == "{ref: {pad: net or None}}"
+    assert tables.describe(tables.registry()["PIN_NETS"]) == "{ref: {pad: net or None}}"
     assert (
         tables.describe(tables.PROPOSED["REFERENCE_PLANES"])
         == '{net: "top" or "bottom" or ("top" or "bottom", max unreferenced mm)}'
@@ -338,11 +338,11 @@ def test_a_table_declared_twice_is_an_error_naming_both_places(
         {
             "dup": """
                 from pcbkit.check.tables import Net
-                TABLES = {"PIN_NETS": Net()}
+                TABLES = {"GROUND_NET": Net()}
             """
         },
     )
-    with pytest.raises(ValueError, match="PIN_NETS is declared in both"):
+    with pytest.raises(ValueError, match="GROUND_NET is declared in both"):
         tables.registry(pkg)
 
 
@@ -1288,9 +1288,9 @@ def test_the_registry_finds_the_engine_modules_once_per_process(
     try:
         tables.registry()
         tables.registry()
-        specs = types.SimpleNamespace(PIN_NETS={"J1": {1: "VIN"}})
-        tables.read(specs, "PIN_NETS")
-        tables.read(specs, "PIN_NETS")
+        specs = types.SimpleNamespace(GROUND_NET="GND")
+        tables.read(specs, "GROUND_NET")
+        tables.read(specs, "GROUND_NET")
         assert len(calls) == 1
         tables.clear_cache()
         tables.registry()

@@ -1037,7 +1037,6 @@ PROPOSED: dict[str, Shape] = {
             "max_ohm": Opt(Ohms(positive=True), default=10),
         },
     ),
-    "PIN_NETS": DictOf(Ref(), DictOf(Pad(), Nullable(Net()))),
     "MATING": DictOf(
         Text("plug"),
         Record(

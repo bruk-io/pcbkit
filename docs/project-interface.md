@@ -100,7 +100,7 @@ it takes the default below.
 | `stitch.dense` | list of boxes | `[]` | Boxes, each `[x0, y0, x1, y1, pitch]` in layout millimetres with `x0 < x1` and `y0 < y1`, where the stitching grid uses `pitch` instead. Use it under a switching regulator, for example. |
 | `stitch.gap_limit_mm` | number | `3.4` | Largest distance from any point with ground on both layers to the nearest ground via or plated ground pad. pcbkit adds vias until nothing is further away. Choose it a little under the limit you care about (a twentieth of a wavelength at your highest frequency, say). |
 | `fab.profile` | string | `"pcbway"` | Whose limits and order forms to use. `"pcbway"` is the only profile so far. |
-| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
+| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`, `ports`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
 
 How the file is read:
 
@@ -943,6 +943,22 @@ override):
 | `GPIO_SCENARIOS` | `{id: keyword arguments}`: no GPIO may exceed its absolute maximum in any of them. |
 | `OPEN_DRAIN_NETS`, `RAIL_3V3` | Optional: nets exempt from the source-current check (default: the I2C lines of `I2C_BUSES`), and the 3.3 V rail the strapping pulls go to (default `"+3V3"`). |
 
+**`ports`** (opt-in, like every group: a board that has not listed it is untouched; once
+it is on, a missing table fails by name and `{}` says "none here"). It runs on the
+netlist, at the `sch` gate:
+
+| Name | Shape | Holds |
+|---|---|---|
+| `PIN_NETS` | `{ref: {pad: net or None}}` | The spec's port map: the net each pad of a connector carries, in the pad numbers the netlist writes (`None`: wired to nothing). Every connector, a part from a `Connector` library or whose reference starts with `J`, must be a key and every wired pad of one must be listed. Any other part may be a key too (a controller whose pins the spec fixes), and only the pads listed are compared. |
+
+`test_port_pins_carry_their_nets[ref]` (one per key) fails naming each pad that carries
+another net than its row, and each wired pad of a connector the row leaves out; it
+records `pins`, `{pad: net or None}` for the listed pads.
+`test_every_connector_is_in_the_port_map` fails naming each connector that is not a key;
+it records `port map`, every connector of the design as `{ref: {pad: net or None}}`,
+before it fails. A pad the schematic leaves unwired (KiCad's `unconnected-(...)` net, or
+none) is `None`.
+
 ### Table shapes
 
 Every table the built-in checks read has a *shape*, defined in one place
@@ -981,7 +997,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 |---|---|---|
 | `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | fault-state pins (`power`) |
 | `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count; the nets a path names should be members of `nets` (the check says so, this shape does not) |
-| `PIN_NETS` | `{ref: {pad: net or None}}` | port map and mis-plug (`ports`) |
 | `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": True or False, "rows": 1 or 2 (optional, default 1)}}` | mis-plug (`ports`) |
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
 | `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
