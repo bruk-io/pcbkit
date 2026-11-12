@@ -17,8 +17,10 @@ exits 1. Five commands use other codes where they have more to say: `check` exit
 pytest's code (0 all passed, 1 a check failed, 5 nothing matched), `mutants` exits 2
 when its control run does not pass, `compare` exits 2 when a file is not a board,
 `datasheet find` exits 3 when a part's datasheet is not verified or confirmed, and
-`parts stock` exits 0 when every line is `ok`, 1 when any is not, and 2 when Mouser
-could not be asked and the cache had nothing for some line.
+`parts stock` exits 2 when any line is `not-asked` (Mouser could not be asked and the
+cache had nothing) or `stale` (the only answer is older than `--max-age`), else 1 when any
+line is not `ok`, else 0. Its JSON is printed with those three codes only: a usage error
+(also 2) or a missing project (1) prints a message.
 
 ::: mkdocs-click
     :module: pcbkit.cli

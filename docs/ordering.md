@@ -58,14 +58,56 @@ whose value is in pcbkit's default table of Yageo 0603 parts gets one without be
 ### Stock
 
 `pcbkit parts stock [--qty N] [--max-age HOURS] [--offline]` asks Mouser whether each BOM line is
-in stock, and prints one JSON object per line: its `status` (`ok`, `short`, `not-active`,
-`not-found`, `ambiguous`, `no-mpn`, `not-asked` or `unreadable`), the stock, lead time, lifecycle,
-price breaks and the unit price at the quantity you need (`--qty` boards times the quantity per
-board). It needs `MOUSER_API_KEY` unless the answers are cached, reads `design.py` and `bom.py`
-and no board file, so it runs anywhere. Answers are cached for 24 hours by default (`--max-age`),
-and `--offline` takes the cache at any age; each row says when its answer was fetched. The exit
-status is 0 when every line is `ok`, 1 when any is not, and 2 when Mouser could not be asked and
-the cache had nothing. The API key never appears in the output.
+in stock, and prints one JSON object per line, in BOM order. It needs `MOUSER_API_KEY` unless the
+answers are cached, reads `design.py` and `bom.py` and no board file, so it runs anywhere. The API
+key never appears in the output.
+
+Each row has `item`, `refs`, `mpn`, `mfr`, `qty_per_board`, `needed` (that times `--qty`),
+`needed_total`, `order_qty`, `status`, `fetched`, `age_hours`, `mouser` and `notes`.
+
+- `needed_total` is the count of that part number over every BOM line that uses it, so two lines
+  of one part are judged on their sum, not each against the whole stock.
+- `order_qty` is what you would order: `needed_total`, raised to Mouser's minimum (`Min`) and then
+  to a multiple of its `Mult`. Stock is compared with it, and so is the price:
+  `mouser.unit_price_at_needed` is the unit price of the price break for `order_qty`.
+- `mouser` holds the matched part's `part_number`, `manufacturer`, `stock`, `availability` (raw
+  text), `lifecycle`, `lead_time`, `price_breaks` (each `qty`, `price` as Mouser wrote it,
+  `price_value` as a number or null, `currency`), `unit_price_at_needed`, `min`, `mult` and
+  `suggested_replacement`. It is null when no one part was matched.
+- `notes` says why a line is not `ok`, and anything pcbkit could not read (a missing price, a
+  stock figure taken from a text). Read it with the status.
+
+`status` is one of:
+
+| status | meaning |
+| --- | --- |
+| `ok` | one Mouser part matched, it is active, and its stock covers `order_qty` |
+| `short` | stock is below `order_qty` |
+| `not-active` | the lifecycle says obsolete, end of life, not for new designs, last time buy or the like, or `IsDiscontinued` is true |
+| `not-found` | Mouser has no part with that number |
+| `ambiguous` | several parts match and the maker does not settle it, or the one match is by another maker than the line's |
+| `no-mpn` | the line has no part number Mouser can take; it was not sent |
+| `not-asked` | Mouser could not be asked and nothing is cached |
+| `unreadable` | Mouser answered, but something that decides the status could not be read: stock, lifecycle (a text pcbkit does not know), `Min` or `Mult`, or the shape of the answer |
+| `stale` | the only answer is older than `--max-age` (or dated in the future) and Mouser could not be asked again |
+
+The maker on a line is compared by whole name or known alias ("Texas Instruments Inc." is "Texas
+Instruments"; "TI" is not known), never by the start of a name. A line with no maker is judged on
+the number alone.
+
+**When Mouser cannot be asked** (no key, no network, a refusal, too many requests), the cached
+answer for the part is used at any age, and the row says so in `notes`. If that answer is younger
+than `--max-age` it is judged as usual; if it is older it is `stale`, and the command exits 2, so
+that a 200-day-old stock figure is never taken for today's. With nothing cached the line is
+`not-asked`. `--offline` is the other way round: you asked for the cache at any age, so the line
+is judged normally and `age_hours` shows how old it is (only a cached date in the future is
+`stale`). Answers are cached for 24 hours by default (`--max-age`); a cache that cannot be
+written does not lose the fresh answer, and a note says so.
+
+Exit status: 2 if any line is `not-asked` or `stale`, else 1 if any line is not `ok`, else 0. The
+JSON is printed with those three codes. A usage error (a bad option) also exits 2 and a missing
+project exits 1, and both print a message instead of JSON. A board with no BOM lines prints `[]`
+and exits 0.
 
 ### bom.py: when the BOM should say something else
 
