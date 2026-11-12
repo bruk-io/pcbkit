@@ -396,6 +396,33 @@ def test_other_ways_of_writing_a_number_are_refused_not_normalised(
     assert missing(value, quote) != []
 
 
+@pytest.mark.parametrize(
+    "value, quote, accepted",
+    [
+        # F1 of the fourth review: a value's "±" or "+/-" was dropped.
+        ("±5 V", "Supply voltage 5 V max", False),
+        ("±12 V", "Supply rail +12 V nominal", False),
+        ("+/-5 V", "Supply voltage 5 V max", False),
+        ("VIN ±5", "Supply voltage 5 V max", False),
+        ("±5 V", "Supply voltage ±5 V max", True),
+        ("±5 V", "Supply voltage +/-5 V max", True),
+        ("+/-5 V", "Supply voltage ±5 V max", True),
+        # A "+" is positive: backed by "+" or no sign, never by "±".
+        ("+12 V", "Supply rail +12 V nominal", True),
+        ("+12 V", "Supply rail 12 V nominal", True),
+        ("+5 V", "Supply voltage ±5 V max", False),
+        # No sign: the magnitude of a "±" or "+", a documented blind spot of roles.
+        ("5 V", "Supply voltage ±5 V max", True),
+        ("12 V", "Supply rail +12 V nominal", True),
+    ],
+)
+def test_a_sign_in_the_value_needs_the_same_sign_on_the_page(
+    value: str, quote: str, accepted: bool
+) -> None:
+    """Refuse a value's "±", "+/-" or "+" unless the page's sign backs it."""
+    assert (check_citation(value, quote, 1, [quote]) is None) is accepted
+
+
 def test_units_are_not_checked_a_known_blind_spot() -> None:
     """Pin that "1.25 mV" passes against "1.25 V": units are not read, only numbers."""
     assert missing("1.25 mV", "Reference voltage 1.25 V") == []

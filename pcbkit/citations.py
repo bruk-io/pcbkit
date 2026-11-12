@@ -80,7 +80,10 @@ Signs. A "-" glued to the front of a number is read only where its role is certa
 
 A "+" glued to a number, and "±", leave the number positive in every reading, so the
 number backs its magnitude: "+19" and "±19" back "19" (but "1+2", a sign glued after a
-digit, makes both unknown). A sign of any kind before a hex
+digit, makes both unknown). In the value a sign is compared, never dropped: a value's
+"-" needs a page "-"; its "±" (or "+/-") needs a page "±" (or "+/-"), so "±5 V" is
+refused against "5 V max"; its "+" needs a page "+" or no sign, both of which are
+positive, and not "±". A sign of any kind before a hex
 number or a code is unknown, in the page and in the value. A "-" or "+" after the
 number 10 makes both numbers unknown: it may be a power of ten flattened onto the line
 ("10-6" for 10⁻⁶).
@@ -326,7 +329,7 @@ class _Token:
 
     @property
     def key(self) -> tuple[_Kind, str]:
-        """Return what two known tokens are compared by."""
+        """Return what two known tokens are compared by, apart from a "+" or "±"."""
         if self.kind is _Kind.HEX:
             match = _HEX.fullmatch(self.number)
             assert match is not None
@@ -334,6 +337,24 @@ class _Token:
         if self.kind in _SIGNABLE and self.sign == "-":
             return self.kind, "-" + self.number
         return self.kind, self.number
+
+
+# The page signs that back each value sign: a "-" only a "-"; a "±" only a "±"; a "+"
+# a "+" or no sign (both positive); no sign any but "-" (the magnitude of a "±").
+_SIGN_BACKED_BY = {
+    "-": frozenset({"-"}),
+    "±": frozenset({"±"}),
+    "+": frozenset({"+", ""}),
+    "": frozenset({"", "+", "±"}),
+}
+
+
+def _backs(page: _Token, value: _Token) -> bool:
+    """Say whether a known page token backs a known value token."""
+    return (
+        page.key == value.key
+        and page.sign in _SIGN_BACKED_BY[value.sign if value.kind in _SIGNABLE else ""]
+    )
 
 
 @dataclass(frozen=True)
@@ -915,7 +936,7 @@ def _missing(value: str, quote: str, page_text: str) -> list[str] | None:
     for token in wanted:
         backed = token.known and all(
             any(
-                mine.known and mine.key == token.key
+                mine.known and _backs(mine, token)
                 for mine in page.reading.tokens
                 if start <= mine.start and mine.end <= end
             )
