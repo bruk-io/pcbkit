@@ -480,11 +480,13 @@ eval should measure what it cannot:
 
 - **Wrong values that pass `verify`**, by kind: the wrong column (typical as maximum),
   the wrong row of a multi-row quote, the wrong part variant or condition, absolute
-  maximum taken as an operating limit, the wrong unit. Sign errors and invented
-  numbers no longer belong here: `verify` refuses them.
+  maximum taken as an operating limit, the wrong unit.
 - **What `verify` itself misses.** Plant mistakes in the gold part files (change a
   digit, swap min and max, move a page, swap columns) and count what passes. That
-  says which kinds the eval must score.
+  says which kinds the eval must score. Sign errors and invented numbers stay here
+  too: `verify` refuses most of them, but not a wrong unit or SI prefix, a value
+  made of numbers that are all in the quote but in the wrong roles, or a part number
+  or "4k7"-style code, whose digits it does not read as numbers.
 - **False refusals.** Every gold value must pass `verify`. One that does not is a
   normalisation fault (cells split by pdftotext, a quote across a page break), and it
   costs a retry.
