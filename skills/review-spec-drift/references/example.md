@@ -26,10 +26,10 @@ what this skill produces at the next gate.
 | 5 | Sensor port is one 6-pin connector (port map) | mechanical | J8 4-pin `+3V3/GND/SDA/SCL`, J9 2-pin `AIN/GND` | differs |
 | 6 | Sensor port split into I2C and analogue (body text) | mechanical | J8, J9 as above | matches |
 | 7 | Ports on three sides (diagram caption) | mechanical | layout.py: J1-J5 on the left edge, J8-J9 on the top | differs |
-| 8 | Power button switches the input (port map note) | behavioural | J3 pin 1 is `PWR_EN`, traced to U2 EN only; `VIN` runs J1 to F1 to U2, never through J3 | differs |
-| 9 | Power button carries a signal (body text) | behavioural | same trace as 8 | matches |
+| 8 | Power button switches the input (port map note) | behavioural | listing: `PWR_EN` holds J3 and U2 only; `VIN` holds J1, F1 and U2, not J3 | differs |
+| 9 | Power button carries a signal (body text) | behavioural | same listing as 8 | matches |
 | 10 | Open question: one rail or two? | behavioural | spec still lists it; the design has `+5V` and `+3V3` | differs |
-| 11 | (none) | - | D5, a TVS on `VIN`, mentioned nowhere | not in spec |
+| 11 | (none) | - | the part listing has D5, a TVS on `VIN`, mentioned nowhere | not in spec |
 | 12 | Bus devices U6 at 0x48 | mechanical | `test_i2c_addresses_unique_per_bus` records U6 0x48 | matches |
 
 Claim 10 is an open question the design has answered: `differs` until the spec says so.

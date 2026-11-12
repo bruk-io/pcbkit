@@ -2,13 +2,15 @@
 
 The drafts of this review kept checkable claims in a YAML file beside the spec. In
 pcbkit the board project is that file: each claim a program can decide has a home that a
-check reads. A claim marked "proposed" has a table but no built-in check yet: write the
-rows and hand the table to `add-check`, which writes a project check that reads it
-(`${CLAUDE_PLUGIN_ROOT}/plans/wp16-review-skills.md` lists them).
+check reads. A claim marked "proposed" has a table but no built-in check reads it yet:
+write the rows and hand the table to `add-check`, which writes a project check that
+reads it. Their shapes are in "Proposed tables" in
+`${CLAUDE_PLUGIN_ROOT}/docs/project-interface.md`.
 
 | Claim | Home | Check that holds it |
 |---|---|---|
-| Board outline size, corner radius | layout.py `W`, `H`, `CORNER_R`, `outline` | `test_outline_size` (`outputs`) |
+| Board outline size | layout.py `W`, `H` | `test_outline_size` (`outputs`), which reads only `W` and `H` |
+| Corner radius, outline shape | layout.py `CORNER_R`, `outline` | none: compare by eye in `pcbkit shots` |
 | Mounting holes | layout.py `HOLES` | `test_drill_files_match_board` (`outputs`); a hole's drill in `POWER_FOOTPRINTS` `drill_mm` |
 | Layers, thickness, copper weight | pcbkit.toml `[stackup]` | `test_job_file_stackup` (`outputs`) |
 | Each part has an orderable part number | design.py `mpn` | `test_bom_complete` (`outputs`) |
