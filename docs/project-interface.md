@@ -100,7 +100,7 @@ it takes the default below.
 | `stitch.dense` | list of boxes | `[]` | Boxes, each `[x0, y0, x1, y1, pitch]` in layout millimetres with `x0 < x1` and `y0 < y1`, where the stitching grid uses `pitch` instead. Use it under a switching regulator, for example. |
 | `stitch.gap_limit_mm` | number | `3.4` | Largest distance from any point with ground on both layers to the nearest ground via or plated ground pad. pcbkit adds vias until nothing is further away. Choose it a little under the limit you care about (a twentieth of a wavelength at your highest frequency, say). |
 | `fab.profile` | string | `"pcbway"` | Whose limits and order forms to use. `"pcbway"` is the only profile so far. |
-| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`, `power`, `ports`, `bringup`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. `power`, `ports` and `bringup` are opt-in netlist checks, each with its own tables, and a group with no check written yet collects nothing. |
+| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
 
 How the file is read:
 

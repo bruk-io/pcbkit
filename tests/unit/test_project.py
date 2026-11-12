@@ -148,34 +148,6 @@ def test_full_file_keeps_every_value(tmp_path: Path) -> None:
     )
 
 
-def test_the_wp17_groups_are_ones_a_project_may_switch_on() -> None:
-    """Accept ``power``, ``ports`` and ``bringup``, and refuse a name nobody wrote."""
-    for group in ("power", "ports", "bringup"):
-        data = good()
-        data["checks"] = {"groups": [group]}
-        assert parse_config(data).checks.groups == (group,)
-    data = good()
-    data["checks"] = {"groups": ["planes"]}
-    with pytest.raises(ProjectError):
-        parse_config(data)
-
-
-def test_the_wp17_modules_map_to_the_groups_decision_d2_gives() -> None:
-    """Freeze the stem to group map for the checks not written yet."""
-    from pcbkit.check.results import BUILTIN_GROUPS
-
-    wanted = {
-        "test_faults": "power",
-        "test_power_paths": "power",
-        "test_enable_links": "power",
-        "test_semis": "power",
-        "test_ports": "ports",
-        "test_mating": "ports",
-        "test_i2c_expected": "bringup",
-    }
-    assert {k: BUILTIN_GROUPS.get(k) for k in wanted} == wanted
-
-
 def test_empty_optional_tables_are_fine() -> None:
     """Treat a present-but-empty optional table like an absent one."""
     data = good()
