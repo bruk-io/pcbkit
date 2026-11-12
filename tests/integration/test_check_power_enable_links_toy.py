@@ -472,3 +472,66 @@ def test_ground_net_or_its_default_stops_the_walk(tmp_path: Path, ground: str) -
     entry = go(tmp_path, "ground", toy, specs).entry(CHECK)
     want = "failed" if "AGND" in ground else "passed"
     assert entry["outcome"] == want, entry
+
+
+# ---------------------------------------------------- the fourth review's plants
+def plant_bav99_beside_the_link(toy: Toy) -> None:
+    """B1: a BAV99 series pair from EN_ALL into EN_U2 through its common pad."""
+    toy.add(
+        "D9",
+        "BAV99",
+        "Diode:BAV99",
+        {"1": ("EN_ALL", "K"), "2": ("NC9", "A"), "3": ("EN_U2", "K")},
+    )
+
+
+def plant_ferrite_tie(toy: Toy) -> None:
+    """Should-fix 4: a ferrite bead from EN_U2 straight to VIN."""
+    toy.add(
+        "FB9", "600R", "Device:FerriteBead", {"1": ("EN_U2", "1"), "2": ("VIN", "2")}
+    )
+
+
+@pytest.mark.parametrize(
+    ("plant", "message"),
+    [
+        (plant_bav99_beside_the_link, "(EN_U2 - D9 - EN_ALL)"),
+        (
+            plant_ferrite_tie,
+            "U2 pad 3: FB9 (600R) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so "
+            "the link R7 controls nothing",
+        ),
+    ],
+)
+def test_each_planted_mistake_of_the_fourth_review_fails(
+    tmp_path: Path, plant: Callable[[Toy], None], message: str
+) -> None:
+    """Fail the BAV99 bypass and the ferrite tie, through the real module."""
+    toy = board()
+    plant(toy)
+    entry = go(tmp_path, "fourth", toy).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert message in entry["message"], entry["message"]
+
+
+def test_a_dip_switch_per_enable_and_a_header_link_pass(tmp_path: Path) -> None:
+    """Pass SW_DIP_x02 forcing each enable to GND, with JP7 (header) as U2's link."""
+    toy = board()
+    toy.add(
+        "SW1",
+        "SW",
+        "Switch:SW_DIP_x02",
+        {"1": ("EN_U2", ""), "4": ("GND", ""), "2": ("EN_U3", ""), "3": ("GND", "")},
+    )
+    del toy.parts["R7"], toy.pins["R7"]
+    toy.add(
+        "JP7",
+        "Shunt",
+        "Connector_Generic:Conn_01x02",
+        {"1": ("EN_U2", "Pin_1"), "2": ("EN_ALL", "Pin_2")},
+    )
+    result = go(tmp_path, "dip-jp", toy)
+    assert result.outcome(CHECK) == "passed", result.entry(CHECK)
+    assert result.entry(CHECK)["numbers"]["enable links"] == {
+        "EN_ALL": {"U2": "JP7", "U3": "R8"}
+    }

@@ -968,7 +968,7 @@ the `sch` gate:
 
 | Name | Shape | Holds |
 |---|---|---|
-| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `NF`, `NP`, `NC`: the footprint is there to fit at bring-up), or a two-pad part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one). It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
+| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net. The check proves, from the netlist, that each one can be enabled alone at bring-up: it reaches the shared net through exactly one link of its own, and taking that link out leaves its enable net joined to no shared net of any row and to no other listed regulator's enable net. A link is a two-pad resistor (reference letters `R`, from any library) whose value reads as 0 (`0`, `0R`, `0R0`, `0E`, `R0`, `0 ohm`) or is a not-fitted mark alone (`DNP`, `DNF`, `NF`, `NP`, `NC`: the footprint is there to fit at bring-up), or a two-pad jumper: a part from a library whose name starts with `Jumper` (the pad count is read from the symbol name, `SolderJumper_2_Open`, when it gives one), or any two-pad part with reference letters `JP`, such as a header with a shunt. It may sit anywhere on the path, so a series resistor or an RC delay beside it is fine. A resistor pack, network or array and a three-pad jumper are not links. A pad listed twice fails as a duplicate row. |
 | `SUPPLY_NETS` | `[supply or ground net]` | The supply and ground nets, by name as the netlist writes them (no leading slash). The enable-link walk never crosses one, nor the ground net (`GROUND_NET`, or `"GND"` when that is not defined and the design has a `GND` net), so a pull-up or pull-down through a resistor is fine. pcbkit does not guess supplies from net or pin names: a supply you leave out is walked like a signal. List only real rails: a signal listed here hides every path through it, so a real bridge between two enables can pass. Each net must be in the design. Needed whenever `power` is on (`[]` says none). |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
@@ -981,43 +981,69 @@ link isolates the regulator, it names the link it took out and the path that sti
 reaches a shared net or another regulator's enable (`removing R7 does not isolate it:
 EN_U2 still reaches the shared net EN_ALL (EN_U2 - R9 - MID - R10 - EN_ALL)`).
 
-It also fails when something fitted and 0 ohm ties a net to a net in `SUPPLY_NETS`, where
-that net is between the enable and its link, or is held to one of those by other fitted 0
-ohm parts: the link then controls nothing. A pull-up through a real resistor is not a
-tie, even with a 0 ohm option in series beyond it. What counts as fitted for this rule: a
-resistor (letters `R`) whose value reads as 0, and a 0 ohm element of a known resistor
-pack; a jumper is fitted unless its symbol name contains `_Open` or its value is a
-not-fitted mark, and a `_Bridged` jumper is fitted only on the pads its name gives
-(`SolderJumper_3_Bridged12`: pads 1 and 2; `_Bridged` with no digits: all); any other
-jumper is taken as fitted. A part whose value is a not-fitted mark ties nothing.
+It also fails when a part ties the enable to a supply, so the link controls nothing.
+The nets checked are those between the enable and its link, and any net tied to one of
+them. Everything walked with two pads ties a net to a net in `SUPPLY_NETS`, unless it
+is: a resistor (reference letters `R`) with a real value above 0 ohm, so a pull-up or
+pull-down is fine; a diode, so a clamp is fine; or a part that is not fitted, which is a
+value that is a not-fitted mark alone (`DNP`, `NC`...) or a jumper whose symbol name has
+`_Open` or `_NO` (`SolderJumper_2_Open`, `Jumper_NO_Small`). So a 0 ohm resistor, a
+ferrite bead, an inductor, a fuse, a net tie, a bridged jumper or an unknown part from
+the enable to a supply fails, from any library. A part that is not walked (a capacitor,
+a connector, a test point, an IC) ties nothing. With three or more pads only a fitted
+jumper ties (a `_Bridged` one on the pads its name gives, `SolderJumper_3_Bridged12`:
+pads 1 and 2; one that is neither open nor bridged on all its pads), and a 0 ohm element
+of a known resistor pack. A pull-up through a real resistor is not a tie even with a 0
+ohm option beyond it, because the net past the resistor is not tied to the enable.
 
 How the walk goes: through every part with two or more pads, from any library, joining
 all its pads, except for a short closed list. Walked by their real pinout: a `Device`
 `R_Pack<n>` or `R_Pack<n>_Split` pad *k* to pad *2n+1-k*, an `R_Pack<n>_SIP` pads 1-2,
-3-4 and so on, an `R_Network<n>` every pad to pad 1, and a diode, a part whose pads are
-all named `A`/`A<n>` or `K`/`K<n>` (a BAT54C's `A1`, `A2` and `K`), from each anode pad to
-each cathode pad only; a part whose pins are named any other way is walked every way. A
-path counts in either direction of current: a shared net or another enable that can
-drive this one, or this one driving them, so a diode-OR into an enable passes while a
-diode from one enable into another fails. A resistor with a real value and a not-fitted
-mark (`10k DNP`) counts as a path, because the netlist does not tell the check which
-builds fit it.
+3-4 and so on, an `R_Network<n>` every pad to pad 1, a `Switch:SW_DIP_x<n>` pad *k* to
+pad *2n+1-k*, and a two-pad diode whose pins are named `A` and `K` (as KiCad's `Device:D`
+and `Device:LED` are), from anode to cathode only. A diode with three or more pads (a
+`BAV99`, a `BAT54C`, a dual zener) is joined on all its pads: its pin names cannot say
+how a series pair is wired, and KiCad's `BAT54C` has no pin names at all. A path counts
+in either direction of current: a shared net or another enable that can drive this one,
+or this one driving them, so a diode-OR into an enable passes while a diode from one
+enable into another fails. Reverse breakdown is not modelled: two separate zeners
+back to back between two enables are no path, while a dual zener in one part is joined
+on all its pads and fails. A resistor with a real value and a not-fitted mark (`10k
+DNP`) counts as a path, because the netlist does not tell the check which builds fit it.
 
 What it does not walk, and so does not prove: parts whose reference letters are `U`,
-`IC` or `Q` (integrated circuits and transistors: a logic gate, a sequencer, another
-regulator's power-good pin), capacitors with two pads (reference letters `C`; one with
-three or more pads, such as a feedthrough, is walked), connectors (as the port map
-defines them: a library starting `Connector` or reference letters exactly `J`, not a test
-point or jumper), so a header or shunt that carries two enables is not followed, and test
-points. Review a path through any of those by hand. Every other part is walked, so a
-part on the list by mistake can only cause a failure, and the message names it.
+`IC`, `Q` or `A` (integrated circuits, transistors and modules: a logic gate, a
+sequencer, another regulator's power-good pin, a microcontroller module, and also a
+resistor array or analogue switch given a `U` reference), capacitors with two pads
+(reference letters `C`; one with three or more pads, such as a feedthrough, is walked),
+connectors (as the port map defines them: a library starting `Connector` or reference
+letters exactly `J`, not a test point or jumper), so a header that carries two enables is
+not followed, and test points. Review a path through any of those by hand: a part on
+the not-walked list can hide a path. A part walked although it does not conduct can
+only cause a failure, and the message names it. A header from a custom library with a
+reference such as `CN1` is walked, and the message says so.
 
-When it fails: if the path runs through a net that is really a supply rail (the message
-ends `(if 3V3 is a supply rail, declare it in specs.SUPPLY_NETS; if it is a signal, this
-path is real)`), declare it in `SUPPLY_NETS`; if it is a signal, the path is a real second
-path (a bridge, a parallel resistor, a tie to a supply): remove it or move it to the
-shared side of the link; if the design means the regulators to come up together, they
-cannot be enabled alone, so take them out of `ENABLE_LINKS`. It records `enable links`,
+When it fails:
+
+- If the path runs through a net that is really a supply rail, declare it in
+  `SUPPLY_NETS` (the message ends `(if 3V3 is a supply rail, declare it in
+  specs.SUPPLY_NETS; if it is a signal, this path is real)`). If the net is named like
+  a ground (`0V`, `AGND`, `DGND`, `PGND`, `VSS`), the message points at `GROUND_NET`
+  too. The name only changes the words: no net is ever taken as a supply because of
+  its name.
+- If the path runs through a part joined on all its pads because its pinout is not
+  known (the message says `(RN1 has eight pads and is joined on all of them because
+  its pinout is not known)`, and gives no supply hint), use a symbol whose pinout the
+  check knows (a `Device:R_Pack<n>` with your own footprint for a resistor array), or
+  give an IC or module a `U` or `A` reference.
+- If no link is found and a connector sits on both nets, a header used as the link
+  takes the reference `JP`.
+- If it is a real second path (a bridge, a parallel resistor, a tie to a supply),
+  remove it or move it to the shared side of the link.
+- If the design means the regulators to come up together, they cannot be enabled
+  alone, so take them out of `ENABLE_LINKS`.
+
+It records `enable links`,
 `{net: {ref: link ref or None}}`, before it fails (a regulator listed on two pads is
 keyed `"U3 pad 4"`).
 

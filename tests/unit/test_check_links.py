@@ -317,7 +317,7 @@ def test_every_regulator_with_a_bypass_is_named() -> None:
 
 # B1: the supply nets are the declared ones, whatever the others are called
 @pytest.mark.parametrize(
-    "middle", ["VBUS_EN", "VCC_EN", "VDD_EN", "VSYS_ON", "VIN_CTRL", "+EN", "GND_SW"]
+    "middle", ["VBUS_EN", "VCC_EN", "VDD_EN", "VSYS_ON", "VIN_CTRL", "+EN"]
 )
 def test_enables_bridged_through_a_net_named_like_a_supply_fail(middle: str) -> None:
     """Walk across a net that is not in SUPPLY_NETS, whatever its name."""
@@ -1015,7 +1015,7 @@ def test_the_parts_on_the_closed_list_are_not_walked(ref: str, kind: str) -> Non
 
 
 def bat54c(toy: Toy, a1: str, a2: str, k: str) -> None:
-    """Add a common-cathode dual diode, its pins named A1, A2 and K as KiCad does."""
+    """Add a common-cathode dual diode with its pins named A1, A2 and K."""
     toy.add(
         "D9",
         "BAT54C",
@@ -1055,8 +1055,12 @@ def test_a_series_dual_diode_beside_the_link_fails() -> None:
     assert check(toy).problems != []
 
 
-def test_diode_pins_are_keyed_by_pad_so_repeated_names_do_not_collapse() -> None:
-    """Give each pad named A an arc to each pad named K."""
+def test_a_diode_with_three_or_more_pads_is_joined_on_all_its_pads() -> None:
+    """Join every pad of a multi-pad diode: its pin names cannot give its pinout.
+
+    This test said the opposite (each A pad to each K pad) until the fourth review: a
+    series pair such as a BAV99 names its common pad K, so names miss a real path.
+    """
     toy = Toy()
     toy.add(
         "D9",
@@ -1064,8 +1068,9 @@ def test_diode_pins_are_keyed_by_pad_so_repeated_names_do_not_collapse() -> None
         "Device:D_Dual",
         {"1": ("N1", "A"), "2": ("N2", "K"), "3": ("N3", "A"), "4": ("N4", "K")},
     )
+    pads = ["1", "2", "3", "4"]
     found = sorted(links.arcs(netlist(toy), "D9"))
-    assert found == [("1", "2"), ("1", "4"), ("3", "2"), ("3", "4")]
+    assert found == sorted((a, b) for a in pads for b in pads if a != b)
 
 
 # should-fix 2: open jumpers are not fitted for the tie rule
@@ -1250,3 +1255,321 @@ def test_a_zero_ohm_pack_element_as_the_only_link_says_a_link_has_two_pads() -> 
         "EN_ALL joins them, with no link on it; RN1 has eight pads: a link must have "
         "two)"
     ]
+
+
+# ----------------------------------------------------------------- fourth review
+def bav99(toy: Toy, one: str, two: str, three: str) -> None:
+    """Add KiCad's Diode:BAV99: a series pair, pads named K, A, K (pad 3 common)."""
+    toy.add(
+        "D9",
+        "BAV99",
+        "Diode:BAV99",
+        {"1": (one, "K"), "2": (two, "A"), "3": (three, "K")},
+    )
+
+
+@pytest.mark.parametrize(
+    ("one", "path"),
+    [("EN_ALL", "(EN_U2 - D9 - EN_ALL)"), ("EN_U3", "(EN_U2 - D9 - EN_U3)")],
+)
+def test_a_series_diode_pair_named_k_a_k_conducts_through_its_common_pad(
+    one: str, path: str
+) -> None:
+    """Fail a BAV99 with pad 1 on EN_ALL or EN_U3 and its common pad 3 on EN_U2."""
+    toy = board()
+    bav99(toy, one, "NC9", "EN_U2")
+    assert any(path in p for p in check(toy).problems), check(toy).problems
+
+
+def test_a_dual_series_pair_of_a_bat54sdw_across_the_enables_fails() -> None:
+    """Fail pads 2 and 3 of a BAT54SDW (named A, K, K, A, K, K) on the two enables."""
+    toy = board()
+    names = ["A", "K", "K", "A", "K", "K"]
+    nets = ["N1", "EN_U3", "EN_U2", "N4", "N5", "N6"]
+    toy.add(
+        "D9",
+        "BAT54SDW",
+        "Diode:BAT54SDW",
+        {str(i + 1): (nets[i], names[i]) for i in range(6)},
+    )
+    assert any("(EN_U2 - D9 - EN_U3)" in p for p in check(toy).problems)
+
+
+def test_a_series_diode_pair_as_a_clamp_to_ground_and_supply_passes() -> None:
+    """Pass a BAV99 with pad 1 on GND, pad 2 on VIN and its common pad on EN_U2."""
+    toy = board()
+    bav99(toy, "GND", "VIN", "EN_U2")
+    assert check(toy).problems == []
+
+
+@pytest.mark.parametrize(
+    ("kind", "names"),
+    [
+        ("Device:D", None),
+        ("Diode:BAV70", ("A", "A", "K")),
+        ("Diode:BAT54C", ("", "", "")),
+    ],
+)
+def test_a_diode_or_after_the_link_still_passes(
+    kind: str, names: tuple[str, str, str] | None
+) -> None:
+    """Pass EN_ALL - R7 - X with X and PG_U1 ORed into EN_U2, whatever the diodes."""
+    toy = board()
+    replace(toy, "R7")
+    check_toy.resistor(toy, "R7", "0", "EN_ALL", "X")
+    if names is None:
+        toy.add("D9", "D", kind, {"1": ("EN_U2", "K"), "2": ("X", "A")})
+        toy.add("D10", "D", kind, {"1": ("EN_U2", "K"), "2": ("PG_U1", "A")})
+    else:
+        nets = ("X", "PG_U1", "EN_U2")
+        toy.add("D9", "D", kind, {str(i + 1): (nets[i], names[i]) for i in range(3)})
+    assert check(toy).problems == []
+
+
+def test_back_to_back_zeners_between_enables() -> None:
+    """Pass two two-pad zeners cathode to cathode; fail a three-pad pair in one part.
+
+    The walk follows a two-pad diode only in its forward direction and ignores
+    reverse breakdown, so a back-to-back pair of separate zeners is no path. A pair in
+    one three-pad part is joined on all pads, so it fails.
+    """
+    toy = board()
+    toy.add("D9", "Z", "Device:D_Zener", {"1": ("MID", "K"), "2": ("EN_U2", "A")})
+    toy.add("D10", "Z", "Device:D_Zener", {"1": ("MID", "K"), "2": ("EN_U3", "A")})
+    assert check(toy).problems == []
+    toy = board()
+    toy.add(
+        "D9",
+        "Z",
+        "Diode:2BZX84Cxx",
+        {"1": ("EN_U2", "K"), "2": ("EN_U3", "K"), "3": ("N3", "A")},
+    )
+    assert check(toy).problems != []
+
+
+# should-fix 1: DIP switches by their pinout
+def dip(toy: Toy, pads: dict[str, str]) -> None:
+    """Add SW1, a Switch:SW_DIP_x02 (elements 1-4 and 2-3), pins unnamed."""
+    toy.add("SW1", "SW", "Switch:SW_DIP_x02", {p: (n, "") for p, n in pads.items()})
+
+
+@pytest.mark.parametrize(
+    "far", [("GND", "GND"), ("VIN", "VIN"), ("PU1", "PU2")], ids=["gnd", "vin", "pulls"]
+)
+def test_a_dip_switch_with_one_element_per_enable_passes(far: tuple[str, str]) -> None:
+    """Pass SW_DIP_x02 elements 1-4 on EN_U2 and 2-3 on EN_U3, to GND, VIN or pulls."""
+    toy = board()
+    dip(toy, {"1": "EN_U2", "4": far[0], "2": "EN_U3", "3": far[1]})
+    if far[0] == "PU1":
+        check_toy.resistor(toy, "R20", "10k", "PU1", "VIN")
+        check_toy.resistor(toy, "R21", "10k", "PU2", "VIN")
+    assert check(toy).problems == []
+
+
+def test_a_dip_switch_element_across_the_enables_still_fails() -> None:
+    """Fail element 1-4 with pad 1 on EN_U2 and pad 4 on EN_U3."""
+    toy = board()
+    dip(toy, {"1": "EN_U2", "4": "EN_U3", "2": "S2", "3": "S3"})
+    assert any("(EN_U2 - SW1 - EN_U3)" in p for p in check(toy).problems)
+
+
+# should-fix 2: a part joined by default says so, and gets no supply hint
+def test_a_path_through_a_part_joined_by_default_says_its_pinout_is_not_known() -> None:
+    """Name RN1's pad count and why it is joined on all pads; give no supply hint."""
+    toy = board()
+    multi(
+        toy,
+        "RN1",
+        "Custom_Resistors:CAY16",
+        {
+            "1": "EN_U2",
+            "8": "EN_U3",
+            "2": "a",
+            "7": "b",
+            "3": "c",
+            "6": "d",
+            "4": "e",
+            "5": "f",
+        },
+    )
+    report = check(toy)
+    assert (
+        "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the enable "
+        "net EN_U3 of U3 (EN_U2 - RN1 - EN_U3) (RN1 has eight pads and is joined on "
+        "all of them because its pinout is not known)"
+    ) in report.problems
+
+
+def test_a_module_path_names_the_module_and_not_the_signals_as_supplies() -> None:
+    """Name M1 as joined by default, and do not suggest declaring GPIO1 a supply."""
+    toy = board()
+    toy.add(
+        "M1",
+        "Pico",
+        "Module:Pico",
+        {"1": ("GND", "GND"), "10": ("GPIO1", "GP1"), "11": ("GPIO2", "GP2")},
+    )
+    check_toy.resistor(toy, "R30", "1k", "GPIO1", "EN_U2")
+    check_toy.resistor(toy, "R31", "1k", "GPIO2", "EN_U3")
+    report = check(toy)
+    assert any(
+        "(M1 has three pads and is joined on all of them because its pinout is not "
+        "known)" in p
+        for p in report.problems
+    ), report.problems
+    assert not any("supply rail" in p for p in report.problems)
+
+
+# follow-up: A is not walked
+def test_a_module_with_reference_letters_a_is_not_walked() -> None:
+    """Pass A1 driving each enable through 1k: A1 is on the not-walked list."""
+    toy = board()
+    toy.add(
+        "A1",
+        "ESP32",
+        "Module:ESP32-WROOM",
+        {"1": ("GND", "GND"), "10": ("GPIO1", "IO1"), "11": ("GPIO2", "IO2")},
+    )
+    check_toy.resistor(toy, "R30", "1k", "GPIO1", "EN_U2")
+    check_toy.resistor(toy, "R31", "1k", "GPIO2", "EN_U3")
+    assert check(toy).problems == []
+
+
+# should-fix 3: a header and shunt as the link
+def test_a_two_pad_part_with_reference_jp_is_a_link_from_any_library() -> None:
+    """Take JP7, a Connector_Generic header with a shunt, as the link."""
+    toy = board()
+    replace(toy, "R7")
+    toy.add(
+        "JP7",
+        "Shunt",
+        "Connector_Generic:Conn_01x02",
+        {"1": ("EN_U2", "Pin_1"), "2": ("EN_ALL", "Pin_2")},
+    )
+    report = check(toy)
+    assert report.problems == []
+    assert report.links["U2"] == "JP7"
+
+
+def test_a_connector_on_both_nets_is_named_as_not_walked() -> None:
+    """Say J7 is on both nets but connectors are not walked, and what to do."""
+    toy = board()
+    replace(toy, "R7")
+    toy.add(
+        "J7",
+        "Conn",
+        "Connector:Conn_01x02_Pin",
+        {"1": ("EN_U2", "Pin_1"), "2": ("EN_ALL", "Pin_2")},
+    )
+    assert check(toy).problems == [
+        "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL (J7 is on both "
+        "nets but is not walked: connectors are not; a header used as a link takes "
+        "the reference JP)"
+    ]
+
+
+# should-fix 4: everything ties unless it is a real resistor, a diode or not fitted
+@pytest.mark.parametrize(
+    ("ref", "kind", "value"),
+    [
+        ("FB9", "Device:FerriteBead", "600R"),
+        ("L9", "Device:L", "1u"),
+        ("NT9", "Device:NetTie_2", "NetTie"),
+        ("F9", "Device:Fuse", "F"),
+        ("JP9", "MyLib:SolderJumper_2_Bridged", "Bridged"),
+        ("JP9", "Jumper:Jumper_2_Bridged", "J"),
+        ("X9", "Mystery:Part2", "?"),
+    ],
+)
+def test_any_walked_two_pad_part_from_the_enable_to_a_supply_is_a_tie(
+    ref: str, kind: str, value: str
+) -> None:
+    """Fail a ferrite, inductor, net tie, fuse, bridged jumper or unknown part."""
+    toy = board()
+    toy.add(ref, value, kind, {"1": ("EN_U2", "1"), "2": ("VIN", "2")})
+    assert check(toy).problems == [
+        f"U2 pad 3: {ref} ({value}) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, "
+        "so the link R7 controls nothing"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ref", "kind", "value", "names"),
+    [
+        ("R9", "Device:R", "10k", ("~", "~")),
+        ("R9", "Device:R", "10k DNP", ("~", "~")),
+        ("RT9", "Device:Thermistor_NTC", "10k", ("~", "~")),
+        ("R9", "Device:R", "DNP", ("~", "~")),
+        ("D9", "Device:D", "D", ("K", "A")),
+        ("D9", "Custom:Diode", "D", ("1", "2")),
+        ("JP9", "Jumper:Jumper_NO_Small", "J", ("1", "2")),
+        ("JP9", "Jumper:SolderJumper_2_Open", "Open", ("A", "B")),
+        ("JP9", "Connector_Generic:Conn_01x02", "NC", ("1", "2")),
+        ("C9", "Device:C", "100n", ("~", "~")),
+        ("J9", "Connector_Generic:Conn_01x02", "J", ("1", "2")),
+    ],
+)
+def test_a_real_resistor_a_diode_or_an_unfitted_part_to_a_supply_is_no_tie(
+    ref: str, kind: str, value: str, names: tuple[str, str]
+) -> None:
+    """Pass a pull, a clamp diode, an open or normally-open jumper, a cap, a header."""
+    toy = board()
+    toy.add(ref, value, kind, {"1": ("VIN", names[0]), "2": ("EN_U2", names[1])})
+    assert check(toy).problems == []
+
+
+def test_a_ferrite_between_a_rail_and_a_pull_up_network_is_no_tie() -> None:
+    """Pass VIN - FB1 - VIN_F with 100k pull-ups from both enables to VIN_F declared."""
+    toy = board()
+    toy.add(
+        "FB1", "600R", "Device:FerriteBead", {"1": ("VIN", "1"), "2": ("VIN_F", "2")}
+    )
+    check_toy.resistor(toy, "R20", "100k", "EN_U2", "VIN_F")
+    check_toy.resistor(toy, "R21", "100k", "EN_U3", "VIN_F")
+    assert check(toy, supplies=["GND", "VIN", "VIN_F"]).problems == []
+
+
+def test_a_ferrite_then_a_zero_ohm_off_the_enable_is_a_tie() -> None:
+    """Fail EN_U2 - FB9 - X - R9 (0) - GND: X is held to the enable."""
+    toy = board()
+    toy.add("FB9", "600R", "Device:FerriteBead", {"1": ("EN_U2", "1"), "2": ("X", "2")})
+    check_toy.resistor(toy, "R9", "0", "X", "GND")
+    assert check(toy).problems == [
+        "U2 pad 3: R9 (0) ties X to GND, a net in specs.SUPPLY_NETS, so the link R7 "
+        "controls nothing"
+    ]
+
+
+# follow-up: a net named like a ground points at GROUND_NET
+@pytest.mark.parametrize("ground", ["0V", "AGND", "DGND", "PGND", "VSS", "GND_SW"])
+def test_a_path_through_an_undeclared_net_named_like_ground_points_at_ground_net(
+    ground: str,
+) -> None:
+    """Say GROUND_NET or SUPPLY_NETS, and never treat the net as ground by name."""
+    toy = board()
+    check_toy.resistor(toy, "R20", "100k", "EN_U2", ground)
+    check_toy.resistor(toy, "R21", "100k", "EN_U3", ground)
+    report = check(toy)
+    assert (
+        "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the enable "
+        f"net EN_U3 of U3 (EN_U2 - R20 - {ground} - R21 - EN_U3) (if {ground} is a "
+        "ground, set specs.GROUND_NET to it or declare it in specs.SUPPLY_NETS; if it "
+        "is a signal, this path is real)"
+    ) in report.problems
+
+
+# follow-up: a custom-library header is walked, and the message says why
+def test_a_custom_library_header_on_the_path_says_it_is_not_a_connector_here() -> None:
+    """Explain that CN1 is walked although J5 would not be."""
+    toy = board()
+    toy.add(
+        "CN1",
+        "Hdr",
+        "MyConn:Header_1x02",
+        {"1": ("EN_U2", "1"), "2": ("EN_U3", "2")},
+    )
+    assert any(
+        "(EN_U2 - CN1 - EN_U3) (CN1 is walked: only a part from a Connector library "
+        "or with reference letters J is a connector)" in p
+        for p in check(toy).problems
+    ), check(toy).problems

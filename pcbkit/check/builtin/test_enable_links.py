@@ -6,7 +6,8 @@ from the schematic. What the project gives, in ``specs.py``:
 * ``ENABLE_LINKS``: ``{enable net: [(regulator ref, enable pad)]}``, in the pad numbers
   the netlist writes. Each regulator on the shared net ``enable net`` must reach it
   through exactly one link of its own (a two-pad 0 ohm or not-fitted resistor,
-  reference ``R``, or a two-pad part from a ``Jumper`` library), anywhere on
+  reference ``R``, or a two-pad jumper: a ``Jumper`` library part or reference
+  ``JP``), anywhere on
   the path, such that with the link taken out its enable net reaches no shared net of
   any row and no other listed regulator's enable net (``links`` walks the parts
   between). ``{}`` says no enable is shared.
