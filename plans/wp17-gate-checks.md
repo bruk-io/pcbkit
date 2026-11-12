@@ -552,3 +552,22 @@ Every slice splits a pure engine (positions and polygons in, verdict out), unit-
 - `pcbkit/check/builtin/test_circuit.py`
 - `pcbkit/check/dc.py`
 - `tests/integration/test_check_plugin.py`
+
+## Slice 0 answers (2026-11-12)
+
+The owner deferred every call to the plan's recommendation. Recorded here so the slices can start.
+
+| Call | Answer |
+|---|---|
+| Gate names | `sch`, `place`, `route`, `order` |
+| Schematic gate without pcbnew | Yes: `pcbkit check --gate sch` runs wherever kicad-cli is installed |
+| Group names | `power`, `ports`, `bringup` (WP17); `planes`, `placement` (WP18) |
+| D4 shape sheet | As written, every row |
+| Pins in tables | Pad numbers, never pin names; the `walk-fault-states` example changes to match |
+| `CAP_DERATE` ceiling | 0.8: the table can only tighten. Revisit if a board needs a film capacitor at full voltage |
+| `max_ohm` default | 10 Ω |
+| What counts as a connector | Symbol library starts with `Connector`, or reference starts with `J` |
+| Validator command | `pcbkit specs` |
+| `parts stock` exit codes | 0 all `ok`, 1 otherwise, 2 when Mouser could not be asked and nothing was cached |
+| Adjacent pads in the mis-plug check | Recorded, not failed; `review-misplug` keeps that judgement |
+| WP17 scope | Kept whole (B and D stay in) |
