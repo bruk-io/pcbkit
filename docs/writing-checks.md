@@ -159,7 +159,8 @@ A check runs once its inputs exist, and `pcbkit check --gate GATE` runs only the
 that can run at `GATE`: `sch`, `place`, `route` or `order`, in that order. The checks left
 out are listed as `waiting` in `results.json`, and the run counts as partial until the
 `order` gate. `--gate sch` needs only kicad-cli, so it runs before the project's `.venv`
-exists.
+exists. After a gated run `pcbkit check` prints one line
+with the count of checks waiting for a later gate.
 
 pcbkit works out a check's gate from the fixtures it asks for: `board` makes it `route`
 and a check that needs neither `board` nor the fab files is `sch`. The `fab_dir` fixture

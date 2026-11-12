@@ -415,7 +415,34 @@ def check_cmd(expression: str | None, gate: str | None) -> None:
     results = check_results.results_dir(proj) / check_results.RESULTS_FILE
     if results.is_file():
         click.echo(f"Results: {results.relative_to(proj.root)} (pcbkit report)")
+        held = _gate_note(results)
+        if held:
+            click.echo(held)
     click.get_current_context().exit(code)
+
+
+def _gate_note(results: Path) -> str | None:
+    """Return the line saying what a gated run left for later, or None.
+
+    Read from ``results.json``: nothing for a run with no gate or at the ``order``
+    gate (a whole run), else the count of checks waiting for a later gate, or a line
+    without a count when the gate held nothing back.
+    """
+    import json
+
+    try:
+        data = json.loads(results.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    gate = data.get("gate") if isinstance(data, dict) else None
+    if gate not in GATES or gate == GATES[-1]:
+        return None
+    held = len(data.get("waiting") or {})
+    advice = "run `pcbkit check` with no `--gate` before you order boards"
+    if not held:
+        return f"Stopped at the {gate} gate: {advice}."
+    plural = "" if held == 1 else "s"
+    return f"{held} check{plural} waiting for a later gate (at {gate}): {advice}."
 
 
 @cli.command("mutants")
