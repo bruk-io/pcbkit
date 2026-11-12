@@ -150,19 +150,21 @@ Context. A number is unknown when any of these touch it:
 
 A range whose one end is unknown makes the other unknown too.
 
-Units. A number's stated unit is the unit glued to it ("19V", "4.7k", "85%", "25°C")
-or the word right after it across white space ("19 V", "45  µA", and a unit column
-that ``-layout`` put on the next line), when that word is a unit of ``_UNITS``, a
-prefix, or a prefix and a unit, or is "%" or "°" with "C", "F" or "K". Reading a
-unit across a line break only refuses more: measured on three datasheets, every unit
-found that way was the row's own. Where the value's number and
-the page's number both state a unit, the two must be the same text, after the
-folding above (micro sign and mu, ohm sign and omega) and with a "u" prefix read as
-micro: "10 Ω" is refused against "10 kΩ", "3.3 V" against "3.3 A", "100 nF" against
-"100 µF". Nothing else is equated: "K" is not "k" (it may be kelvin) and "ohm" is not
-"Ω", so those are refused. Where either side states none ("1.25" against "1.25 V",
-or a page whose unit is in another cell, on another line or before the number, as
-in "kHz 500") the units are not compared.
+Units. A number's stated unit is the unit glued to it ("19V", "4.7k", "85%",
+"25°C"); the unit joined to it by a hyphen, as TI writes component values ("6.8-pF",
+"10-kΩ", "60-V": a hyphen and then a word that is a unit, never a number, so the
+range "2.7-3.6 V" states nothing for 2.7); or the word right after it across white
+space ("19 V", "45  µA", and a unit column that ``-layout`` put on the next line).
+The unit is a word of ``_UNITS``, a prefix, or a prefix and a unit, or is "%" or "°"
+with "C", "F" or "K". Reading a unit across a line break only refuses more: measured
+on three datasheets, every unit found that way was the row's own. Where the value's
+number and the page's number both state a unit, the two must be the same text, after
+the folding above (micro sign and mu, ohm sign and omega) and with a "u" prefix read
+as micro: "10 Ω" is refused against "10 kΩ", "3.3 V" against "3.3 A", "100 nF"
+against "100 µF" or "100-µF". Nothing else is equated: "K" is not "k" (it may be
+kelvin) and "ohm" is not "Ω", so those are refused. Where either side states none
+("1.25" against "1.25 V", or a page whose unit is in another cell after other
+numbers or before the number, as in "kHz 500") the units are not compared.
 
 Values. The value is read like a page, with the same rules, and every number in it must
 be known. A value with an unknown character anywhere, or with no number at all, is
@@ -645,8 +647,9 @@ def _stated_unit(lexemes: Sequence[_Lexeme], token: _Token) -> str:
     """Return the unit the text states for a number: glued, or after plain spaces.
 
     A unit is a word of the closed list (``_is_unit``), "%", or "°" and "C", "F" or
-    "K". It may be glued ("19V", "85%", "25°C") or follow after white space of any
-    kind ("19 V", "45  µA", "1.22\\n   V"). A "u" prefix is micro.
+    "K". It may be glued ("19V", "85%", "25°C"), joined by a hyphen ("6.8-pF") or
+    follow after white space of any kind ("19 V", "45  µA", "1.22\\n   V"). A "u"
+    prefix is micro.
     """
     if token.kind not in _SIGNABLE:
         return ""
@@ -654,7 +657,15 @@ def _stated_unit(lexemes: Sequence[_Lexeme], token: _Token) -> str:
     if not unit:
         at = token.word + 1
         between = _get(lexemes, at)
-        if between is not None and between.lex is _Lex.SPACE:
+        joined = _get(lexemes, at + 1)
+        if (
+            _is_char(between, "-")
+            and joined is not None
+            and joined.lex is _Lex.WORD
+            and _is_unit(joined.text)
+        ):
+            at += 1  # "6.8-pF", "60-V": a unit joined by a hyphen
+        elif between is not None and between.lex is _Lex.SPACE:
             at += 1
         following = _get(lexemes, at)
         if following is None:

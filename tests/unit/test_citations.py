@@ -456,6 +456,7 @@ def test_a_sign_in_the_value_needs_the_same_sign_on_the_page(
         ("1", "Pin 4 1M mode input"),
         ("1", "Pin 4 1H hold input"),
         ("1", "Pin 4 1W write input"),
+        ("3", "Pin 7 3H input"),
         ("10 kΩ", "Pull-up resistor 10K to VDD"),
         ("1 MΩ", "Bleed resistor 1M to ground"),
         # Digits and "Ah": hex or ampere-hours, so neither.
@@ -547,6 +548,51 @@ def test_a_unit_stated_on_one_side_only_is_not_compared(
 ) -> None:
     """Accept the same unit however it is spelt, and a unit only one side states."""
     assert check_citation(value, quote, 1, [quote if page is None else page]) is None
+
+
+CAPACITANCE = "6.8-pF capacitance is recommended for R2 of 100-kΩ resistance"
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        # H1 of the fifth review: a unit joined by a hyphen was never read.
+        ("6.8 nF", CAPACITANCE),
+        ("6.8 µF", CAPACITANCE),
+        ("100 Ω", CAPACITANCE),
+        ("6.8-nF", "6.8-pF capacitance is recommended"),  # the hyphen in the value
+        ("6.8-nF", "6.8 pF capacitance is recommended"),
+        ("10 Ω", "Use a 10-kΩ pullup resistor"),
+        ("100 µF", "Bypass with a 100-nF capacitor"),
+        ("4.7 nF", "Place a 4.7-µF ceramic capacitor"),
+        ("±20 mV", "60-V VDS(MAX) and ±20-V VGS(MAX)"),
+        ("60 A", "Rated 60-V VDS(MAX) here"),
+        ("10 µs", "PH (10-ns transient from ground)"),
+    ],
+)
+def test_a_unit_joined_by_a_hyphen_is_compared(value: str, quote: str) -> None:
+    """Refuse a value whose unit differs from one the page joins with a hyphen."""
+    assert rule(check_citation(value, quote, 1, [quote])) is Rule.NUMBER
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("6.8 pF", CAPACITANCE),
+        ("100 kΩ", CAPACITANCE),
+        ("6.8-pF", "6.8-pF capacitance is recommended"),
+        ("6.8-pF", "6.8 pF capacitance is recommended"),
+        ("6.8", "6.8-pF capacitance is recommended"),  # no unit in the value
+        ("60 V", "Rated 60-V VDS(MAX) here"),
+        ("±20 V", "60-V VDS(MAX) and ±20-V VGS(MAX)"),
+        ("4.5 V to 17 V", "4.5-V to 17-V Input"),
+        ("2.7 V", "Supply voltage 2.7-3.6 V range"),  # a range dash, not a unit
+        ("10 ns", "PH (10-ns transient from ground)"),
+    ],
+)
+def test_a_unit_joined_by_a_hyphen_backs_the_same_unit(value: str, quote: str) -> None:
+    """Accept the same unit with or without the hyphen, and a range's first end."""
+    assert check_citation(value, quote, 1, [quote]) is None
 
 
 def test_a_quote_may_not_end_between_a_number_and_its_glued_unit() -> None:
