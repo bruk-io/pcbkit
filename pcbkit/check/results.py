@@ -53,6 +53,15 @@ BUILTIN_GROUPS = {
     "test_copper": "copper",
     "test_circuit": "circuit",
     "test_esp32s3": "esp32s3",
+    # The WP17 netlist checks, one module each; a module that is not written yet
+    # switches on nothing.
+    "test_faults": "power",
+    "test_power_paths": "power",
+    "test_enable_links": "power",
+    "test_semis": "power",
+    "test_ports": "ports",
+    "test_mating": "ports",
+    "test_i2c_expected": "bringup",
 }
 
 # The design gates, earliest first. A gated run keeps the checks up to its own gate.

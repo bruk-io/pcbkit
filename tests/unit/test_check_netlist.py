@@ -306,6 +306,29 @@ def test_kicad_10_pin_functions_lose_the_number_kicad_added(kicad10: Netlist) ->
     assert ("U1", "2", "GND") in kicad10.nets["GND"]
 
 
+def test_functions_give_the_suffix_stripped_name_of_each_pad(
+    kicad10: Netlist,
+) -> None:
+    """Return ``{pad: function}``: ``VIN`` for pad 3, not ``VIN_3``; "" when unnamed."""
+    assert kicad10.functions("U1") == {"3": "VIN", "1": "IO_1", "2": "GND"}
+    assert kicad10.functions("R1") == {"1": "", "2": ""}
+
+
+def test_functions_of_kicad_9_keep_the_name_as_written(kicad9: Netlist) -> None:
+    """Keep ``IO_1`` and the unnamed pin's ``~`` when no suffix was added."""
+    assert kicad9.functions("U1")["1"] == "IO_1"
+    assert kicad9.functions("R1") == {"1": "~", "2": "~"}
+
+
+def test_functions_of_a_reference_that_is_not_listed_is_empty(
+    kicad10: Netlist,
+) -> None:
+    """Give an empty dict, and a copy the caller may change."""
+    assert kicad10.functions("U99") == {}
+    kicad10.functions("U1")["3"] = "changed"
+    assert kicad10.functions("U1")["3"] == "VIN"
+
+
 def test_kicad_9_pin_functions_are_kept_as_written(kicad9: Netlist) -> None:
     """Keep ``IO_1`` on pin 1 as it is: KiCad 9 added no suffix, so none is removed."""
     assert kicad9.nets["VIN"] == [

@@ -58,6 +58,7 @@ class Netlist:
         suffixed = _suffixed_pin_names(tree)
         self.pin_net: dict[tuple[str, str], str] = {}
         self.nets: dict[str, list[tuple[str, str, str]]] = {}
+        self._functions: dict[str, dict[str, str]] = {}
         for net in findall(find(tree, "nets"), "net"):
             name = str(find(net, "name")[1]).lstrip("/")
             nodes = []
@@ -70,6 +71,7 @@ class Netlist:
                     func = func[: -len(pin) - 1]
                 nodes.append((ref, pin, func))
                 self.pin_net[(ref, pin)] = name
+                self._functions.setdefault(ref, {})[pin] = func
             self.nets[name] = nodes
 
     @classmethod
@@ -85,6 +87,17 @@ class Netlist:
     def net(self, ref: str, pin: Any) -> str | None:
         """Return the net on pin ``pin`` of ``ref``, or None if it is not listed."""
         return self.pin_net.get((ref, str(pin)))
+
+    def functions(self, ref: str) -> dict[str, str]:
+        """Return ``{pad: function}`` for the connected pads of ``ref``.
+
+        The function is the pin name the symbol gives, with KiCad 10's ``_<pad>``
+        suffix removed ("VIN" for pad 3, not "VIN_3"). A pad with no pinfunction in the
+        netlist (a passive pin) maps to "", and KiCad 9's unnamed pin keeps its "~". A
+        pad on no net is missing, as it is from ``nets``, and a reference that is not
+        listed gives an empty dict.
+        """
+        return dict(self._functions.get(ref, {}))
 
     def refs_on(self, net: str) -> set[str]:
         """Return the references that have a pin on ``net``."""

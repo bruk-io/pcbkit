@@ -589,8 +589,10 @@ def test_built_in_modules_are_collected_only_for_the_groups_switched_on(
     assert collected([]) == set()
     assert collected(["circuit"]) == {"test_circuit"}
     assert collected(["esp32s3", "kicad"]) == {"test_esp32s3", "test_kicad"}
+    # The WP17 groups are known, and switch on nothing until their modules exist.
+    assert collected(["power", "ports", "bringup"]) == set()
     everything = ["kicad", "outputs", "fab", "copper", "circuit", "esp32s3"]
-    assert collected(everything) == {
+    assert collected(everything + ["power", "ports", "bringup"]) == {
         "test_kicad",
         "test_outputs",
         "test_fab",
