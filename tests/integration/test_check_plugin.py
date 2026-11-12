@@ -1209,6 +1209,24 @@ def test_a_supply_limit_row_with_a_bad_operator_is_recorded_as_not_ok(
     assert limits["odd"] == {"value": 1.0, "op": "==", "limit": 2.0, "ok": False}
 
 
+def test_a_later_supply_limit_that_raises_does_not_hide_a_bad_operator(
+    tmp_path: Path,
+) -> None:
+    """Fail with the first error, the bad operator, not a later row's exception."""
+    extra = (
+        '\nSUPPLY_LIMITS = [("odd", 1.0, "==", 2.0), lambda nl: 1 / 0, '
+        '("text", "a", "<", 2.0)]\n'
+    )
+    result = _circuit_run(tmp_path, "first", extra=extra, only="test_supply_pins")
+    entry = result.entry("test_supply_pins_in_range")
+    assert entry["outcome"] == "failed"
+    assert "SUPPLY_LIMITS: 'odd': operator '==' is not < or <=" in entry["message"]
+    assert "ZeroDivisionError" not in entry["message"]
+    assert entry["numbers"]["supply limits"] == {
+        "odd": {"value": 1.0, "op": "==", "limit": 2.0, "ok": False}
+    }
+
+
 def test_capacitor_failures_come_in_a_fixed_order(tmp_path: Path) -> None:
     """Report reverse bias, then a missing rating, then an unknown CAP_DERATE part
     number, then a capacitor over its target, each only once the one before is fixed.

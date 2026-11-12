@@ -294,22 +294,27 @@ def test_supply_pins_in_range(
     limits: dict[str, Any] = {}
     bad_operator = None
     for entry in specs.SUPPLY_LIMITS:
-        what, value, op, limit = entry(nl) if callable(entry) else entry
-        valid = op in ("<", "<=")
+        try:
+            what, value, op, limit = entry(nl) if callable(entry) else entry
+            valid = op in ("<", "<=")
+            # a row with a bad operator is recorded too, as not ok
+            ok = valid and bool(value < limit if op == "<" else value <= limit)
+            if valid and not ok:
+                problems.append(f"{what}: {value:g} {op} {limit:g} is false")
+        except Exception:
+            if bad_operator is None:
+                raise
+            break  # the first error stands: a later row that raises cannot hide it
         if not valid:
             bad_operator = bad_operator or (
                 f"SUPPLY_LIMITS: {what!r}: operator {op!r} is not < or <="
             )
-        # a row with a bad operator is recorded too, as not ok
-        ok = valid and bool(value < limit if op == "<" else value <= limit)
         limits[_unique(limits, what)] = {
             "value": _plain(value),
             "op": op,
             "limit": _plain(limit),
             "ok": ok,
         }
-        if valid and not ok:
-            problems.append(f"{what}: {value:g} {op} {limit:g} is false")
     record("supply pins", pins)
     record("supply limits", limits)
     if bad_operator is not None:
