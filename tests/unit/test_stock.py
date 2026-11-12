@@ -695,9 +695,11 @@ def test_max_age_is_in_hours(board: Path, shop: Shop) -> None:
     assert len(shop.asked) == 1
 
 
-def seed_stale(shop: Shop, age: timedelta = timedelta(days=200)) -> None:
-    """Cache a good answer (stock 5000) fetched ``age`` ago."""
-    stocked(shop, "5000")
+def seed_stale(
+    shop: Shop, age: timedelta = timedelta(days=200), count: Any = "5000"
+) -> None:
+    """Cache a good answer (stock ``count``) fetched ``age`` ago."""
+    stocked(shop, count)
     seed(
         everything_query(),
         {"SearchResults": {"Parts": shop.parts}},
@@ -881,8 +883,8 @@ def test_the_maker_is_matched_by_whole_name_or_known_alias(
     assert row["mouser"]["manufacturer"] == mouser_maker
 
 
-def test_a_maker_that_only_starts_the_same_is_another_maker() -> None:
-    found = [mouser_part(CAP, "Murata Power Solutions")]
+def test_a_maker_that_only_starts_the_same_in_characters_is_another_maker() -> None:
+    found = [mouser_part(CAP, "Murataland")]
     assert one_line_row(found, maker="Murata")["status"] == "ambiguous"
 
 
@@ -1147,3 +1149,203 @@ def test_build_row_needs_no_network() -> None:
     row = stock.build_row(line, 2, {CAP: stock.Answer(entry)}, now)
     assert (row["status"], row["needed"], row["age_hours"]) == ("short", 4, 6.0)
     assert row["fetched"] == "2026-11-11T18:00:00+00:00"
+
+
+# --- the second review (N1 to N8) ---------------------------------------------------
+
+
+def _line(item: int, qty: int, mpn: str, mfr: str = "", ref: str = "U1") -> BomLine:
+    return BomLine(item, qty, (ref,), mfr, mpn, "x", "", "SOIC", False)
+
+
+NOW = datetime(2026, 11, 12, tzinfo=timezone.utc)
+
+
+def _answers(found: list[dict[str, Any]], *numbers: str) -> dict[str, Any]:
+    entry = cache.Entry({"SearchResults": {"Parts": found}}, NOW)
+    return {number: stock.Answer(entry) for number in numbers}
+
+
+def test_one_part_bought_by_two_numbers_is_judged_on_both_through_the_cli(
+    board: Path, shop: Shop
+) -> None:
+    """N1: U1 by the maker's number, U2 by Mouser's; one Mouser part, stock 1."""
+    write_file(
+        board / "design.py",
+        PRELUDE
+        + 'part("U1", "Amp:LM358", "LM358", "x:soic8", {}, mfr="Texas Instruments",'
+        ' mpn="LM358DR")\n'
+        'part("U2", "Amp:LM358", "LM358", "x:soic8", {}, mfr="Texas Instruments",'
+        ' mpn="595-LM358DR")\n',
+    )
+    shop.parts = [
+        mouser_part("LM358DR", "Texas Instruments", "1", MouserPartNumber="595-LM358DR")
+    ]
+    result = run()
+    found = json.loads(result.output)
+    assert [row["mpn"] for row in found] == ["LM358DR", "595-LM358DR"]
+    assert [row["status"] for row in found] == ["short", "short"]
+    assert [row["needed_total"] for row in found] == [2, 2]
+    assert result.exit_code == 1
+
+
+def test_one_part_under_two_texts_is_summed_without_a_mouser_number() -> None:
+    """The same part with no MouserPartNumber is keyed on its number and maker."""
+    found = [mouser_part("LM358DR", "Texas Instruments", "1", MouserPartNumber=None)]
+    lines = [_line(1, 1, "LM358DR", "Texas Instruments"), _line(2, 1, "lm-358dr")]
+    got = stock.build_rows(lines, 1, _answers(found, "LM358DR", "lm-358dr"), NOW)
+    assert [row["needed_total"] for row in got] == [2, 2]
+    assert [row["status"] for row in got] == ["short", "short"]
+
+
+def test_the_same_number_by_two_makers_is_two_parts_not_one_total() -> None:
+    found = [
+        mouser_part(CAP, "Murata", "5", MouserPartNumber="81-A"),
+        mouser_part(CAP, "Another Maker", "5", MouserPartNumber="999-B"),
+    ]
+    lines = [_line(1, 3, CAP, "Murata"), _line(2, 4, CAP, "Another Maker")]
+    got = stock.build_rows(lines, 1, _answers(found, CAP), NOW)
+    assert [row["needed_total"] for row in got] == [3, 4]
+    assert [row["status"] for row in got] == ["ok", "ok"]
+
+
+def test_no_mpn_lines_have_no_total() -> None:
+    lines = [_line(1, 3, "", ref="R1"), _line(2, 4, "", ref="R2")]
+    got = stock.build_rows(lines, 1, {}, NOW)
+    assert [row["status"] for row in got] == ["no-mpn", "no-mpn"]
+    assert [row["needed_total"] for row in got] == [None, None]
+    assert [row["needed"] for row in got] == [3, 4]
+
+
+def test_lines_that_matched_no_part_are_summed_by_their_number() -> None:
+    lines = [_line(1, 3, "ZZZ-1"), _line(2, 4, "zzz1"), _line(3, 5, "OTHER-2")]
+    answers = _answers([mouser_part("QQQ", "x")], "ZZZ-1", "zzz1", "OTHER-2")
+    got = stock.build_rows(lines, 1, answers, NOW)
+    assert [row["status"] for row in got] == ["not-found"] * 3
+    assert [row["needed_total"] for row in got] == [7, 7, 5]
+    not_asked = stock.build_rows(lines[:2], 1, {}, NOW)
+    assert [row["status"] for row in not_asked] == ["not-asked"] * 2
+    assert [row["needed_total"] for row in not_asked] == [7, 7]
+
+
+@pytest.mark.parametrize(
+    ("line_maker", "mouser_maker"),
+    [
+        ("Microchip", "Microchip Technology"),
+        ("Espressif", "Espressif Systems"),
+        ("Vishay", "Vishay Semiconductors"),
+        ("Vishay", "Vishay / Dale"),
+        ("Infineon", "Infineon Technologies"),
+        ("Bosch", "Bosch Sensortec"),
+        ("NXP", "NXP Semiconductors"),
+        ("JST", "JST Commercial"),
+        ("Sullins", "Sullins Connector Solutions"),
+        ("Panasonic", "Panasonic Industry"),
+        ("Monolithic Power Systems", "Monolithic Power Systems (MPS)"),
+        ("Alpha & Omega", "Alpha & Omega Semiconductor"),
+        ("Analog Devices", "Analog Devices / Maxim Integrated"),
+        ("Microchip Technology", "Microchip"),
+    ],
+)
+def test_a_maker_is_also_the_leading_whole_words_of_a_longer_name(
+    line_maker: str, mouser_maker: str
+) -> None:
+    assert stock.same_maker(line_maker, mouser_maker)
+    assert stock.same_maker(mouser_maker, line_maker)
+    row = one_line_row([mouser_part(CAP, mouser_maker)], maker=line_maker)
+    assert row["status"] == "ok"
+
+
+@pytest.mark.parametrize(
+    ("one", "other"),
+    [
+        ("TI", "Tiny Co"),
+        ("Murata", "Murataland"),
+        ("Vishay", "Vishayx Semiconductors"),
+        ("Power Systems", "Monolithic Power Systems"),
+        ("Alpha", "Omega Alpha"),
+        ("", "Murata"),
+    ],
+)
+def test_a_maker_is_never_a_character_prefix_or_a_trailing_part(
+    one: str, other: str
+) -> None:
+    assert not stock.same_maker(one, other)
+    assert not stock.same_maker(other, one)
+
+
+def test_two_parts_that_both_pass_the_looser_maker_test_are_ambiguous() -> None:
+    found = [
+        mouser_part(CAP, "Vishay Semiconductors", MouserPartNumber="78-A"),
+        mouser_part(CAP, "Vishay / Dale", MouserPartNumber="71-B"),
+    ]
+    row = one_line_row(found, maker="Vishay")
+    assert row["status"] == "ambiguous"
+    assert "78-A" in row["notes"][0] and "71-B" in row["notes"][0]
+
+
+def test_a_stale_short_line_is_stale_and_exit_2_through_the_cli(
+    board: Path, shop: Shop, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N3: it would have been `short`, and exit 1, if it were fresh."""
+    seed_stale(shop, count="0")
+    monkeypatch.delenv("MOUSER_API_KEY")
+    result = run()
+    assert result.exit_code == 2
+    assert {row["status"] for row in json.loads(result.output)} == {"stale"}
+    assert any("judged short" in n for n in rows(result)[CAP]["notes"])
+
+
+def test_a_stale_not_found_line_is_stale_and_exit_2() -> None:
+    entry = cache.Entry(
+        {"SearchResults": {"Parts": [mouser_part("QQQ", "x")]}},
+        NOW - timedelta(days=9),
+    )
+    got = stock.build_rows(
+        [_line(1, 1, "ZZZ-1")],
+        1,
+        {"ZZZ-1": stock.Answer(entry)},
+        NOW,
+        max_age=timedelta(hours=24),
+    )
+    assert got[0]["status"] == "stale"
+    assert any("judged not-found" in note for note in got[0]["notes"])
+    assert stock.exit_code(got) == 2
+
+
+def test_status_precedence_is_pinned() -> None:
+    """Not active, then unreadable, then short, then ok; and see the docs."""
+    bad_mult = {"Mult": "x"}
+    # not-active outranks unreadable
+    assert status_of(mouser_part(CAP, LifecycleStatus="Obsolete", **bad_mult)) == (
+        "not-active"
+    )
+    assert status_of(mouser_part(CAP, IsDiscontinued=True, Min="x")) == "not-active"
+    # not-active outranks short
+    assert status_of(mouser_part(CAP, "x", "0", LifecycleStatus="Obsolete")) == (
+        "not-active"
+    )
+    # unreadable outranks short: stock 0 but the multiple cannot be read
+    assert status_of(mouser_part(CAP, "x", "0", **bad_mult)) == "unreadable"
+    assert status_of(mouser_part(CAP, "x", "0", LifecycleStatus="Weird")) == (
+        "unreadable"
+    )
+    assert status_of(mouser_part(CAP, "x", "0")) == "short"
+    assert status_of(mouser_part(CAP, "x", "5")) == "ok"
+    # stale outranks every judged status, offline or not asked aside
+    old = cache.Entry(
+        {
+            "SearchResults": {
+                "Parts": [mouser_part(CAP, "x", LifecycleStatus="Obsolete")]
+            }
+        },
+        NOW - timedelta(days=9),
+    )
+    line = _line(1, 1, CAP)
+    stale = stock.build_row(
+        line, 1, {CAP: stock.Answer(old)}, NOW, max_age=timedelta(hours=1)
+    )
+    assert stale["status"] == "stale"
+    # no-mpn outranks everything: nothing is asked
+    nothing = stock.build_row(_line(1, 1, ""), 1, {"": stock.Answer(old)}, NOW)
+    assert nothing["status"] == "no-mpn"

@@ -300,29 +300,48 @@ def asked_number_problem(line: BomLine) -> str | None:
     return None
 
 
-def _maker_key(name: str) -> str:
-    """Return ``name`` as lower-case words without a trailing company word, joined."""
+def _maker_words(name: str) -> list[str]:
+    """Return ``name`` as lower-case words, without trailing company words."""
     words = re.findall(r"[a-z0-9]+", name.lower())
     while len(words) > 1 and words[-1] in _COMPANY_WORDS:
         words.pop()
-    return "".join(words)
+    return words
 
 
+def _maker_key(name: str) -> str:
+    """Return ``name`` as lower-case words without a trailing company word, joined."""
+    return "".join(_maker_words(name))
+
+
+# The longer Mouser-side names in the tests of this rule ("Microchip Technology",
+# "Vishay / Dale", "Analog Devices / Maxim Integrated", ...) are written from memory,
+# not measured: experiment M3 of plans/wp17-gate-checks.md is to record Mouser's real
+# maker strings.
+#
+# Names that differ only by a dropped company word compare equal ("Samsung" and
+# "Samsung Electronics"), and so do the leading words of a longer name ("Samsung" and
+# "Samsung Semiconductor"). That only matters when the part number matches exactly, and
+# M3's recorded maker strings will settle whether the rule needs to be tighter.
 def same_maker(one: str | None, other: str | None) -> bool:
-    """Say whether two maker names are the same maker: whole names or known aliases.
+    """Say whether two maker names are the same maker.
 
-    Never a prefix: "TI" is not "Tiny Co", and "Murata Power Solutions" is not
-    "Murata". Corporate words at the end ("Inc.", "Electronics") do not count. When
-    either name is empty, the answer is no.
+    They are when, after dropping trailing company words ("Inc.", "Electronics") and
+    punctuation, the words are the same; when one name's whole words are the leading
+    whole words of the other ("Microchip" and "Microchip Technology", "Vishay" and
+    "Vishay / Dale"); or when both are known aliases. Never a character prefix: "TI" is
+    not "Tiny Co", and "Murata" is not "Murataland". When either name is empty, the
+    answer is no.
     """
-    left, right = _maker_key(one or ""), _maker_key(other or "")
+    left, right = _maker_words(one or ""), _maker_words(other or "")
     if not left or not right:
         return False
-    if left == right:
+    short, long = sorted((left, right), key=len)
+    if long[: len(short)] == short or "".join(left) == "".join(right):
         return True
+    keys_left, keys_right = "".join(left), "".join(right)
     for names in MAKERS:
         keys = {_maker_key(name) for name in names}
-        if left in keys and right in keys:
+        if keys_left in keys and keys_right in keys:
             return True
     return False
 
@@ -450,7 +469,7 @@ def is_stale(
 def _row(
     line: BomLine,
     boards: int,
-    needed_total: int,
+    needed_total: int | None,
     status: str,
     entry: cache.Entry | None,
     now: datetime,
@@ -477,10 +496,21 @@ def _row(
     }
 
 
-def _judge_line(
-    line: BomLine, needed_total: int, entry: cache.Entry
-) -> tuple[str, Judged | None, list[str]]:
-    """Return the status, the judgement and the notes of a line against an entry."""
+@dataclass(frozen=True)
+class _Resolved:
+    """What a line came to before it is judged: a status, or the one part it matched."""
+
+    line: BomLine
+    answer: Answer | None
+    status: str | None  # None when ``part`` is the one match, still to be judged
+    part: Mapping[str, Any] | None
+    notes: tuple[str, ...]
+
+
+def _match_line(
+    line: BomLine, entry: cache.Entry
+) -> tuple[str | None, Mapping[str, Any] | None, list[str]]:
+    """Return a line's status or its one matched part against an entry, and notes."""
     found = answer_parts(entry.value)
     if found is None:
         return (
@@ -513,8 +543,68 @@ def _judge_line(
                 f"not {line.mfr.strip()}: it may be another part"
             ],
         )
-    judged = judge(matches[0], needed_total)
-    return judged.status, judged, judged.notes
+    return None, matches[0], []
+
+
+def _resolve(line: BomLine, answers: Mapping[str, Answer]) -> _Resolved:
+    """Match ``line`` to a Mouser part, or to the status that says why not."""
+    problem = asked_number_problem(line)
+    if problem is not None:
+        shown = f"{line.mpn!r} " if line.mpn else ""
+        return _Resolved(line, None, NO_MPN, None, (f"{shown}{problem}",))
+    answer = answers.get(line.mpn)
+    if answer is None or answer.entry is None:
+        notes = list(answer.notes) if answer else []
+        notes = notes or ["Mouser was not asked and nothing is cached for this part"]
+        return _Resolved(line, answer, NOT_ASKED, None, tuple(notes))
+    status, part, more = _match_line(line, answer.entry)
+    return _Resolved(line, answer, status, part, tuple(answer.notes) + tuple(more))
+
+
+def part_key(part: Mapping[str, Any], line: BomLine) -> tuple[str, ...]:
+    """Return what makes ``part`` one Mouser part: its number, else number and maker."""
+    mouser_number = squash(_text(part.get(F_MOUSER_PN)) or "")
+    if mouser_number:
+        return ("mouser", mouser_number)
+    return (
+        "mpn",
+        squash(_text(part.get(F_MPN)) or line.mpn),
+        _maker_key(_text(part.get(F_MAKER)) or ""),
+    )
+
+
+def _finish(
+    found: _Resolved,
+    boards: int,
+    needed_total: int | None,
+    now: datetime,
+    max_age: timedelta | None,
+    offline: bool,
+) -> dict[str, Any]:
+    """Return the row of a resolved line: judged, and stale if its answer is too old."""
+    line, answer = found.line, found.answer
+    if answer is None or answer.entry is None:
+        status = found.status or NOT_ASKED
+        return _row(line, boards, needed_total, status, None, now, None, found.notes)
+    entry = answer.entry
+    status, judged, notes = found.status, None, list(found.notes)
+    if found.part is not None:
+        judged = judge(found.part, needed_total or 0)
+        status = judged.status
+        notes += judged.notes
+    status = status or UNREADABLE
+    if is_stale(entry, now, max_age, offline):
+        hours = entry.age(now).total_seconds() / 3600
+        if hours < 0:
+            reason = f"the answer is dated {-hours:.1f} hours in the future"
+        else:
+            reason = (
+                f"the answer is {hours:.1f} hours old, older than "
+                f"{(max_age or timedelta(0)).total_seconds() / 3600:g} hours"
+            )
+        notes.append(f"{reason}: it was judged {status} but may no longer be true")
+        status = STALE
+    return _row(line, boards, needed_total, status, entry, now, judged, notes)
 
 
 def build_row(
@@ -531,37 +621,17 @@ def build_row(
 
     ``answers`` maps a part number, as written in the line, to what was learned about
     it; a line whose number cannot be asked about has none. ``needed_total`` is the
-    count of the part over every BOM line that uses it (by default this line's own).
-    An answer that is not ``offline`` and older than ``max_age`` makes the status
-    ``stale``, whatever it said, with what it said in the notes.
+    count of the part over every BOM line that uses it (by default this line's own; a
+    ``no-mpn`` line has none). An answer that is not ``offline`` and older than
+    ``max_age`` makes the status ``stale``, whatever it said, with what it said in the
+    notes.
     """
-    needed_total = line.qty * boards if needed_total is None else needed_total
-    problem = asked_number_problem(line)
-    if problem is not None:
-        shown = f"{line.mpn!r} " if line.mpn else ""
-        return _row(
-            line, boards, needed_total, NO_MPN, None, now, None, [f"{shown}{problem}"]
-        )
-    answer = answers.get(line.mpn)
-    if answer is None or answer.entry is None:
-        notes = list(answer.notes) if answer else []
-        notes = notes or ["Mouser was not asked and nothing is cached for this part"]
-        return _row(line, boards, needed_total, NOT_ASKED, None, now, None, notes)
-    entry = answer.entry
-    status, judged, more = _judge_line(line, needed_total, entry)
-    notes = list(answer.notes) + more
-    if is_stale(entry, now, max_age, offline):
-        hours = entry.age(now).total_seconds() / 3600
-        if hours < 0:
-            reason = f"the answer is dated {-hours:.1f} hours in the future"
-        else:
-            reason = (
-                f"the answer is {hours:.1f} hours old, older than "
-                f"{(max_age or timedelta(0)).total_seconds() / 3600:g} hours"
-            )
-        notes.append(f"{reason}: it was judged {status} but may no longer be true")
-        status = STALE
-    return _row(line, boards, needed_total, status, entry, now, judged, notes)
+    found = _resolve(line, answers)
+    if found.status == NO_MPN:
+        needed_total = None
+    elif needed_total is None:
+        needed_total = line.qty * boards
+    return _finish(found, boards, needed_total, now, max_age, offline)
 
 
 def build_rows(
@@ -575,24 +645,34 @@ def build_rows(
 ) -> list[dict[str, Any]]:
     """Return one row for each BOM line, in the BOM's order.
 
-    A part number on several lines is judged on the total of them all.
+    Every line is matched to its Mouser part first; the count is then summed over the
+    lines that matched the same part (by its Mouser number, or its number and maker),
+    however each wrote the number, and the part is judged on that sum. A line that
+    matched no part gets the sum over the lines with the same squashed number, and a
+    ``no-mpn`` line has no total (null).
     """
-    totals: dict[str, int] = {}
-    for line in lines:
-        key = squash(line.mpn)
-        totals[key] = totals.get(key, 0) + line.qty * boards
-    return [
-        build_row(
-            line,
-            boards,
-            answers,
-            now,
-            needed_total=totals[squash(line.mpn)],
-            max_age=max_age,
-            offline=offline,
-        )
-        for line in lines
-    ]
+    resolved = [_resolve(line, answers) for line in lines]
+    by_part: dict[tuple[str, ...], int] = {}
+    by_number: dict[str, int] = {}
+    for found in resolved:
+        need = found.line.qty * boards
+        if found.part is not None:
+            key = part_key(found.part, found.line)
+            by_part[key] = by_part.get(key, 0) + need
+        elif found.status != NO_MPN:
+            number = squash(found.line.mpn)
+            by_number[number] = by_number.get(number, 0) + need
+    rows = []
+    for found in resolved:
+        total: int | None
+        if found.part is not None:
+            total = by_part[part_key(found.part, found.line)]
+        elif found.status == NO_MPN:
+            total = None
+        else:
+            total = by_number[squash(found.line.mpn)]
+        rows.append(_finish(found, boards, total, now, max_age, offline))
+    return rows
 
 
 def exit_code(rows: Sequence[Mapping[str, Any]]) -> int:
