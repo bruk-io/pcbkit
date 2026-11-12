@@ -62,11 +62,14 @@ it cannot be told, so the number is kept with its dash and backs no value at all
 "+" is never part of a number. Every "-" that is not a sign is a dash token.
 
 The span rule: the quote is looked for in the normalised page, and an occurrence is
-refused if either end falls strictly inside a page token, or if it starts on a dash
-token (that would turn a range dash into a sign). An occurrence with clean ends is
-enough, even if another occurrence is cut. The numbers that back the value are the
-page's tokens inside that occurrence, read with the page's spacing, never the quote's
-own: a quote typed "5, 5" on a page that says "5,5" has no 5 in it.
+refused if either end falls strictly inside a page token, if it starts on a dash
+token (that would turn a range dash into a sign), or if an end is next to a space the
+normalisation kept, which is always between two digits: "1 000" may be one number
+with a thin-space separator or two table cells, so a quote takes both or neither.
+An occurrence with clean ends is enough, even if another occurrence is cut. The
+numbers that back the value are the page's tokens inside that occurrence, read with
+the page's spacing, never the quote's own: a quote typed "5, 5" on a page that says
+"5,5" has no 5 in it.
 
 Blind spots, which this module does not prove:
 
@@ -82,6 +85,8 @@ Blind spots, which this module does not prove:
   wrong one passed: write it as the page does or mark it derived.
 - A number after a letter or a code and a dash ("VDD-0.3", "pin-5") backs nothing,
   and a range written with units and spaced dashes reads as separate numbers.
+- A quote that stops between two numbers with only space between them (table cells,
+  "-0.3 6 V") is refused, right or not: quote the whole row.
 - A value made of numbers that are all in the quote, but in the wrong roles (the
   typical as the maximum, a number from another row of the quote), passes.
 - Figures and scans (no text: the value is "read from figure N" for a person to
@@ -380,6 +385,9 @@ def _read_page(page_text: str) -> _Page:
             continue
         inside.update(range(start + 1, end))
         numbers.append((start, end, token))
+    for at, character in enumerate(text):
+        if character == " ":  # only ever between two digits
+            inside.update((at, at + 1))
     return _Page(text, frozenset(inside), frozenset(dashes), tuple(numbers))
 
 

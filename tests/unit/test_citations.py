@@ -182,12 +182,28 @@ def test_a_quote_at_a_bad_boundary_and_a_good_one_is_accepted_on_the_good_one() 
     )
 
 
-def test_a_quote_may_start_after_a_range_dash_or_end_before_a_space_number() -> None:
-    """Keep a quote that starts after a range "3.0-5.5" dash, or ends before " 6"."""
+def test_a_quote_may_start_after_a_range_dash() -> None:
+    """Keep a quote that starts after the dash of a range "3.0-5.5"."""
     assert citations.quote_on_page(
         "5.5 V Supply current", "Supply 3.0-5.5 V Supply current"
     )
-    assert citations.quote_on_page("Enable EN -0.3", RATINGS)
+
+
+@pytest.mark.parametrize(
+    "quote, page",
+    [
+        ("Output current 1", "Output current 1 000 mA max"),  # a thin-space 1000
+        ("000 mA max load", "Output current 1 000 mA max load"),
+        ("Enable EN -0.3", RATINGS),  # one cell of a row
+        ("19 V Enable EN -0.3 6 V", RATINGS),
+    ],
+)
+def test_a_quote_cannot_end_next_to_a_space_between_digits(
+    quote: str, page: str
+) -> None:
+    """Refuse a quote that stops at a space between digits: "1 000" may be 1000."""
+    assert not citations.quote_on_page(quote, page)
+    assert citations.quote_on_page("Enable EN -0.3 6 V", RATINGS)
 
 
 def test_table_cells_on_their_own_lines_match_a_row() -> None:
@@ -541,6 +557,8 @@ FRAGMENTS = {
         ("free", "V"),
     ],
     "range-integers": [("token", "5"), ("dash", "-"), ("token", "40")],
+    "space-grouped": [("token", "1 000"), ("free", " mA")],
+    "table-cells": [("token", "-0.3 19"), ("free", " V")],
 }
 LEAD = "The rated level is "
 TAIL = " for this part."
@@ -610,7 +628,8 @@ NEAR = [
     (name, text, variant)
     for name, parts in FRAGMENTS.items()
     for role, text in parts
-    if role == "token" and name not in ("decimal-comma", "thousands")
+    if role == "token"
+    and name not in ("decimal-comma", "thousands", "space-grouped", "table-cells")
     for variant in _one_off(text)
     if any(character.isdigit() for character in variant.translate(SUPERSCRIPT_DIGITS))
 ]
