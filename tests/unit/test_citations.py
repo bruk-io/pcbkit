@@ -247,6 +247,39 @@ def test_hexadecimal_numbers_are_whole_tokens_apart_from_decimals(
     assert citations.missing_numbers(value, quote) == missing
 
 
+@pytest.mark.parametrize(
+    "value, quote, missing",
+    [
+        ("2 V", "Q1 2N7002 VGS 20 V", ["2"]),  # not the "2" of 2N7002
+        ("4 k", "R5 4k7 pull-up", ["4"]),  # 4k7 is not read as 4
+        ("3 V", "Output 3V3 regulated", ["3"]),
+        ("7002 V", "Q1 2N7002 VGS 20 V", ["7002"]),
+    ],
+)
+def test_digits_of_a_part_number_or_value_code_are_not_numbers(
+    value: str, quote: str, missing: list[str]
+) -> None:
+    """Refuse a number taken from a word with letters between its digits."""
+    assert citations.missing_numbers(value, quote) == missing
+    assert citations.numbers(quote.split()[1]) == []
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("5 V", "pin-5 and a 5V rail"),  # a separate 5V is still a number
+        ("20 V", "Q1 2N7002 VGS 20 V"),
+        ("10 MHz", "fSW 10MHz"),  # digits then letters only
+        ("4.7", "R5 4.7k pull-up"),
+    ],
+)
+def test_digits_followed_by_letters_alone_are_still_numbers(
+    value: str, quote: str
+) -> None:
+    """Keep "5V" and "10MHz" as numbers: only letters between digits make a code."""
+    assert citations.missing_numbers(value, quote) == []
+
+
 def test_check_citation_refuses_a_wrong_number() -> None:
     """Refuse a cited value whose number its quote does not have, naming it."""
     problem = check_citation("-0.3 to 17 V", "Input voltage VIN -0.3 19 V", 1, PAGES)
