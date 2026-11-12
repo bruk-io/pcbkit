@@ -187,6 +187,14 @@ def test_a_page_outside_the_pdf_is_refused(page: int) -> None:
     assert "pages 1 to 5" in problem.message  # type: ignore[union-attr]
 
 
+def test_a_pdf_with_no_pages_has_no_page_to_cite() -> None:
+    """Refuse any page of an empty page list, without saying "pages 1 to 0"."""
+    problem = check_citation("6 V", "Enable EN -0.3 6 V", 1, [])
+    assert rule(problem) is Rule.PAGE
+    assert "no pages" in problem.message  # type: ignore[union-attr]
+    assert "1 to 0" not in problem.message  # type: ignore[union-attr]
+
+
 def test_a_short_quote_is_refused_even_when_it_is_on_the_page() -> None:
     """Refuse "-0.3 6 V": it is on the page, but too short to be evidence."""
     assert citations.quote_on_page("-0.3 6 V", RATINGS)

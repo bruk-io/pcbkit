@@ -252,6 +252,12 @@ def check_citation(
     ``pages`` are the PDF's page texts, page 1 first. ``derived`` says the value is
     worked out from the quote rather than copied, so its numbers need not be in it.
     """
+    if not pages:
+        return Problem(
+            Rule.PAGE,
+            f"page {page} is not a page of the PDF: no page text was given for it, so "
+            "the PDF has no pages to cite",
+        )
     if not 1 <= page <= len(pages):
         return Problem(
             Rule.PAGE,
