@@ -1196,6 +1196,23 @@ def test_w1_a_dash_after_a_word_and_a_cell_gap_is_a_sign(value: str, page: str) 
         ("-70 °C", "Operating temp 0     –70 °C"),
         ("-3", "Value level 1.5 E     -3 ohm"),
         ("-6", "Leakage level 1 x     -6 A"),
+        # After a unit spelt out or with a suffix (fifth review, follow-up 2).
+        ("-3.6", "Supply 2.7 Volts    –3.6 Volts range"),
+        ("-3.6", "Supply 2.7 volts    –3.6 volts range"),
+        ("-3.6", "Supply 2.7 Vdc    –3.6 Vdc range"),
+        ("-3.6", "Supply 2.7 VDC    –3.6 VDC range"),
+        ("-3.6", "Supply 2.7 Vac    –3.6 Vac range"),
+        ("-3.6", "Supply 2.7 Vpk    –3.6 Vpk range"),
+        ("-3.6", "Supply 2.7 mVpk    –3.6 mVpk range"),
+        ("-3.6", "Supply 2.7 Vrms    –3.6 Vrms range"),
+        ("-1.5", "Load 0.5 Amps    –1.5 Amps range"),
+        ("-1.5", "Load 0.5 amps    –1.5 amps range"),
+        ("-1.5", "Load 0.5 Amperes    –1.5 Amperes range"),
+        ("-2", "Power 1 Watts    –2 Watts range"),
+        ("-2", "Value 1 Ohms    –2 Ohms range"),
+        ("-2", "Value 1 kohms    –2 kohms range"),
+        ("-40", "Ambient 25 degrees    –40 degrees"),
+        ("-3", "Delay 1 seconds    –3 seconds"),
         # After ")": not a word, so not widened.
         ("-5 V", "SW (<10ns transient)     –5     35     V"),
         # The dash after a gap but spaced from the number.
@@ -1380,6 +1397,8 @@ def test_real_layout_rows_show_the_unit_and_role_blind_spots() -> None:
         ("3.61", "VDD max is 3.61 V", None),
         # A rail offset in its own cell, read as a sign by W1.
         ("-0.4 V", "Output high VOH VCC    –0.4 V", None),
+        # A dash list item after a label and a gap, read as a sign by W1.
+        ("-5 V", "Notes    –5 V tolerant inputs", None),
     ],
 )
 def test_the_documented_blind_spots_pass(

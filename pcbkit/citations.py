@@ -90,10 +90,17 @@ Signs. A "-" glued to the front of a number is read only where its role is certa
   space around its minus, and pdftotext's ``-layout`` puts two or more spaces only
   between separate text blocks, so the dash cannot join the word before it. A number
   before the gap is still excluded ("2.7    –3.6" may be a range whose space before
-  the dash was widened), and so is a unit ("2.7 V    –3.6 V"), an exponent letter
-  ("1.5 E    -3") and "x". What it can still get wrong: a cell holding an offset from
-  a rail ("VCC    –0.4" meaning VCC minus 0.4) backs -0.4, which is the "offset from
-  a rail" blind spot below;
+  the dash was widened), and so is a unit ("2.7 V    –3.6 V") in any spelling the
+  closed lists cover (``_UNITS``; ``_SPELT_UNITS``: volt, millivolt, amp, ampere,
+  milliamp, milliampere, watt, milliwatt, ohm, kilohm, megohm, farad, henry, hertz,
+  second, millisecond, microsecond, nanosecond, degree, kelvin and celsius, lower case
+  or capitalised, singular or plural; ``_SUFFIXED_UNITS``: Vdc, Vac, Vpk, Vp, Vpp,
+  Vrms, Adc, Aac, Apk, Arms, as written or in capitals, with or without a prefix),
+  an exponent letter ("1.5 E    -3") and "x". A unit word outside those lists is
+  read as a label. What it can still get wrong: a cell holding an offset from a rail
+  ("VCC    –0.4" meaning VCC minus 0.4) backs -0.4, which is the "offset from a rail"
+  blind spot below; and a dash that starts a list item after a label and a gap
+  ("Notes    –5 V tolerant inputs") is read as the sign of -5;
 - "+/-", glued: plus-minus;
 - a range dash, when it is glued between two decimals (a unit, "%" or "°C" may be
   glued to the first), the first is not 10, and the first is less than the second:
@@ -303,6 +310,42 @@ _UNITS = frozenset(
     | {"C", "K", "m", "mil", "mils", "dB", "dBm", "dBc", "dBV", "dBFS", "ppm"}
     | {"LSB", "LSBs", "bit", "bits", "bps", "SPS", "sps", "Vpp", "Vrms", "VDC"}
     | {"VAC", "Ah"}
+)
+# Unit words W1 also excludes before a cell gap, beyond ``_UNITS``: unit names spelt
+# out, in lower case or capitalised, singular or plural, and voltages and currents
+# with a suffix ("Vdc", "Vpk"), with or without an SI prefix ("mVpk").
+_PLURALS = {"henry": "henries", "hertz": "hertz", "celsius": "celsius"}
+_SPELT_UNITS = frozenset(
+    name.capitalize() if upper else name
+    for base in (
+        "volt",
+        "millivolt",
+        "amp",
+        "ampere",
+        "milliamp",
+        "milliampere",
+        "watt",
+        "milliwatt",
+        "ohm",
+        "kilohm",
+        "megohm",
+        "farad",
+        "henry",
+        "hertz",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+        "degree",
+        "kelvin",
+        "celsius",
+    )
+    for name in (base, _PLURALS.get(base, base + "s"))
+    for upper in (False, True)
+)
+_SUFFIXED_UNITS = frozenset(
+    {"Vdc", "VDC", "Vac", "VAC", "Vpk", "VPK", "Vp", "Vpp", "VPP", "Vrms", "VRMS"}
+    | {"Adc", "ADC", "Aac", "AAC", "Apk", "APK", "Arms", "ARMS"}
 )
 
 _MANTISSA = r"(?:\d+(?:\.\d+)?|\.\d+)"
@@ -722,18 +765,29 @@ def _is_gap(space: str) -> bool:
     return len(lines) > 2
 
 
+def _is_unit_word(word: str) -> bool:
+    """Say whether a word is a unit: of ``_UNITS``, spelt out, or with a suffix."""
+    return (
+        _is_unit(word)
+        or word in _SPELT_UNITS
+        or word in _SUFFIXED_UNITS
+        or (word[:1] in _PREFIXES and word[1:] in _SUFFIXED_UNITS)
+    )
+
+
 def _signs_after_gap(word: _Lexeme | None) -> bool:
     """Say whether a dash after ``word`` and a cell gap is a sign (W1).
 
     The word must be a symbol or label: no digit (a number may be a range's first
-    end), not a unit or prefix ("2.7 V  -3.6 V" may be a range), not an exponent
-    letter ("1.5 E  -3") and not a times sign ("x").
+    end), not a unit or prefix of any spelling (``_is_unit_word``: "2.7 V  -3.6 V"
+    and "2.7 Volts  -3.6 Volts" may be ranges), not an exponent letter ("1.5 E  -3")
+    and not a times sign ("x").
     """
     return (
         word is not None
         and word.lex is _Lex.WORD
         and not any(_is_digit(c) for c in word.text)
-        and not _is_unit(word.text)
+        and not _is_unit_word(word.text)
         and not _EXPONENT_WORD.fullmatch(word.text)
         and word.text not in ("x", "X")
     )
