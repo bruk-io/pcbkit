@@ -7,7 +7,7 @@ One function per command, in workflow order. Command functions are called
 Tier 2 commands (build, route, promote, finalize, check, mutants, compare) need
 pcbnew. Each calls ``pcbkit.kicad.env.require_pcbnew()`` first, so a missing pcbnew is a
 message rather than a traceback. ``shots`` is tier 1: it needs only kicad-cli and
-rsvg-convert.
+rsvg-convert. So is ``check --gate sch``, whose checks read only the schematic.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from pathlib import Path
 import click
 
 from pcbkit import __version__, doctor, sch
+from pcbkit.check.results import GATES
 from pcbkit.kicad import env
 from pcbkit.project import load_project
 
@@ -389,23 +390,59 @@ def finalize_cmd(no_render: bool) -> None:
     metavar="EXPR",
     help="Only run the checks that match this pytest -k expression.",
 )
-def check_cmd(expression: str | None) -> None:
+@click.option(
+    "--gate",
+    type=click.Choice(GATES),
+    help="Only run the checks whose inputs exist at this design gate: sch (the "
+    "schematic), place, route or order (everything). The rest are listed as waiting "
+    "in the results, and the run counts as partial until the order gate.",
+)
+def check_cmd(expression: str | None, gate: str | None) -> None:
     """Run the design checks against the board.
 
     Runs the built-in checks of the groups listed in [checks] groups, then the
     project's own checks/ folder, with pytest. Writes out/checks/results.json and exits
-    1 if any check fails. Needs pcbnew.
+    1 if any check fails. Needs pcbnew, except with --gate sch, which only needs
+    kicad-cli.
     """
-    env.require_pcbnew()
+    if gate != "sch":
+        env.require_pcbnew()
     proj = load_project()
     from pcbkit.check import results as check_results
     from pcbkit.check import runner
 
-    code = runner.run(proj, expression)
+    code = runner.run(proj, expression, gate=gate)
     results = check_results.results_dir(proj) / check_results.RESULTS_FILE
     if results.is_file():
         click.echo(f"Results: {results.relative_to(proj.root)} (pcbkit report)")
+        held = _gate_note(results)
+        if held:
+            click.echo(held)
     click.get_current_context().exit(code)
+
+
+def _gate_note(results: Path) -> str | None:
+    """Return the line saying what a gated run left for later, or None.
+
+    Read from ``results.json``: nothing for a run with no gate or at the ``order``
+    gate (a whole run), else the count of checks waiting for a later gate, or a line
+    without a count when the gate held nothing back.
+    """
+    import json
+
+    try:
+        data = json.loads(results.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    gate = data.get("gate") if isinstance(data, dict) else None
+    if gate not in GATES or gate == GATES[-1]:
+        return None
+    held = len(data.get("waiting") or {})
+    advice = "run `pcbkit check` with no `--gate` before you order boards"
+    if not held:
+        return f"Stopped at the {gate} gate: {advice}."
+    plural = "" if held == 1 else "s"
+    return f"{held} check{plural} waiting for a later gate (at {gate}): {advice}."
 
 
 @cli.command("mutants")

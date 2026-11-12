@@ -129,11 +129,14 @@ it fails, naming each one.
 ```
 .venv/bin/pcbkit check                              # the built-in groups you switched on, then checks/
 .venv/bin/pcbkit check -k test_led_current_window   # only the checks that match
+pcbkit check --gate sch                             # only what the schematic can judge (no pcbnew)
 pcbkit report                                       # write out/checks/VALIDATION.md
 ```
 
 `-k` is pytest's own expression (`-k led`, `-k "led or resistor"`, `-k "not drc"`). The
-exit code is pytest's: 0 all passed, 1 a check failed, 5 nothing matched.
+exit code is pytest's: 0 all passed, 1 a check failed, 5 nothing matched. The one
+change is a `--gate` that held back every check, with no `-k` or `-m` given: that exits
+0, because nothing failed and nothing was mistyped.
 
 Every run writes `out/checks/results.json`: one entry per check with its outcome, the
 message of a failure or the reason for a skip, and the numbers it recorded. `pcbkit report`
@@ -149,6 +152,36 @@ A `-k` run replaces the results with the few checks it ran, and says so in the f
 Treat those results as partial. `pcbkit report` says so under the counts of the report it
 writes from them, and the order preflight refuses results with `complete: false`
 ([ordering](ordering.md)). Run `pcbkit check` with no `-k` before you order.
+
+### Gates: running only what a design step can judge
+
+A check runs once its inputs exist, and `pcbkit check --gate GATE` runs only the checks
+that can run at `GATE`: `sch`, `place`, `route` or `order`, in that order. The checks left
+out are listed as `waiting` in `results.json`, and the run counts as partial until the
+`order` gate. `--gate sch` needs only kicad-cli, so it runs before the project's `.venv`
+exists. After a gated run `pcbkit check` prints one line
+with the count of checks waiting for a later gate.
+
+pcbkit works out a check's gate from the fixtures it asks for: `board` makes it `route`
+and a check that needs neither `board` nor the fab files is `sch`. The `fab_dir` fixture
+that makes a check `order` is defined in the built-in `test_outputs.py`, so a check of
+yours cannot ask for it. A check of yours that reads files through `project` (the
+`.kicad_pcb`, or anything in `out/fab`) asks for no fixture that says so, so it would be
+taken for `sch` and run too early. Such a check must carry
+`@pytest.mark.pcbkit_gate("route")` or `("order")`. The marker wins over the fixtures:
+
+```python
+import pytest
+
+
+@pytest.mark.pcbkit_gate("place")
+def test_connector_is_near_the_edge(board, layout): ...
+```
+
+A check that reads only part positions, say, is `place`, and the marker lets a review
+at the placement gate run it before any track exists. An unknown gate name is a usage
+error, so a typo cannot quietly move a check. The full rules, and the JSON fields, are in
+[the project interface](project-interface.md#gates).
 
 ### When a check fails
 

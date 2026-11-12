@@ -148,6 +148,29 @@ def test_command_adds_k_only_for_a_non_empty_expression(tmp_path: Path) -> None:
         assert "-k" not in runner.command(tmp_path, none)
 
 
+def test_command_adds_the_gate_after_the_project_and_before_k(
+    tmp_path: Path,
+) -> None:
+    """Pass ``--pcbkit-gate`` for a gate, and nothing for none."""
+    assert runner.command(tmp_path, "test_a", gate="place") == [
+        *head(tmp_path),
+        "--pcbkit-gate",
+        "place",
+        "-k",
+        "test_a",
+        "--pyargs",
+        "pcbkit.check.builtin",
+    ]
+    for none in (None, ""):
+        assert "--pcbkit-gate" not in runner.command(tmp_path, gate=none)
+
+
+def test_the_gate_option_is_the_one_the_plugin_adds() -> None:
+    """Name the option the plugin registers, with the gates the results know."""
+    assert plugin.GATE_OPTION == "--pcbkit-gate"
+    assert results.GATES == ("sch", "place", "route", "order")
+
+
 def test_command_puts_extra_arguments_before_the_places_to_collect(
     tmp_path: Path,
 ) -> None:
@@ -297,6 +320,25 @@ def test_run_passes_the_expression_and_the_callers_extras_on(
         "--pyargs",
         "pcbkit.check.builtin",
         str(root / "checks"),
+    ]
+
+
+def test_run_passes_the_gate_on_to_the_command(
+    board_project: Project, fake_subprocess: FakeSubprocess
+) -> None:
+    """Start the same command ``command`` builds for that gate."""
+    make_schematic(board_project)
+    runner.run(board_project, gate="sch")
+    (call,) = fake_subprocess.calls
+    root = board_project.root
+    assert call.args == [
+        *head(root),
+        "--pcbkit-gate",
+        "sch",
+        "-q",
+        "-rfEs",
+        "--pyargs",
+        "pcbkit.check.builtin",
     ]
 
 

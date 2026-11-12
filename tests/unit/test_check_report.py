@@ -245,6 +245,64 @@ def test_render_of_a_complete_run_has_no_partial_note(more: dict[str, Any]) -> N
     assert "Partial run" not in report.render(data)
 
 
+def gated(gate: str, held: int, **more: Any) -> dict[str, Any]:
+    """Return results of a run stopped at ``gate`` that held back ``held`` checks."""
+    block = {**selection(), "gated_out": held}
+    return make_results({}, gate=gate, selection=block, **more)
+
+
+def test_partial_note_names_the_gate_a_run_stopped_at() -> None:
+    """Say which gate, how many checks waited, and what to run before ordering."""
+    note = report.partial_note(gated("sch", 12))
+    assert note == (
+        "Partial run: stopped at the sch gate, with 12 checks waiting for a later "
+        "gate. Run `pcbkit check` with no `--gate` before you order boards."
+    )
+    one = report.partial_note(gated("route", 1))
+    assert one is not None
+    assert "1 check waiting" in one
+
+
+def test_partial_note_of_a_gated_run_that_held_nothing_back_has_no_count() -> None:
+    """Say the run stopped at the gate without "with 0 checks waiting"."""
+    note = report.partial_note(gated("sch", 0))
+    assert note == (
+        "Partial run: stopped at the sch gate. "
+        "Run `pcbkit check` with no `--gate` before you order boards."
+    )
+
+
+def test_partial_note_of_a_gate_and_a_k_run_names_both() -> None:
+    """Name -k and the gate together, with both counts."""
+    block = {**selection(keyword="led", deselected=3), "gated_out": 5}
+    note = report.partial_note(make_results({}, gate="place", selection=block))
+    assert note is not None
+    assert "filtered by -k 'led' and --gate place" in note
+    assert "left out 3 checks and held back 5 for a later gate" in note
+    assert "no `-k` or `--gate`" in note
+
+
+def test_a_run_at_the_order_gate_is_whole_and_has_no_partial_note() -> None:
+    """Treat ``--gate order`` as the full run the plugin says it is."""
+    data = make_results(
+        {}, gate="order", selection={**selection(complete=True), "gated_out": 0}
+    )
+    assert report.partial_note(data) is None
+
+
+def test_summary_line_and_render_name_the_gate() -> None:
+    """Put the gate in the counts line, in the file and on the terminal alike."""
+    data = gated("sch", 2)
+    assert report.summary_line(data) == "no checks in 1.5s (gate sch)"
+    assert "`no checks in 1.5s (gate sch)`" in report.render(data)
+    assert "Partial run: stopped at the sch gate" in report.render(data)
+
+
+def test_summary_line_of_a_run_with_no_gate_is_unchanged() -> None:
+    """Add nothing for ``"gate": null``, which is what an ungated run writes."""
+    assert report.summary_line(make_results({}, gate=None)) == "no checks in 1.5s"
+
+
 def test_render_ends_with_a_newline_and_leaves_the_results_alone() -> None:
     """Return text that ends in a line break, and do not edit what it was given."""
     data = make_results({"checks/test_a.py::test_x": entry("passed")})

@@ -726,11 +726,13 @@ describe an earlier export.
 
 ## Checks: specs.py, circuits.py, checks/ and mutants.py
 
-`pcbkit check [-k EXPR]` runs two kinds of check with pytest, in one run: the built-in
-checks of the groups listed in `[checks] groups`, and your own, the `test_*.py` files in
-`checks/`. It needs pcbnew (`pcbkit setup` makes the project's `.venv` that has it) and
-exits with pytest's code: 0 all passed, 1 a check failed, 5 nothing matched. `-k` is
-pytest's own expression. `pcbkit mutants` shows that the checks bite (below), and
+`pcbkit check [-k EXPR] [--gate GATE]` runs two kinds of check with pytest, in one run:
+the built-in checks of the groups listed in `[checks] groups`, and your own, the
+`test_*.py` files in `checks/`. It needs pcbnew (`pcbkit setup` makes the project's
+`.venv` that has it; `--gate sch` is the exception, see "Gates") and exits with pytest's
+code: 0 all passed, 1 a check failed, 5 nothing matched (0 when a `--gate` alone held
+every check back, see "Gates"). `-k` is pytest's own expression. `pcbkit mutants` shows
+that the checks bite (below), and
 `pcbkit report` turns the last run into a report.
 
 A built-in check reads its numbers from your `specs.py`, and the operating points of the
@@ -758,12 +760,15 @@ A run leaves `out/checks/results.json` (a run that selects nothing leaves an emp
 {"format": 1, "board": {"stem": "my_board", "title": "My Board", "rev": "A"},
  "copper_mm": 0.035, "groups": ["kicad", "outputs"], "exit_status": 1,
  "counts": {"passed": 40, "failed": 1}, "seconds": 12.3,
- "selection": {"keyword": "", "markexpr": "", "deselected": 0, "complete": true},
+ "gate": null, "waiting": {},
+ "selection": {"keyword": "", "markexpr": "", "deselected": 0, "gated_out": 0,
+               "complete": true},
  "checks": {"pcbkit.check.builtin.test_kicad::test_erc_clean":
-              {"group": "kicad", "outcome": "passed", "numbers": {"erc": "..."}},
+              {"group": "kicad", "outcome": "passed", "numbers": {"erc": "..."},
+               "gate": "sch"},
             "checks/test_power.py::test_rail":
               {"group": "project", "outcome": "failed", "numbers": {},
-               "message": "AssertionError: ..."}}}
+               "message": "AssertionError: ...", "gate": "sch"}}}
 ```
 
 A check's id is `pcbkit.check.builtin.<module>::<name>[param]` for a built-in one and its
@@ -773,7 +778,50 @@ has a `reason` and a failed or errored one a `message`. `numbers` holds what the
 recorded. `selection` says whether the run was cut short: after `pcbkit check -k ...`
 (or any run that left checks out) `complete` is false, so treat those results as partial
 and run the checks in full before you order boards. `pcbkit report` marks such a report as
-partial, under its counts.
+partial, under its counts. `gate`, `waiting`, `selection.gated_out` and each check's `gate`
+are described next.
+
+### Gates
+
+A board is designed in four steps, and a check can run once its inputs exist. The design
+gates, in order, are `sch` (the schematic), `place` (the placed board), `route` (the routed
+board) and `order` (the fab files). `pcbkit check --gate GATE` runs only the checks whose
+gate is `GATE` or earlier, so a design review at a gate starts from a clean run of what
+that gate can judge. The rest are not run and not skipped: they are listed under
+`waiting`, each with its gate.
+
+A check's gate is the earliest gate at which its inputs exist, worked out in this order:
+
+1. The marker `@pytest.mark.pcbkit_gate("place")` on the check (or its module), if there
+   is one. Use it for your own checks when the fixtures do not say enough.
+2. For the built-in checks, a short exception table (`BUILTIN_GATES` in
+   `pcbkit/check/results.py`): `test_drc_clean_with_schematic_parity` is `route`, and
+   `test_decoupling_caps_are_close` and `test_power_footprints_match_datasheet` are
+   `place`.
+3. The fixtures the check needs, those asked for by other fixtures included: `fab_dir`
+   (the fab files, which `gerbers`, `bom` and `centroid` read through) gives `order`,
+   `board` gives `route`, and a check that needs neither is `sch`. `board` gives `route`
+   and not `place` because the fixture cannot tell a placed board from a routed one, and
+   running a check later than it could run is safe where running it too early is not.
+   `fab_dir` is defined in the built-in `test_outputs.py` module, so a check in your
+   `checks/` folder cannot request it. A check of yours that reads files through
+   `project` (the `.kicad_pcb`, `out/fab`) derives `sch` and runs too early, so it must
+   carry `@pytest.mark.pcbkit_gate("route")` or `("order")`.
+
+With a gate, `results.json` has `"gate"` (the gate asked for; null for a run with no
+gate), `"waiting"` (the id of each check held back, with its gate) and
+`selection.gated_out` (how many that is, apart from `deselected`, which counts what `-k`
+and `-m` left out). Each check's entry has its own `gate`. If the gate held back every
+selected check (`--gate sch` on a project whose groups are all later ones), `pcbkit check`
+exits 0 and not 5: nothing failed and nothing was mistyped. It still writes
+`results.json`, with `gate`, `waiting` and `gated_out`. A run with no gate, and any run
+with `-k` or `-m`, still exits 5 when no check ran. `selection.complete` is false
+for any gate before `order`, so `pcbkit report` marks the run partial and the order
+preflight refuses it, naming the gate. `--gate order` runs everything, so it is a full run.
+
+`--gate sch` needs only kicad-cli, not pcbnew: its checks read the schematic, so it runs
+before the project's `.venv` is built on KiCad's Python. Every other gate, and a run with
+no gate, still needs pcbnew.
 
 ### Writing a check
 

@@ -26,12 +26,15 @@ def command(
     root: Path,
     expression: str | None = None,
     extra: Sequence[str] = (),
+    gate: str | None = None,
 ) -> list[str]:
     """Return the pytest command line that runs the checks of the project at ``root``.
 
     ``expression`` is pytest's ``-k`` expression; ``extra`` is added before the
     places to collect (so ``-q`` or ``--no-header`` can be passed). The project's
-    ``checks/`` folder is collected only if it exists.
+    ``checks/`` folder is collected only if it exists. ``gate`` (one of
+    ``pcbkit.check.results.GATES``) keeps only the checks that can run at that design
+    gate.
     """
     root = Path(root)
     args = [
@@ -49,6 +52,8 @@ def command(
         "--pcbkit-project",
         str(root),
     ]
+    if gate:
+        args += ["--pcbkit-gate", gate]
     if expression:
         args += ["-k", expression]
     args += list(extra)
@@ -73,6 +78,7 @@ def run(
     project: Project,
     expression: str | None = None,
     extra: Sequence[str] = ("-q", "-rfEs"),
+    gate: str | None = None,
 ) -> int:
     """Run the project's checks with output on the terminal; return pytest's exit code.
 
@@ -86,5 +92,7 @@ def run(
         raise click.ClickException(
             f"{schematic} not found: run `pcbkit sch` (or `pcbkit build`) first"
         )
-    done = subprocess.run(command(project.root, expression, extra), cwd=project.root)
+    done = subprocess.run(
+        command(project.root, expression, extra, gate), cwd=project.root
+    )
     return done.returncode

@@ -70,9 +70,10 @@ def run(
     expression: str | None = None,
     extra: tuple[str, ...] = ("-q",),
     cwd: Path | None = None,
+    gate: str | None = None,
 ) -> Run:
     """Run the project's checks in a child pytest; return it and its results."""
-    command = runner.command(root, expression, [*extra, "-p", "fake_nl"])
+    command = runner.command(root, expression, [*extra, "-p", "fake_nl"], gate)
     done = subprocess.run(
         command,
         cwd=cwd or root,
@@ -196,8 +197,11 @@ def test_a_full_run_records_a_complete_selection(project: Path) -> None:
         "keyword": "",
         "markexpr": "",
         "deselected": 0,
+        "gated_out": 0,
         "complete": True,
     }
+    assert done.results["gate"] is None
+    assert done.results["waiting"] == {}
 
 
 def test_a_k_run_records_what_it_left_out(project: Path) -> None:
@@ -218,6 +222,238 @@ def test_a_k_run_that_keeps_every_check_is_still_partial(project: Path) -> None:
     selection = run(project, "alpha or omega").results["selection"]
     assert selection["deselected"] == 0
     assert selection["complete"] is False
+
+
+# --- gates ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def gated_project(project: Path) -> Path:
+    """Return a project with the circuit group and one project check at each gate."""
+    root = check_toy.write_project(
+        project.parent / "gated", check_toy.good(), groups=["circuit"]
+    )
+    checks_file(root, "test_schematic.py", "def test_nets(nl):\n    assert nl.parts\n")
+    checks_file(
+        root,
+        "test_board_side.py",
+        "def test_tracks(board):\n    assert board is not None\n",
+    )
+    checks_file(
+        root,
+        "test_fab_side.py",
+        """
+        import pytest
+
+        @pytest.mark.pcbkit_gate("order")
+        def test_files(nl):
+            assert nl.parts
+        """,
+    )
+    return root
+
+
+def test_a_run_at_the_sch_gate_holds_back_the_later_checks_and_is_partial(
+    gated_project: Path,
+) -> None:
+    """Run the schematic checks only, naming each check held back with its gate."""
+    done = run(gated_project, gate="sch")
+    assert done.done.returncode == 0, done.done.stdout
+    results = done.results
+    assert results["gate"] == "sch"
+    assert results["waiting"] == {
+        "checks/test_board_side.py::test_tracks": "route",
+        "checks/test_fab_side.py::test_files": "order",
+    }
+    assert results["selection"]["gated_out"] == len(results["waiting"]) == 2
+    assert results["selection"]["deselected"] == 0
+    assert results["selection"]["complete"] is False
+    assert set(done.checks) == {
+        "checks/test_schematic.py::test_nets",
+        *(k for k in done.checks if k.startswith(f"{BUILTIN}.test_circuit")),
+    }
+    assert {e["gate"] for e in done.checks.values()} == {"sch"}
+    assert {e["outcome"] for e in done.checks.values()} == {"passed"}
+
+
+def test_a_run_at_the_route_gate_holds_back_only_the_order_checks(
+    gated_project: Path,
+) -> None:
+    """Keep the board check (it fails here: no pcbnew) and hold back the order one."""
+    done = run(gated_project, gate="route")
+    assert done.results["gate"] == "route"
+    assert done.results["waiting"] == {"checks/test_fab_side.py::test_files": "order"}
+    assert done.results["selection"]["gated_out"] == 1
+    assert done.results["selection"]["complete"] is False
+    assert "checks/test_board_side.py::test_tracks" in done.checks
+    assert done.checks["checks/test_board_side.py::test_tracks"]["gate"] == "route"
+
+
+def test_a_run_with_no_gate_or_at_order_is_complete_with_nothing_waiting(
+    gated_project: Path,
+) -> None:
+    """Write ``gate`` null and no ``waiting`` for no gate; complete either way."""
+    for gate in (None, "order"):
+        done = run(gated_project, gate=gate)
+        assert done.results["gate"] == gate
+        assert done.results["waiting"] == {}
+        assert done.results["selection"]["gated_out"] == 0
+        assert done.results["selection"]["complete"] is True
+        gates = {k: e["gate"] for k, e in done.checks.items()}
+        assert gates["checks/test_schematic.py::test_nets"] == "sch"
+        assert gates["checks/test_board_side.py::test_tracks"] == "route"
+        assert gates["checks/test_fab_side.py::test_files"] == "order"
+
+
+def test_gated_out_checks_are_counted_apart_from_k_deselections(
+    gated_project: Path,
+) -> None:
+    """Count what -k left out as ``deselected``, what the gate held as ``gated_out``."""
+    everything = run(gated_project, gate="sch")
+    done = run(gated_project, "test_nets or test_tracks", gate="sch")
+    selection = done.results["selection"]
+    assert set(done.checks) == {"checks/test_schematic.py::test_nets"}
+    assert selection["gated_out"] == 2
+    # Eight checks reach the sch gate: test_nets and the seven of the circuit group.
+    # -k keeps test_nets and leaves the seven out. test_tracks was held back by the
+    # gate first, so it is not counted a second time.
+    assert len(everything.checks) == 8
+    assert selection["deselected"] == 7
+    assert selection["keyword"] == "test_nets or test_tracks"
+
+
+@pytest.fixture
+def later_gates_only(project: Path) -> Path:
+    """Return a project whose every check is for a later gate than ``sch``."""
+    checks_file(
+        project,
+        "test_board_side.py",
+        "def test_tracks(board):\n    assert board is not None\n",
+    )
+    return project
+
+
+def test_a_gate_that_holds_back_every_check_exits_zero_and_still_writes_results(
+    later_gates_only: Path,
+) -> None:
+    """Exit 0, not pytest's 5, when the gate alone left nothing to run."""
+    done = run(later_gates_only, gate="sch")
+    assert done.done.returncode == 0, done.done.stdout
+    results = done.results
+    assert results["exit_status"] == 0
+    assert results["gate"] == "sch"
+    assert results["waiting"] == {"checks/test_board_side.py::test_tracks": "route"}
+    assert results["selection"]["gated_out"] == 1
+    assert results["selection"]["complete"] is False
+    assert done.checks == {}
+
+
+def test_a_run_that_selects_nothing_still_exits_five_without_a_gate_or_with_k(
+    later_gates_only: Path,
+) -> None:
+    """Keep 5 for no gate and nothing to run, and for -k with every check held back."""
+    ungated = run(later_gates_only, "test_nothing_has_this_name")
+    assert ungated.done.returncode == 5, ungated.done.stdout
+    assert ungated.results["gate"] is None
+    with_k = run(later_gates_only, "test_nothing_has_this_name", gate="sch")
+    assert with_k.done.returncode == 5, with_k.done.stdout
+    assert with_k.results["exit_status"] == 5
+    assert with_k.results["waiting"] == {
+        "checks/test_board_side.py::test_tracks": "route"
+    }
+
+
+def test_a_k_that_matches_nothing_exits_five_at_a_gate_that_held_checks_back(
+    gated_project: Path,
+) -> None:
+    """Keep 5 when -k left out every check the gate let through."""
+    done = run(gated_project, "test_nothing_has_this_name", gate="sch")
+    assert done.done.returncode == 5, done.done.stdout
+    assert done.results["selection"]["gated_out"] == 2
+    assert done.results["selection"]["deselected"] == 8
+
+
+def test_an_item_that_is_not_a_function_is_not_gated_and_does_not_crash(
+    gated_project: Path,
+) -> None:
+    """Run a plugin's own kind of item at every gate instead of reading its fixtures."""
+    (gated_project / "checks" / "conftest.py").write_text(
+        textwrap.dedent(
+            """
+            import pytest
+
+
+            class Plain(pytest.Item):
+                def runtest(self):
+                    pass
+
+                def reportinfo(self):
+                    return self.path, 0, "plain"
+
+
+            class PlainFile(pytest.File):
+                def collect(self):
+                    yield Plain.from_parent(self, name="plain")
+
+
+            def pytest_collect_file(file_path, parent):
+                if file_path.suffix == ".plain":
+                    return PlainFile.from_parent(parent, path=file_path)
+            """
+        ),
+        encoding="utf-8",
+    )
+    (gated_project / "checks" / "one.plain").write_text("x\n", encoding="utf-8")
+    done = run(gated_project, gate="sch")
+    assert done.done.returncode == 0, done.done.stdout + done.done.stderr
+    assert "checks/one.plain::plain" in done.checks
+    assert done.checks["checks/one.plain::plain"]["outcome"] == "passed"
+    assert "checks/one.plain::plain" not in done.results["waiting"]
+    assert "checks/test_board_side.py::test_tracks" in done.results["waiting"]
+
+
+def test_a_marker_that_names_no_gate_is_a_usage_error(gated_project: Path) -> None:
+    """Refuse a misspelt gate in a marker, naming the check."""
+    checks_file(
+        gated_project,
+        "test_typo.py",
+        """
+        import pytest
+
+        @pytest.mark.pcbkit_gate("plcae")
+        def test_x():
+            pass
+        """,
+    )
+    done = run(gated_project, gate="sch")
+    assert done.done.returncode != 0
+    assert "unknown gate 'plcae'" in done.done.stdout + done.done.stderr
+
+
+def test_the_built_in_checks_get_the_gates_the_frozen_table_holds(
+    tmp_path: Path,
+) -> None:
+    """Collect every built-in check for real and hold the plugin to the table.
+
+    The schematic gate with every group on holds back each check later than ``sch``, so
+    ``waiting`` is the plugin's own answer, worked out from the fixtures pytest
+    collected, for every built-in check with a later gate. Those that ran must be the
+    ``sch`` ones.
+    """
+    from tests.unit.test_check_gates import FROZEN
+
+    everything = ["kicad", "outputs", "fab", "copper", "circuit", "esp32s3"]
+    root = check_toy.write_project(tmp_path / "all", check_toy.good(), everything)
+    done = run(root, gate="sch")
+    prefix = f"{BUILTIN}."
+    waiting = {
+        k.removeprefix(prefix).partition("[")[0]: g
+        for k, g in done.results["waiting"].items()
+    }
+    assert waiting == {k: g for k, g in FROZEN.items() if g != "sch"}
+    ran = {k.removeprefix(prefix).partition("[")[0] for k in done.checks}
+    assert ran <= {k for k, g in FROZEN.items() if g == "sch"}
+    assert done.results["selection"]["gated_out"] == len(done.results["waiting"])
 
 
 def test_without_the_plugin_no_results_file_is_written(project: Path) -> None:

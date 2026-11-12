@@ -42,10 +42,12 @@ class Recorder:
 
     result: Any = 0
     calls: list[tuple[Any, ...]] = field(default_factory=list)
+    keywords: list[dict[str, Any]] = field(default_factory=list)
 
-    def __call__(self, *args: Any) -> Any:
+    def __call__(self, *args: Any, **keywords: Any) -> Any:
         """Record the call and return the canned result."""
         self.calls.append(args)
+        self.keywords.append(keywords)
         return self.result
 
 
@@ -184,6 +186,68 @@ def test_check_says_where_the_results_are_when_the_file_exists(
     assert result.output == f"Results: {RESULTS} (pcbkit report)\n"
 
 
+def write_gated_results(root: Path, gate: str | None, waiting: dict[str, str]) -> None:
+    """Add a ``gate`` and the ``waiting`` checks to a results file."""
+    path = write_results(root, {"checks/test_a.py::test_x": "passed"})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.update({"gate": gate, "waiting": waiting})
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_check_says_how_many_checks_a_gated_run_left_waiting(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Print one line with the count of waiting checks, read from the results."""
+    waiting = {"a::t1": "route", "a::t2": "route", "a::t3": "order"}
+    write_gated_results(root, "place", waiting)
+    monkeypatch.setattr(runner, "run", Recorder(0))
+    result = invoke("check", "--gate", "place")
+    assert_exit(result, 0)
+    assert result.output == (
+        f"Results: {RESULTS} (pcbkit report)\n"
+        "3 checks waiting for a later gate (at place): run `pcbkit check` with no "
+        "`--gate` before you order boards.\n"
+    )
+
+
+def test_check_says_one_check_waiting_in_the_singular(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write ``1 check waiting``, not ``1 checks``."""
+    write_gated_results(root, "route", {"a::t1": "order"})
+    monkeypatch.setattr(runner, "run", Recorder(0))
+    result = invoke("check", "--gate", "route")
+    assert "\n1 check waiting for a later gate (at route)" in result.output
+
+
+def test_check_words_a_gate_that_held_nothing_back_without_a_count(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Say the run stopped at the gate, with no ``0 checks``."""
+    write_gated_results(root, "sch", {})
+    monkeypatch.setattr(runner, "run", Recorder(0))
+    result = invoke("check", "--gate", "sch")
+    assert result.output == (
+        f"Results: {RESULTS} (pcbkit report)\n"
+        "Stopped at the sch gate: run `pcbkit check` with no `--gate` before you "
+        "order boards.\n"
+    )
+
+
+@pytest.mark.parametrize("gate", [None, "order"])
+def test_check_adds_nothing_for_an_ungated_or_order_gate_run(
+    gate: str | None,
+    root: Path,
+    fake_pcbnew: types.ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Print only the Results line when the run was whole."""
+    write_gated_results(root, gate, {})
+    monkeypatch.setattr(runner, "run", Recorder(0))
+    result = invoke("check") if gate is None else invoke("check", "--gate", gate)
+    assert result.output == f"Results: {RESULTS} (pcbkit report)\n"
+
+
 def test_check_prints_no_results_line_when_no_file_was_written(
     root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -225,6 +289,69 @@ def test_check_without_a_schematic_says_to_run_pcbkit_sch(
     result = invoke("check")
     assert_error(result, "my_board.kicad_sch", "run `pcbkit sch`")
     assert "Results:" not in result.output
+
+
+@pytest.mark.parametrize("gate", ["place", "route", "order"])
+def test_check_with_a_gate_after_sch_still_needs_pcbnew(
+    gate: str, root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stop at the pcbnew guard for every gate but the schematic one."""
+    monkeypatch.setitem(sys.modules, "pcbnew", None)
+    spy = Recorder()
+    monkeypatch.setattr(runner, "run", spy)
+    assert_error(invoke("check", "--gate", gate), "pcbnew isn't importable here")
+    assert spy.calls == []
+
+
+def test_check_gate_sch_reaches_the_runner_without_pcbnew(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the schematic gate where pcbnew cannot be imported: it needs kicad-cli."""
+    monkeypatch.setitem(sys.modules, "pcbnew", None)
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    assert_exit(invoke("check", "--gate", "sch"), 0)
+    ((project, expression),) = spy.calls
+    assert project.root == root
+    assert expression is None
+    assert spy.keywords == [{"gate": "sch"}]
+
+
+@pytest.mark.parametrize("gate", ["place", "route", "order"])
+def test_check_hands_the_gate_to_the_runner(
+    gate: str,
+    root: Path,
+    fake_pcbnew: types.ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass ``--gate`` on as the runner's ``gate`` keyword, next to ``-k``."""
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    assert_exit(invoke("check", "-k", "led", "--gate", gate), 0)
+    assert [args[1] for args in spy.calls] == ["led"]
+    assert spy.keywords == [{"gate": gate}]
+
+
+def test_check_without_a_gate_passes_none(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hand the runner ``gate=None`` for a run with no gate."""
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    assert_exit(invoke("check"), 0)
+    assert spy.keywords == [{"gate": None}]
+
+
+def test_check_refuses_a_gate_that_does_not_exist(
+    root: Path, fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Name the gates in click's usage error and run nothing."""
+    spy = Recorder(0)
+    monkeypatch.setattr(runner, "run", spy)
+    result = invoke("check", "--gate", "launch")
+    assert result.exit_code == 2, result.output
+    assert "sch" in result.output and "order" in result.output
+    assert spy.calls == []
 
 
 # --- mutants ----------------------------------------------------------------------
