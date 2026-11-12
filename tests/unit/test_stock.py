@@ -201,7 +201,7 @@ def test_every_field_of_the_plan_is_in_each_row(board: Path, shop: Shop) -> None
             "lifecycle",
             "lead_time",
             "price_breaks",
-            "unit_price_at_needed",
+            "unit_price_at_order",
             "min",
             "mult",
             "suggested_replacement",
@@ -227,7 +227,7 @@ def test_every_field_of_the_plan_is_in_each_row(board: Path, shop: Shop) -> None
             {"qty": 10, "price": "$0.05", "price_value": 0.05, "currency": "USD"},
             {"qty": 100, "price": "$0.02", "price_value": 0.02, "currency": "USD"},
         ],
-        "unit_price_at_needed": 0.1,
+        "unit_price_at_order": 0.1,
         "min": 1,
         "mult": 1,
         "suggested_replacement": None,
@@ -250,7 +250,7 @@ def test_a_recorded_answer_is_read_as_it_came(board: Path, shop: Shop) -> None:
         "price_value": 3.96,
         "currency": "CAD",
     }
-    assert mine["unit_price_at_needed"] == 3.96
+    assert mine["unit_price_at_order"] == 3.96
 
 
 def test_needed_is_the_quantity_per_board_times_qty(board: Path, shop: Shop) -> None:
@@ -279,7 +279,7 @@ def test_the_price_is_read_at_the_total_needed_not_the_count_per_board(
     stocked(shop, "100000")
     mine = rows(run("--qty", "50"))[RESISTOR]
     assert mine["needed"] == 100
-    assert mine["mouser"]["unit_price_at_needed"] == 0.02
+    assert mine["mouser"]["unit_price_at_order"] == 0.02
 
 
 @pytest.mark.parametrize(
@@ -339,7 +339,7 @@ def test_an_unreadable_price_keeps_its_text_and_says_so(
     assert cap["mouser"]["price_breaks"] == [
         {"qty": 1, "price": "0,12 EUR", "price_value": None, "currency": "EUR"}
     ]
-    assert cap["mouser"]["unit_price_at_needed"] is None
+    assert cap["mouser"]["unit_price_at_order"] is None
     assert any("price break" in note for note in cap["notes"])
 
 
@@ -528,7 +528,7 @@ def test_the_minimum_above_stock_makes_the_line_short(board: Path, shop: Shop) -
     mine = rows(run("--qty", "10"))[CAP]
     assert mine["status"] == "short"
     assert (mine["needed"], mine["needed_total"], mine["order_qty"]) == (10, 10, 100)
-    assert mine["mouser"]["unit_price_at_needed"] == 0.02  # the 100 break
+    assert mine["mouser"]["unit_price_at_order"] == 0.02  # the 100 break
     assert any("at least 100" in note for note in mine["notes"])
 
 
@@ -604,7 +604,7 @@ def test_the_total_over_lines_and_boards_picks_the_price_break(
     shop.parts = [mouser_part(CAP, "Murata", "1000")]
     found = json.loads(run("--qty", "4").output)
     assert [row["needed_total"] for row in found] == [12, 12, 12]
-    assert {row["mouser"]["unit_price_at_needed"] for row in found} == {0.05}
+    assert {row["mouser"]["unit_price_at_order"] for row in found} == {0.05}
 
 
 def test_exit_0_when_every_line_is_ok(board: Path, shop: Shop) -> None:
@@ -948,7 +948,7 @@ def test_an_answer_with_a_part_that_is_not_an_object_is_unreadable() -> None:
 def test_price_breaks_that_are_not_a_list_say_so(breaks: Any) -> None:
     row = one_line_row([mouser_part(CAP, PriceBreaks=breaks)])
     assert row["mouser"]["price_breaks"] == []
-    assert row["mouser"]["unit_price_at_needed"] is None
+    assert row["mouser"]["unit_price_at_order"] is None
     assert any("PriceBreaks" in note for note in row["notes"])
 
 

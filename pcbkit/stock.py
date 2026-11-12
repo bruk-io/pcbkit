@@ -406,7 +406,7 @@ def judge(part: Mapping[str, Any], needed: int) -> Judged:
         "lifecycle": lifecycle,
         "lead_time": _text(part.get(F_LEAD_TIME)),
         "price_breaks": breaks,
-        "unit_price_at_needed": unit_price_at(breaks, order or needed),
+        "unit_price_at_order": unit_price_at(breaks, order or needed),
         "min": minimum,
         "mult": multiple,
         "suggested_replacement": _text(part.get(F_REPLACEMENT)),

@@ -69,10 +69,10 @@ Each row has `item`, `refs`, `mpn`, `mfr`, `qty_per_board`, `needed` (that times
   of one part are judged on their sum, not each against the whole stock.
 - `order_qty` is what you would order: `needed_total`, raised to Mouser's minimum (`Min`) and then
   to a multiple of its `Mult`. Stock is compared with it, and so is the price:
-  `mouser.unit_price_at_needed` is the unit price of the price break for `order_qty`.
+  `mouser.unit_price_at_order` is the unit price of the price break for `order_qty`.
 - `mouser` holds the matched part's `part_number`, `manufacturer`, `stock`, `availability` (raw
   text), `lifecycle`, `lead_time`, `price_breaks` (each `qty`, `price` as Mouser wrote it,
-  `price_value` as a number or null, `currency`), `unit_price_at_needed`, `min`, `mult` and
+  `price_value` as a number or null, `currency`), `unit_price_at_order`, `min`, `mult` and
   `suggested_replacement`. It is null when no one part was matched.
 - `notes` says why a line is not `ok`, and anything pcbkit could not read (a missing price, a
   stock figure taken from a text). Read it with the status.

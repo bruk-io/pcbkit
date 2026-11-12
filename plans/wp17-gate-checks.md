@@ -169,7 +169,7 @@ Every check records before it asserts. The failure precedence (reverse bias, the
   - `--qty N` boards (default 1);
   - `--max-age HOURS` (default 24, from `STOCK_MAX_AGE`);
   - `--offline` (use the cache at any age; never ask Mouser).
-- Prints JSON, one object per BOM line: `item`, `refs`, `mpn`, `mfr`, `qty_per_board`, `needed`, `needed_total`, `order_qty`, `status`, `fetched` (ISO date, or null), `age_hours`, `mouser` (`part_number`, `manufacturer`, `stock`, `availability` as raw text, `lifecycle`, `lead_time`, `price_breaks` as `[{"qty", "price" raw, "price_value", "currency"}]`, `unit_price_at_needed`, `min`, `mult`, `suggested_replacement`).
+- Prints JSON, one object per BOM line: `item`, `refs`, `mpn`, `mfr`, `qty_per_board`, `needed`, `needed_total`, `order_qty`, `status`, `fetched` (ISO date, or null), `age_hours`, `mouser` (`part_number`, `manufacturer`, `stock`, `availability` as raw text, `lifecycle`, `lead_time`, `price_breaks` as `[{"qty", "price" raw, "price_value", "currency"}]`, `unit_price_at_order`, `min`, `mult`, `suggested_replacement`).
 - `status` is one of `ok`, `short`, `not-active`, `not-found`, `ambiguous`, `no-mpn`, `not-asked` (no key and nothing cached), `unreadable` and `stale` (see "Slice 5 review changes").
 - Exit codes: 2 if any line is `not-asked` or `stale`, else 1 if any line is not `ok`, else 0 (**owner's call**; `stale` added by the slice 5 review).
 - Logic goes in a new `pcbkit/stock.py`: pure functions from a Mouser answer to rows, plus the batching. `pcbkit/mouser.py` is not touched; its plainness test stays.
@@ -431,7 +431,7 @@ Order:
   - `--offline` with an empty cache gives `not-asked` and exit 2.
   - A cached answer older than `--max-age` is refetched, and `fetched` shows the new date.
   - No request URL and no header text appears in any output.
-- **Planted mistakes:** price breaks read at the per-board quantity instead of the total (`unit_price_at_needed` test red); stale cache accepted (age test red).
+- **Planted mistakes:** price breaks read at the per-board quantity instead of the total (`unit_price_at_order` test red); stale cache accepted (age test red).
 - **No KiCad needed:** yes. M3 confirms the field names.
 - **Size:** medium. The field names are unknown.
 
@@ -591,5 +591,5 @@ The independent review rejected slice 5 for four false `ok` results. The rule be
   - `unreadable` now also covers a lifecycle text outside the allow-list (`null`, empty, `New Product`, `New at Mouser`, `Active`) and not on the known not-active list, a non-text lifecycle, an unreadable `IsDiscontinued`, `Min` or `Mult`, and parts with no `ManufacturerPartNumber`.
   - `ambiguous` also covers the one match being by another maker than the line's (whole name or known alias; never a prefix).
 - **Exit code:** 2 if any line is `not-asked` or `stale`, else 1 if any line is not `ok`, else 0. The JSON is on stdout only with those codes; a usage error (2) and a missing project (1) print a message.
-- **New row fields:** `needed_total` (the part's total over every BOM line, by squashed part number, times `--qty`) and `order_qty` (`needed_total` raised to `Min`, then to a multiple of `Mult`; null when no part was matched or `Min`/`Mult` were unreadable). Stock and price are judged at them; `mouser.unit_price_at_needed` is the price at `order_qty`.
+- **New row fields:** `needed_total` (the part's total over every BOM line, by squashed part number, times `--qty`) and `order_qty` (`needed_total` raised to `Min`, then to a multiple of `Mult`; null when no part was matched or `Min`/`Mult` were unreadable). Stock and price are judged at them; `mouser.unit_price_at_order` is the price at `order_qty`.
 - `stock.fetch_answers` asks through `mouser.send` and `cache.write` rather than `parts.ask_mouser`, so a cache that cannot be written still yields the fresh answer; `parts.py` and `cache.py` are untouched.
