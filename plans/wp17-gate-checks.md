@@ -627,10 +627,12 @@ No name rule fixes that, so names are no longer guessed.
 - **`SUPPLY_NETS` (new table, `power` group, in `pcbkit/check/links.py`):** `[net]`, the
   supply and ground nets. The walk refuses to cross exactly these and `GROUND_NET` when
   that is defined. Like every table in an opt-in group a missing one fails by name, and a
-  listed net that is not in the design fails by name. A supply left out is walked: that is
-  a false failure, never a false pass, and the message ends with the way out ("if 3V3 is
-  a supply, add it to specs.SUPPLY_NETS") whenever the path passes through a net that is
-  no listed enable.
+  listed net that is not in the design fails by name. A supply left out is walked: for
+  the bypass search that is a false failure, never a false pass, and the message ends
+  with the way out whenever the path passes through a net that is no listed enable. For
+  the tie rule it is the other way: a tie to a supply that is not declared is not seen,
+  so a 0 ohm from an enable to an undeclared `3V3` passes. (Corrected 2026-11-12, after
+  the fourth review.)
 - **Targets are table-wide (B2):** each case still runs per shared net, but every walk
   stops on any shared net of the table and any other listed regulator's own enable net.
 - **A link may sit anywhere on the path (S2):** a regulator's link is the one two-pad link
@@ -682,3 +684,25 @@ rejections: the walk listed what conducts, so anything not on the list was skipp
   `M1`) joins every pad, so GPIOs from one module to two enables fail.
 - The "Not done" changelog line in the follow-ups note above is done: it is in the root
   `CHANGELOG.md` under Unreleased.
+
+## Enable links after the fourth review (2026-11-12)
+
+The fourth review found the engine held and rejected on one blocker: a diode with three
+or more pads was walked by its pin names, and a series pair names its common pad `K`
+(KiCad's `Diode:BAV99` is K, A, K), so a real path from pad 1 to pad 3 was missed.
+
+- **Diodes:** walked by `A`/`K` names only with two pads. Three or more pads are joined
+  on all pads (over-connecting only). The unit test that said multi-pad diodes go each
+  anode to each cathode now says the opposite.
+- **DIP switches** (`Switch:SW_DIP_x<n>`) follow their pinout, pad k to pad 2n+1-k.
+- **Links:** a two-pad part with reference letters `JP` from any library is a link (a
+  header with a shunt). A connector on both nets is named in the message as not walked.
+- **The tie rule is inverted, like the walk:** every walked two-pad part ties unless it
+  is a resistor with a real value above 0 ohm, a diode, or not fitted (a not-fitted value
+  alone, a jumper named `_Open` or `_NO`). Multi-pad parts keep the earlier rule.
+- **Not walked:** reference letters `A` join `U`, `IC` and `Q` (KiCad's `Module:`
+  symbols default to `A`). `M` is left out.
+- **Messages:** a path through a part joined on all pads by default says so and gives no
+  supply hint; a net named like a ground (`0V`, `AGND`...) points at `GROUND_NET` (words
+  only: no net is a supply by name); a custom-library header such as `CN1` says why it is
+  walked.
