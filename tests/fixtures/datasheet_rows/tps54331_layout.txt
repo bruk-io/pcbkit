@@ -1,0 +1,86 @@
+6 Specifications
+6.1 Absolute Maximum Ratings
+over operating free-air temperature range (unless otherwise noted) (1)
+                                                                                                          MIN          MAX            UNIT
+                      VIN                                                                                 –0.3           30
+                      EN                                                                                  –0.3           6
+                      BOOT                                                                                               38
+    Input voltage                                                                                                                      V
+                      VSENSE                                                                              –0.3           3
+                      COMP                                                                                –0.3           3
+                      SS                                                                                  –0.3           3
+                      BOOT-PH                                                                                            8
+    Output voltage    PH                                                                                  –0.6           30            V
+                      PH (10-ns transient from ground to negative peak)                                                  –5
+                      EN                                                                                                100            μA
+                      BOOT                                                                                              100            mA
+    Source current
+                      VSENSE                                                                                             10            μA
+                      PH                                                                                                 9             A
+                      VIN                                                                                                9             A
+    Sink current      COMP                                                                                              100
+                                                                                                                                       μA
+                      SS                                                                                                200
+    Operating junction temperature, TJ                                                                    –40           150            °C
+    Storage temperature range, Tstg                                                                       –65           150            °C
+
+
+6.2 ESD Ratings
+                                                                                                           MIN          MAX           UNIT
+                                  Human body model (HBM), per ANSI/ESDA/JEDEC JS-001, all pins(1)           –2            2            kV
+               Electrostatic
+    V(ESD)                        Charged device model (CDM), per JEDEC specification JESD22-
+               discharge                                                                                   –500          500            V
+                                  C101, all pins(2)
+
+(1)      JEDEC document JEP155 states that 500-V HBM allows safe manufacturing with a standard ESD control process.
+(2)      JEDEC document JEP157 states that 250-V CDM allows safe manufacturing with a standard ESD control process.
+
+6.3 Recommended Operating Conditions
+over operating free-air temperature range (unless otherwise noted)
+                                                                                                                MIN          MAX      UNIT
+             Operating input voltage on (VIN pin)                                                                3.5           28      V
+    TJ       Operating junction temperature                                                                      –40          150      °C
+
+6.5 Electrical Characteristics
+TJ = –40°C to 150°C, VIN = 3.5 to 28 V (unless otherwise noted)
+                   PARAMETER                                           TEST CONDITIONS                       MIN      TYP        MAX      UNIT
+ SUPPLY VOLTAGE (VIN PIN)
+      Internal undervoltage lockout threshold     Rising and falling                                                               3.5      V
+      Shutdown supply current                     EN = 0 V, VIN = 12 V, –40°C to 85°C                                       1       4      μA
+      Operating – non-switching supply current    VSENSE = 0.85 V                                                         110     190      μA
+ ENABLE AND UVLO (EN PIN)
+      Enable threshold                            Rising and falling                                                  1.25        1.35      V
+      Input current                               Enable threshold – 50 mV                                                 –1              μA
+      Input current                               Enable threshold + 50 mV                                                 –4              μA
+ VOLTAGE REFERENCE
+      Voltage reference                                                                                     0.772          0.8   0.828      V
+ HIGH-SIDE MOSFET
+                                                  BOOT-PH = 3 V, VIN = 3.5 V                                              115     200      mΩ
+      On resistance
+                                                  BOOT-PH = 6 V, VIN = 12 V                                                80     150
+ ERROR AMPLIFIER
+      Error amplifier transconductance (gm)       –2 μA < I(COMP) < 2 μA, V(COMP) = 1 V                                    92             μmhos
+      Error amplifier DC gain(1)                  VSENSE = 0.8 V                                                          800              V/V
+      Error amplifier unity gain bandwidth(1)     5-pF capacitance from COMP to GND pins                                   2.7             MHz
+      Error amplifier source and sink current     V(COMP) = 1 V, 100-mV overdrive                                          ±7              μA
+      Switch current to COMP                      VIN = 12 V                                                               12              A/V
+      transconductance
+ PULSE SKIPPING ECO-MODE
+      Pulse skipping Eco-mode switch current                                                                              160              mA
+      threshold
+ CURRENT LIMIT
+      Current-limit threshold                     VIN = 12 V                                                  3.5          5.8              A
+ THERMAL SHUTDOWN
+      Thermal shutdown                                                                                                    165              °C
+ SLOW START (SS PIN)
+      Charge current                              V(SS) = 0.4 V                                                             2              μA
+      SS to VSENSE matching                       V(SS) = 0.4 V                                                            10              mV
+
+6.6 Switching Characteristics
+TJ = –40°C to 150°C, VIN = 3.5 to 28 V (unless otherwise noted)
+                    PARAMETER                         TEST CONDITIONS            MIN          TYP          MAX       UNIT
+    SWITCHING FREQUENCY
+      Switching frequency                     VIN = 12 V, 25°C                   456          570           684       kHz
+      Minimum controllable on time            VIN = 12 V, 25°C                                105           130       ns
+      Maximum controllable duty ratio(1)      BOOT-PH = 6 V                      90%          93%

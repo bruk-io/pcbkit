@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from pathlib import Path
 
 import pytest
 
@@ -1226,6 +1227,116 @@ def test_a_bullet_at_the_start_of_a_line_is_an_opener(value: str, page: str) -> 
 def test_a_bullet_inside_a_line_is_still_unknown(value: str, page: str) -> None:
     """Refuse a number next to a bullet inside a line, or another bullet character."""
     assert rule(check_citation(value, page, 1, [page])) is Rule.NUMBER
+
+
+# Real rows: pdftotext 24.02 -layout text of the absolute maximum ratings, ESD
+# ratings, recommended operating conditions, electrical and switching characteristics
+# of a public TI datasheet (TPS54331, SLVS839H), copied unchanged.
+
+TPS54331 = (
+    (Path(__file__).resolve().parents[1] / "fixtures" / "datasheet_rows")
+    .joinpath("tps54331_layout.txt")
+    .read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("-0.3 V", "VIN –0.3 30 EN –0.3 6"),  # W1: a symbol, a gap, a sign
+        ("-0.3 V", "VSENSE –0.3 3"),
+        ("-0.6 V", "Output voltage PH –0.6 30 V"),
+        ("30 V", "Output voltage PH –0.6 30 V"),
+        ("-40 °C", "Operating junction temperature, TJ –40 150 °C"),
+        ("150 °C", "Operating junction temperature, TJ –40 150 °C"),
+        ("-65 °C", "Storage temperature range, Tstg –65 150 °C"),  # W1 and W2
+        ("150 °C", "Storage temperature range, Tstg –65 150 °C"),
+        ("-40 °C", "TJ Operating junction temperature –40 150 °C"),
+        ("3.5 V", "Operating input voltage on (VIN pin) 3.5 28 V"),
+        ("4 μA", "Shutdown supply current EN = 0 V, VIN = 12 V, –40°C to 85°C 1 4 μA"),
+        ("190 μA", "non-switching supply current VSENSE = 0.85 V 110 190 μA"),  # W2
+        ("0.8 V", "Voltage reference 0.772 0.8 0.828 V"),  # W2 after a fraction
+        ("0.772 V", "Voltage reference 0.772 0.8 0.828 V"),
+        ("±7 μA", "source and sink current V(COMP) = 1 V, 100-mV overdrive ±7 μA"),
+        ("5.8 A", "Current-limit threshold VIN = 12 V 3.5 5.8 A"),
+        ("165 °C", "Thermal shutdown 165 °C"),
+        ("570 kHz", "Switching frequency VIN = 12 V, 25°C 456 570 684 kHz"),  # W2
+        ("130 ns", "Minimum controllable on time VIN = 12 V, 25°C 105 130 ns"),
+        ("93%", "Maximum controllable duty ratio(1) BOOT-PH = 6 V 90% 93%"),
+        ("200 mΩ", "BOOT-PH = 3 V, VIN = 3.5 V 115 200 mΩ"),  # the ohm sign
+        ("2 kV", "JEDEC JS-001, all pins(1) –2 2 kV"),
+    ],
+)
+def test_real_layout_rows_back_their_right_values(value: str, quote: str) -> None:
+    """Accept right values quoted from real -layout table rows."""
+    assert check_citation(value, quote, 1, [TPS54331]) is None
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        # Wrong values: a changed digit, a dropped or added sign, another unit.
+        ("0.3 V", "VIN –0.3 30 EN –0.3 6"),
+        ("-0.6 V", "VSENSE –0.3 3"),
+        ("40 °C", "Operating junction temperature, TJ –40 150 °C"),
+        ("-150 °C", "Storage temperature range, Tstg –65 150 °C"),
+        ("5.8 V", "Current-limit threshold VIN = 12 V 3.5 5.8 A"),
+        ("-7 μA", "source and sink current V(COMP) = 1 V, 100-mV overdrive ±7 μA"),
+        ("0.82 V", "Voltage reference 0.772 0.8 0.828 V"),
+        ("165 °F", "Thermal shutdown 165 °C"),
+        ("200 Ω", "BOOT-PH = 3 V, VIN = 3.5 V 115 200 mΩ"),
+        # Right values the grammar still refuses: the dash has no certain role.
+        ("-2 kV", "JEDEC JS-001, all pins(1) –2 2 kV"),  # after ")"
+        ("-1 μA", "Input current Enable threshold – 50 mV –1 μA"),  # after a unit
+        ("-5 V", "PH (10-ns transient from ground to negative peak) –5"),  # ")"
+    ],
+)
+def test_real_layout_rows_refuse_wrong_and_uncertain_values(
+    value: str, quote: str
+) -> None:
+    """Refuse wrong values from real rows, and the right ones whose sign is unsure."""
+    assert rule(check_citation(value, quote, 1, [TPS54331])) is Rule.NUMBER
+
+
+def test_real_layout_rows_show_the_unit_and_role_blind_spots() -> None:
+    """Pin the blind spots on real rows: a unit in another cell, a neighbour's role."""
+    quote = "Switching frequency VIN = 12 V, 25°C 456 570 684 kHz"
+    assert check_citation("570 MHz", quote, 1, [TPS54331]) is None  # unit not stated
+    assert check_citation("684 kHz", quote, 1, [TPS54331]) is None  # max, not typ
+    assert rule(check_citation("684 MHz", quote, 1, [TPS54331])) is Rule.NUMBER
+
+
+# Blind spots, pinned: each passes, and no text check can tell it from a right value.
+
+
+@pytest.mark.parametrize(
+    "value, quote, page",
+    [
+        # Roles: a neighbour in the same quote passes.
+        ("4.4 V", "Wake up VIN voltage 4.0 4.2 4.4 V", None),
+        (
+            "-0.3 V",
+            "AGND –0.3 0.3 V SW –2 32 V",
+            "AGND    –0.3   0.3  V\nSW  –2  32  V",
+        ),
+        # A cross-reference reads as a range.
+        ("10", "see Figure 8-10 for details", None),
+        ("8", "see Figure 8-10 for details", None),
+        # A power of ten flattened with no mark.
+        ("6", "Endurance 10\n6 cycles min", None),
+        ("106", "Endurance 106 cycles min", None),
+        ("10", "Endurance 10 6 cycles min", None),
+        # A footnote digit glued to a number.
+        ("3.61", "VDD max is 3.61 V", None),
+        # A rail offset in its own cell, read as a sign by W1.
+        ("-0.4 V", "Output high VOH VCC    –0.4 V", None),
+    ],
+)
+def test_the_documented_blind_spots_pass(
+    value: str, quote: str, page: str | None
+) -> None:
+    """Accept each documented blind spot: a change here must update the docstring."""
+    assert check_citation(value, quote, 1, [quote if page is None else page]) is None
 
 
 # Right values that the grammar still refuses, on purpose. Each is pinned so that a
