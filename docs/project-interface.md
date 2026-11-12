@@ -1065,7 +1065,8 @@ It records `enable links`,
 keyed `"U3 pad 4"`).
 
 `test_fault_state_pins[condition]` (one per key of `FAULT_STATES`) builds
-`circuits.scenario(nl, **scenario)`, solves it, and fails for each listed pin that:
+`circuits.scenario(nl, **scenario)`, solves it, and fails when the condition lists no
+pins (it would judge nothing), and for each listed pin that:
 
 - is not on a net (a reference that is not in the design, or a pad the netlist does not
   list: the message gives the pads it has);

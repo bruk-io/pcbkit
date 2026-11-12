@@ -262,6 +262,11 @@ def judge(
     or None to leave that test out.
     """
     report = FaultReport()
+    if not pins:
+        report.problems.append(
+            "it lists no pins, so nothing is judged: list the pins whose level the "
+            "condition must hold, or remove the condition"
+        )
     listed = {(ref, pad) for ref, pad, _w in pins}
     seen: set[tuple[str, str]] = set()
     for ref, pad, (lo, hi) in pins:

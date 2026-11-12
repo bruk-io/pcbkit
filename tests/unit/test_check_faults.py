@@ -418,3 +418,11 @@ def test_the_shape_is_registered_here_and_reads_pads_as_text() -> None:
     assert tables.read(Specs, "FAULT_STATES") == {
         "c": {"scenario": {}, "pins": [("U2", "3", (0, 0.4))]}
     }
+
+
+def test_a_condition_with_no_pins_fails_rather_than_judging_nothing() -> None:
+    """``"pins": []`` is a mistake, not a pass."""
+    assert judge(board(), []).problems == [
+        "it lists no pins, so nothing is judged: list the pins whose level the "
+        "condition must hold, or remove the condition"
+    ]
