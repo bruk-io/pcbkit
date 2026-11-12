@@ -6,35 +6,41 @@ that can be taken out without touching the others, and taking it out isolates it
 
 A *link* is a two-pad part that is
 
-* a ``Device:R``, ``Device:R_Small``, ``Device:R_US`` or ``Device:R_Small_US`` whose
-  value reads as 0 (``0``, ``0R``, ``0R0``, ``0E``, ``R0``, ``0 ohm``) or is a
-  not-fitted mark alone (``DNP``, ``DNF``, ``NF``, ``NP``, ``NC``: the footprint is
-  there to fit at bring-up), or
-* a part from a library whose name starts with ``Jumper``.
+* a resistor (reference letters ``R``, from any library) whose value reads as 0
+  (``0``, ``0R``, ``0R0``, ``0E``, ``R0``, ``0 ohm``) or is a not-fitted mark alone
+  (``DNP``, ``DNF``, ``NF``, ``NP``, ``NC``: the footprint is there to fit at
+  bring-up), or
+* a part from a library whose name starts with ``Jumper``, with two pads (read from
+  the symbol name, ``SolderJumper_2_Open``, when it gives one).
 
-A resistor-pack element and a three-pad jumper are not links (the walk still goes
-through them).
+The walk goes through every part by default: a part with two or more pads joins all
+its pads to each other, from any library. The exceptions are a closed list (``arcs``):
 
-The walk. From a net it crosses every part that can carry a current from one net to
-another (``arcs``): any two-pad part but a capacitor, a diode (two pads named ``A``
-and ``K``) one way only, every pad of a ``Jumper`` part to every other, a resistor
-pack's elements by its real pinout, and every pad of a pack or network whose pinout is
-not known to every other. It never crosses a supply or ground net: exactly the nets
-the project lists in ``SUPPLY_NETS``, plus ``GROUND_NET`` when that is defined. Names
-are not guessed: a supply that is not declared is walked, and a failure whose path
-runs through a net no listed regulator's enable is on says how to declare it. A part
-with three or more pads that is not a jumper or pack (a transistor, a gate, a
-regulator) is not walked, so a path through an active part is not found.
+* not walked: a part whose reference letters are ``U``, ``IC`` or ``Q`` (integrated
+  circuits and transistors), a capacitor with two pads (reference letters ``C``), a
+  connector as the port-map check defines it (``ports.is_connector``) and a test point;
+* walked by its real pinout: the ``Device`` resistor packs (``R_Pack<n>`` and
+  ``_Split`` pad *k* to pad *2n+1-k*, ``R_Pack<n>_SIP`` pads 1-2, 3-4...,
+  ``R_Network<n>`` every pad to pad 1), and a diode, a part whose pads are all named
+  ``A``/``A<n>`` or ``K``/``K<n>``: each anode pad to each cathode pad, in the
+  direction of current.
+
+It never crosses a supply or ground net: exactly the nets the project lists in
+``SUPPLY_NETS``, plus the ground net it is given. Names are not guessed: a supply that
+is not declared is walked, and a failure whose path runs through a net no listed
+regulator's enable is on says how to tell a rail from a real path.
 
 The rule, for each ``(ref, pad)`` of the shared net being checked, with *targets* the
 shared nets of every row of the table and the own enable nets of every other listed
 regulator: exactly one link must be such that, with it taken out, no walk from the
 regulator's own enable net reaches a target, while with it in place the own net reaches
 its shared net. A walk counts in either direction of current (the target driving the
-enable or the enable driving the target), so a diode is followed anode to cathode on
-the way out and cathode to anode on the way in. On the regulator's side of that link
-no 0 ohm resistor or jumper may tie a net to a supply: the link would then control
-nothing.
+enable or the enable driving the target). Between the enable and that link, and on any
+net held to them by fitted 0 ohm parts, nothing fitted and 0 ohm may tie a net to a
+supply: the link would then control nothing. For that rule a jumper whose symbol name
+has ``_Open`` (or whose value is a not-fitted mark) is not fitted, a ``_Bridged`` one is
+fitted on the pads its name gives (``Bridged12``), any other jumper is fitted, and a 0
+ohm element of a known pack ties its two pads.
 
 ``ENABLE_LINKS`` is ``{enable net: [(regulator ref, enable pad)]}``, pads as the
 netlist writes them; ``SUPPLY_NETS`` is ``[net]``. The functions here compare them with
@@ -50,6 +56,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from pcbkit.check.netlist import Netlist, natkey, parse_value
+from pcbkit.check.ports import is_connector, letters
 from pcbkit.check.tables import DictOf, ListOf, Net, Pad, Ref, Shape, Tuple
 
 TABLES: dict[str, Shape] = {
@@ -60,8 +67,6 @@ TABLES: dict[str, Shape] = {
 }
 
 
-# The resistor symbols a link may be: two pins, one resistor.
-RESISTOR = re.compile(r"R(_Small)?(_US)?")
 # A value that says "not fitted": the link's footprint is still there.
 NOT_FITTED = ("dnp", "dnf", "nf", "np", "nc")
 # Writing a zero with the R, E or ohm sign as the decimal point: 0R0, R0, 0E, 0 ohm.
@@ -71,9 +76,19 @@ PACK_FACING = re.compile(r"R_Pack(\d+)(_Split)?")
 PACK_SIP = re.compile(r"R_Pack(\d+)_SIP")
 # A network with one common pad (pad 1) and every other pad to it.
 NETWORK_STAR = re.compile(r"R_Network(\d+)(_US)?")
-# Other packs, networks and multi-pad resistors: every pad is taken as joined.
-PACK_UNKNOWN = re.compile(r"R_(Pack|Network|Array|Pot|Trim)")
-CAPACITOR = re.compile(r"CP?(_|$)")
+# The pin names of a diode's anodes and cathodes.
+ANODE = re.compile(r"A\d*", re.IGNORECASE)
+CATHODE = re.compile(r"K\d*", re.IGNORECASE)
+# Reference letters of the parts the walk does not go through.
+NOT_WALKED = ("U", "IC", "Q")
+# The pad count a jumper's symbol name gives (SolderJumper_3_Bridged12), and the pads
+# a bridged jumper joins.
+JUMPER_PADS = re.compile(r"(?:^|_)(\d+)(?:_|$)")
+BRIDGED = re.compile(r"_Bridged(\d*)")
+# Device resistor symbols with more than two pads: never a link, whatever the netlist
+# shows of their pads.
+MULTI_PAD_RESISTOR = re.compile(r"R_(Pack|Network|Array|Pot|Trim|Shunt)")
+NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six"}
 
 # A path: net, part, net, part, ..., net.
 Path = list[str]
@@ -108,16 +123,41 @@ def is_jumper(nl: Netlist, ref: str) -> bool:
     return str(nl.parts[ref]["lib"]).startswith("Jumper")
 
 
+def pad_count(nl: Netlist, ref: str) -> int:
+    """Return how many pads ``ref`` has: a jumper's symbol name says, else the netlist.
+
+    A pad left off every net is missing from the netlist, so a three-pad jumper with
+    one pad unused would otherwise look like a two-pad one.
+    """
+    found = JUMPER_PADS.search(str(nl.parts[ref]["part"]))
+    if is_jumper(nl, ref) and found:
+        return int(found.group(1))
+    return len(nl.functions(ref))
+
+
 def is_link(nl: Netlist, ref: str) -> bool:
     """Return True for a two-pad 0 ohm or not-fitted resistor, or two-pad jumper."""
-    part = nl.parts[ref]
-    if len(nl.functions(ref)) != 2:
+    if len(nl.functions(ref)) != 2 or pad_count(nl, ref) != 2:
         return False
     if is_jumper(nl, ref):
         return True
-    if part["lib"] != "Device" or not RESISTOR.fullmatch(str(part["part"])):
+    part = nl.parts[ref]
+    if part["lib"] == "Device" and MULTI_PAD_RESISTOR.match(str(part["part"])):
         return False
-    return is_zero(str(part["value"]))
+    return letters(ref) == "R" and is_zero(str(part["value"]))
+
+
+def not_a_link(nl: Netlist, ref: str) -> str:
+    """Return why two-pad part ``ref`` is not a link."""
+    if is_jumper(nl, ref):
+        count = pad_count(nl, ref)
+        return f"{ref} has {NUMBER_WORDS.get(count, count)} pads: a link must have two"
+    part = nl.parts[ref]
+    if part["lib"] == "Device" and MULTI_PAD_RESISTOR.match(str(part["part"])):
+        return "it is a resistor pack, network or multi-pad resistor"
+    if letters(ref) == "R":
+        return "its value is not 0 ohm or a not-fitted mark"
+    return "a link is a resistor (reference R) or a two-pad jumper"
 
 
 def joiners(nl: Netlist, a: str, b: str) -> list[str]:
@@ -140,48 +180,99 @@ def _both_ways(pairs: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
     return [arc for a, b in pairs for arc in ((a, b), (b, a))]
 
 
+def _is_test_point(nl: Netlist, ref: str) -> bool:
+    """Return True for a test point: letters ``TP``, or ``TestPoint`` in its symbol."""
+    part = nl.parts[ref]
+    lib, name = str(part["lib"]).lower(), str(part["part"]).lower()
+    return letters(ref) == "TP" or "testpoint" in lib or "testpoint" in name
+
+
+def _pack_pairs(nl: Netlist, ref: str) -> list[tuple[str, str]] | None:
+    """Return the element pads of a known ``Device`` pack, or None for other parts."""
+    part = nl.parts[ref]
+    if part["lib"] != "Device":
+        return None
+    name = str(part["part"])
+    functions = nl.functions(ref)
+    pads = sorted(functions, key=natkey)
+    numeric = all(p.isdigit() for p in pads)
+    facing = PACK_FACING.fullmatch(name)
+    if facing and numeric:
+        top = 2 * int(facing.group(1)) + 1
+        return [
+            (p, str(top - int(p)))
+            for p in pads
+            if int(p) < top - int(p) and str(top - int(p)) in functions
+        ]
+    sip = PACK_SIP.fullmatch(name)
+    if sip and numeric:
+        return [
+            (p, str(int(p) + 1))
+            for p in pads
+            if int(p) % 2 == 1 and str(int(p) + 1) in functions
+        ]
+    if NETWORK_STAR.fullmatch(name) and "1" in functions:
+        return [("1", p) for p in pads if p != "1"]
+    return None
+
+
 def arcs(nl: Netlist, ref: str) -> list[tuple[str, str]]:
     """Return ``(from pad, to pad)`` for each way current can pass through ``ref``.
 
-    A two-pad part but a capacitor both ways, a diode (pads named ``A`` and ``K``)
-    anode to cathode only; every pad of a ``Jumper`` part to every other; a
-    ``Device:R_Pack<n>`` or ``R_Pack<n>_Split`` pad *k* with pad *2n+1-k*; an
-    ``R_Pack<n>_SIP`` pads 1-2, 3-4...; an ``R_Network<n>`` every pad with pad 1; any
-    other pack, network or multi-pad resistor every pad with every other. Other parts
-    (three pads or more: transistors, gates, regulators) have none.
+    Every pad to every other, unless ``ref`` is on the closed list: none for a part
+    whose reference letters are ``U``, ``IC`` or ``Q``, a two-pad capacitor (letters
+    ``C``), a connector or a test point; a known ``Device`` resistor pack by its
+    elements; a diode (every pad named ``A``/``A<n>`` or ``K``/``K<n>``) from each
+    anode pad to each cathode pad only. Jumpers join all their pads.
     """
-    part = nl.parts[ref]
-    lib, name = str(part["lib"]), str(part["part"])
     functions = nl.functions(ref)
     pads = sorted(functions, key=natkey)
-    if lib.startswith("Jumper"):
-        return _all_pairs(pads)
-    if lib == "Device":
-        facing = PACK_FACING.fullmatch(name)
-        sip = PACK_SIP.fullmatch(name)
-        star = NETWORK_STAR.fullmatch(name)
-        numeric = all(p.isdigit() for p in pads)
-        if facing and numeric:
-            top = 2 * int(facing.group(1)) + 1
-            return _both_ways(
-                (p, str(top - int(p))) for p in pads if str(top - int(p)) in functions
-            )
-        if sip and numeric:
-            return _both_ways(
-                (p, str(int(p) + 1))
-                for p in pads
-                if int(p) % 2 == 1 and str(int(p) + 1) in functions
-            )
-        if star and "1" in functions:
-            return _both_ways(("1", p) for p in pads if p != "1")
-        if PACK_UNKNOWN.match(name):
-            return _all_pairs(pads)
-    if len(pads) != 2 or (lib == "Device" and CAPACITOR.match(name)):
+    if len(pads) < 2:
         return []
-    by_function = {f: p for p, f in functions.items()}
-    if sorted(by_function) == ["A", "K"]:
-        return [(by_function["A"], by_function["K"])]
-    return _both_ways([(pads[0], pads[1])])
+    found = letters(ref)
+    if found in NOT_WALKED or (found == "C" and len(pads) == 2):
+        return []
+    if _is_test_point(nl, ref) or is_connector(nl, ref):
+        return []
+    if is_jumper(nl, ref):
+        return _all_pairs(pads)
+    pack = _pack_pairs(nl, ref)
+    if pack is not None:
+        return _both_ways(pack)
+    anodes = [p for p in pads if ANODE.fullmatch(functions[p])]
+    cathodes = [p for p in pads if CATHODE.fullmatch(functions[p])]
+    if anodes and cathodes and len(anodes) + len(cathodes) == len(pads):
+        return [(a, k) for a in anodes for k in cathodes]
+    return _all_pairs(pads)
+
+
+def tie_pairs(nl: Netlist, ref: str) -> list[tuple[str, str]]:
+    """Return the pairs of pads a fitted 0 ohm part ties together, both ways.
+
+    A two-pad resistor (letters ``R``) whose value reads as 0; a known pack whose value
+    reads as 0, by its elements; a jumper that is fitted: not one whose symbol name has
+    ``_Open`` or whose value is a not-fitted mark, a ``_Bridged`` one on the pads its
+    name gives (``Bridged12``: pads 1 and 2; plain ``_Bridged``: all), any other on
+    all its pads. A not-fitted value ties nothing.
+    """
+    part = nl.parts[ref]
+    value, name = str(part["value"]), str(part["part"])
+    if is_not_fitted(value):
+        return []
+    pads = sorted(nl.functions(ref), key=natkey)
+    if is_jumper(nl, ref):
+        if "_Open" in name:
+            return []
+        bridged = BRIDGED.search(name)
+        if bridged and bridged.group(1):
+            return _all_pairs([p for p in pads if p in bridged.group(1)])
+        return _all_pairs(pads)
+    if not is_zero(value):
+        return []
+    if letters(ref) == "R" and len(pads) == 2:
+        return _all_pairs(pads)
+    pack = _pack_pairs(nl, ref)
+    return _both_ways(pack) if pack else []
 
 
 @dataclass(frozen=True)
@@ -206,30 +297,6 @@ def _graph(nl: Netlist) -> _Graph:
     return _Graph(forward, backward)
 
 
-def _walk(
-    steps: Mapping[str, list[tuple[str, str]]],
-    start: str,
-    supplies: frozenset[str],
-    removed: str | None,
-) -> dict[str, tuple[str, str] | None]:
-    """Return ``{net: (net before, part) or None}`` for each net reached from start.
-
-    Breadth first, so the parent chain of a net is a shortest path to it. It does not
-    go on from a supply net, nor through part ``removed``.
-    """
-    parents: dict[str, tuple[str, str] | None] = {start: None}
-    queue = deque([start])
-    while queue:
-        net = queue.popleft()
-        if net != start and net in supplies:
-            continue
-        for ref, other in steps.get(net, []):
-            if ref != removed and other not in parents:
-                parents[other] = (net, ref)
-                queue.append(other)
-    return parents
-
-
 def _path(parents: Mapping[str, tuple[str, str] | None], net: str) -> Path:
     """Return the path from the walk's start to ``net``: net, part, net, ..."""
     path = [net]
@@ -241,30 +308,56 @@ def _path(parents: Mapping[str, tuple[str, str] | None], net: str) -> Path:
     return path[::-1]
 
 
-@dataclass(frozen=True)
+@dataclass
 class _Walker:
-    """Walks one netlist from a regulator's own enable net, both ways."""
+    """Walks one netlist from a regulator's own enable net, out and back.
+
+    ``steps`` counts every part step looked at, for the tests that bound the search.
+    """
 
     graph: _Graph
     supplies: frozenset[str]
+    steps: int = 0
 
-    def reached(self, start: str, removed: str | None) -> list[Path]:
-        """Return a shortest path to every net reached, out first, then in."""
-        out = _walk(self.graph.forward, start, self.supplies, removed)
-        back = _walk(self.graph.backward, start, self.supplies, removed)
-        paths = {net: _path(out, net) for net in out}
-        for net in back:
-            if net not in paths:
-                paths[net] = _path(back, net)
-        return sorted(paths.values(), key=len)
+    def _walk(
+        self,
+        steps: Mapping[str, list[tuple[str, str]]],
+        start: str,
+        removed: str | None,
+        wanted: set[str],
+    ) -> tuple[dict[str, tuple[str, str] | None], str | None]:
+        """Walk breadth first from ``start``; stop at the first net in ``wanted``.
+
+        Return the parents of every net reached and the wanted net found, or None.
+        The walk does not go on from a supply net, nor through part ``removed``.
+        """
+        parents: dict[str, tuple[str, str] | None] = {start: None}
+        queue = deque([start])
+        while queue:
+            net = queue.popleft()
+            if net != start and net in self.supplies:
+                continue
+            for ref, other in steps.get(net, []):
+                self.steps += 1
+                if ref == removed or other in parents:
+                    continue
+                parents[other] = (net, ref)
+                if other in wanted:
+                    return parents, other
+                queue.append(other)
+        return parents, None
 
     def first(self, start: str, removed: str | None, targets: Iterable[str]) -> Path:
-        """Return a shortest path to a target, or an empty list if none is reached."""
+        """Return a shortest path to a target, out or back, or [] if none is reached."""
         wanted = set(targets) - {start}
-        for path in self.reached(start, removed):
-            if path[-1] in wanted:
-                return path
-        return []
+        if not wanted:
+            return []
+        found = []
+        for steps in (self.graph.forward, self.graph.backward):
+            parents, net = self._walk(steps, start, removed, wanted)
+            if net is not None:
+                found.append(_path(parents, net))
+        return min(found, key=len) if found else []
 
 
 @dataclass
@@ -273,11 +366,13 @@ class EnableReport:
 
     ``links`` maps each regulator to the link part it was found behind, or None; a
     regulator listed on two pads is keyed ``"U3 pad 4"`` and not ``"U3"``. ``problems``
-    has one line for each thing wrong.
+    has one line for each thing wrong. ``steps`` is how many part steps the walks
+    looked at, a measure of the work done.
     """
 
     links: dict[str, str | None] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
+    steps: int = 0
 
 
 def supply_problems(nl: Netlist, supplies: Iterable[str]) -> list[str]:
@@ -294,13 +389,19 @@ def supply_problems(nl: Netlist, supplies: Iterable[str]) -> list[str]:
 
 
 def _hint(path: Path, enables: set[str]) -> str:
-    """Return the advice to declare a supply for the nets a path passes through."""
+    """Return the note for the nets a path passes through that could be a supply."""
     between = [n for n in path[2:-1:2] if n not in enables]
     if not between:
         return ""
     if len(between) == 1:
-        return f"; if {between[0]} is a supply, add it to specs.SUPPLY_NETS"
-    return f"; if any of {', '.join(between)} is a supply, add it to specs.SUPPLY_NETS"
+        return (
+            f" (if {between[0]} is a supply rail, declare it in specs.SUPPLY_NETS; "
+            "if it is a signal, this path is real)"
+        )
+    return (
+        f" (if any of {', '.join(between)} is a supply rail, declare it in "
+        "specs.SUPPLY_NETS; if they are signals, this path is real)"
+    )
 
 
 def _show(path: Path) -> str:
@@ -308,11 +409,38 @@ def _show(path: Path) -> str:
     return " - ".join(path)
 
 
-def _three_pad_jumpers(nl: Netlist, refs: Iterable[str]) -> list[str]:
-    """Return the jumpers among ``refs`` that have more than two pads, in order."""
-    return [
-        r for r in dict.fromkeys(refs) if is_jumper(nl, r) and len(nl.functions(r)) > 2
-    ]
+def _ties(
+    nl: Netlist, walker: _Walker, what: str, held: list[str], link: str
+) -> list[str]:
+    """Return a line for each fitted 0 ohm tie to a supply from the nets ``held``.
+
+    ``held`` is the nets between the enable and its link; the nets fitted 0 ohm parts
+    join to them are held too.
+    """
+    seen = set(held)
+    queue = deque(held)
+    problems: list[str] = []
+    while queue:
+        net = queue.popleft()
+        for ref in sorted(nl.refs_on(net), key=natkey):
+            if ref == link:
+                continue
+            for a, b in tie_pairs(nl, ref):
+                here, there = nl.net(ref, a), nl.net(ref, b)
+                if here != net or there is None or there in seen:
+                    continue
+                if there in walker.supplies:
+                    line = (
+                        f"{what}: {ref} ({nl.parts[ref]['value']}) ties {net} to "
+                        f"{there}, a net in specs.SUPPLY_NETS, so the link {link} "
+                        "controls nothing"
+                    )
+                    if line not in problems:
+                        problems.append(line)
+                else:
+                    seen.add(there)
+                    queue.append(there)
+    return problems
 
 
 def _own_link(
@@ -329,15 +457,12 @@ def _own_link(
     ``targets`` maps every net the regulator must not reach once its link is out to
     what to call it; ``enables`` is every net the table names, for the hint.
     """
-    whole = walker.reached(own, None)
-    to_net = next((p for p in whole if p[-1] == net), None)
-    if to_net is None:
+    to_net = walker.first(own, None, {net})
+    if not to_net:
         return None, [f"{what}: no 0 ohm resistor or jumper joins {own} to {net}"]
-    # a supply ends every path through it, so a link on one is on no path but to net
-    region = {n for p in whole for n in p[::2] if n == net or n not in walker.supplies}
-    candidates = sorted(
-        {r for n in region for r in nl.refs_on(n) if is_link(nl, r)}, key=natkey
-    )
+    # a link that isolates the regulator is on every path to its shared net, so on
+    # this one
+    candidates = list(dict.fromkeys(r for r in to_net[1::2] if is_link(nl, r)))
     links = [r for r in candidates if not walker.first(own, r, targets)]
     if len(links) > 1:
         names = ", ".join(links[:-1]) + " and " + links[-1]
@@ -347,8 +472,7 @@ def _own_link(
         ]
     if not links:
         direct = joiners(nl, own, net)
-        shown = [r for r in direct if is_link(nl, r)]
-        shown = shown or [r for r in to_net[1::2] if is_link(nl, r)]
+        shown = [r for r in direct if is_link(nl, r)] or candidates
         if shown:
             link = shown[0]
             path = walker.first(own, link, targets)
@@ -357,36 +481,26 @@ def _own_link(
                 f"{targets[path[-1]]} ({_show(path)}){_hint(path, enables)}"
             ]
         if direct:
-            parts = ", ".join(f"{r} ({nl.parts[r]['value']})" for r in direct)
-            note = f"{parts} joins them but is not a link"
+            note = "; ".join(
+                f"{r} ({nl.parts[r]['value']}) joins them but is not a link: "
+                + not_a_link(nl, r)
+                for r in direct
+            )
         else:
             note = f"{_show(to_net)} joins them, with no link on it"
-        three = _three_pad_jumpers(nl, [*to_net[1::2], *nl.refs_on(own)])
-        note += "".join(f"; {j} has three pads: a link must have two" for j in three)
+            three = [
+                r
+                for r in dict.fromkeys([*to_net[1::2], *nl.refs_on(own)])
+                if is_jumper(nl, r) and pad_count(nl, r) > 2
+            ]
+            note += "".join(f"; {not_a_link(nl, j)}" for j in three)
         return None, [
             f"{what}: no 0 ohm resistor or jumper joins {own} to {net} ({note})"
             + _hint(to_net, enables)
         ]
     link = links[0]
-    problems = []
-    for path in walker.reached(own, link):
-        side = path[-1]
-        if side in walker.supplies:
-            continue
-        for ref in sorted(nl.refs_on(side), key=natkey):
-            if ref == link or not is_link(nl, ref):
-                continue
-            if is_not_fitted(str(nl.parts[ref]["value"])):
-                continue
-            for pad in nl.functions(ref):
-                tied = nl.net(ref, pad)
-                if tied in walker.supplies and tied != side:
-                    problems.append(
-                        f"{what}: {ref} ({nl.parts[ref]['value']}) ties {side} to "
-                        f"{tied}, a net in specs.SUPPLY_NETS, so the link {link} "
-                        "controls nothing"
-                    )
-    return link, problems
+    held = to_net[: to_net.index(link)][::2]
+    return link, _ties(nl, walker, what, held, link)
 
 
 def check_enable_net(
@@ -400,7 +514,7 @@ def check_enable_net(
 
     ``table`` is the whole ``ENABLE_LINKS``: the targets of every walk are the shared
     nets and listed enable nets of all its rows. ``supplies`` is ``SUPPLY_NETS`` and
-    ``ground`` is ``GROUND_NET`` (or None): the walk crosses neither.
+    ``ground`` the ground net (or None): the walk crosses neither.
     """
     supplies = list(supplies)
     report = EnableReport(problems=supply_problems(nl, supplies))
@@ -457,11 +571,12 @@ def check_enable_net(
         report.links[key] = link
         report.problems += problems
         if link is not None and not problems:
-            used.setdefault(link, []).append(ref)
+            used.setdefault(link, []).append(key)
     for link, owners in sorted(used.items(), key=lambda kv: natkey(kv[0])):
         if len(owners) > 1:
             report.problems.append(
                 f"{' and '.join(owners)} share the link {link}: each regulator "
                 "needs its own"
             )
+    report.steps = walker.steps
     return report

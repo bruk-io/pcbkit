@@ -5,14 +5,15 @@ from the schematic. What the project gives, in ``specs.py``:
 
 * ``ENABLE_LINKS``: ``{enable net: [(regulator ref, enable pad)]}``, in the pad numbers
   the netlist writes. Each regulator on the shared net ``enable net`` must reach it
-  through exactly one link of its own (a two-pad 0 ohm or not-fitted ``Device:R``,
-  ``R_Small`` or ``R_US``, or a two-pad part from a ``Jumper`` library), anywhere on
+  through exactly one link of its own (a two-pad 0 ohm or not-fitted resistor,
+  reference ``R``, or a two-pad part from a ``Jumper`` library), anywhere on
   the path, such that with the link taken out its enable net reaches no shared net of
   any row and no other listed regulator's enable net (``links`` walks the parts
   between). ``{}`` says no enable is shared.
 * ``SUPPLY_NETS``: ``[net]``, the supply and ground nets. The walk never crosses one,
-  nor ``GROUND_NET`` when that is defined; a net that is a supply but is not listed is
-  walked. Needed whenever ``power`` is on.
+  nor ``GROUND_NET`` (default ``"GND"``, when the design has that net); a net that is a
+  supply but is not listed is walked, and a signal listed here hides every path
+  through it. Needed whenever ``power`` is on.
 """
 
 from __future__ import annotations
@@ -49,7 +50,11 @@ def test_each_regulator_on_a_shared_enable_has_its_own_link(
     """
     table = tables.read(specs, "ENABLE_LINKS")
     supplies = tables.read(specs, "SUPPLY_NETS")
-    ground = tables.read(specs, "GROUND_NET") if hasattr(specs, "GROUND_NET") else None
+    # GROUND_NET's documented default is "GND", used when the design has that net
+    if hasattr(specs, "GROUND_NET"):
+        ground = tables.read(specs, "GROUND_NET")
+    else:
+        ground = "GND" if "GND" in nl.nets else None
     report = links.check_enable_net(nl, net, table, supplies, ground)
     record("enable links", {net: report.links})
     assert not report.problems, "; ".join(report.problems)

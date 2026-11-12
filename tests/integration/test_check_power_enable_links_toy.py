@@ -86,7 +86,8 @@ def test_a_zero_ohm_link_replaced_by_ten_kilohms_fails(tmp_path: Path) -> None:
     assert entry["outcome"] == "failed"
     assert (
         "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL "
-        "(R7 (10k) joins them but is not a link)"
+        "(R7 (10k) joins them but is not a link: its value is not 0 ohm or a "
+        "not-fitted mark)"
     ) in entry["message"]
     assert entry["numbers"]["enable links"] == {"EN_ALL": {"U2": None, "U3": "R8"}}
 
@@ -282,8 +283,9 @@ def plant_undeclared_rail_pull_ups(toy: Toy) -> None:
         (
             plant_bridge_through_vbus_en,
             "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the "
-            "enable net EN_U3 of U3 (EN_U2 - R9 - VBUS_EN - R10 - EN_U3); if VBUS_EN "
-            "is a supply, add it to specs.SUPPLY_NETS",
+            "enable net EN_U3 of U3 (EN_U2 - R9 - VBUS_EN - R10 - EN_U3) (if VBUS_EN "
+            "is a supply rail, declare it in specs.SUPPLY_NETS; if it is a signal, "
+            "this path is real)",
         ),
         (
             plant_parallel_through_vcc_en_bus,
@@ -308,8 +310,8 @@ def plant_undeclared_rail_pull_ups(toy: Toy) -> None:
         ),
         (
             plant_undeclared_rail_pull_ups,
-            "(EN_U2 - R20 - 3V3 - R21 - EN_U3); if 3V3 is a supply, add it to "
-            "specs.SUPPLY_NETS",
+            "(EN_U2 - R20 - 3V3 - R21 - EN_U3) (if 3V3 is a supply rail, declare it "
+            "in specs.SUPPLY_NETS; if it is a signal, this path is real)",
         ),
     ],
 )
@@ -378,3 +380,95 @@ def test_a_supply_net_that_is_not_in_the_design_fails_by_name(tmp_path: Path) ->
     entry = go(tmp_path, "supply-typo", board(), specs).entry(CHECK)
     assert entry["outcome"] == "failed"
     assert "specs.SUPPLY_NETS: VDD_TYPO is not in the design" in entry["message"]
+
+
+# ----------------------------------------------------- the third review's plants
+def plant_dual_diode_from_u3(toy: Toy) -> None:
+    """Blocker: a BAT54C lets EN_U3 drive EN_U2."""
+    toy.add(
+        "D9",
+        "BAT54C",
+        "Diode:BAT54C",
+        {"1": ("PG_U1", "A1"), "2": ("EN_U3", "A2"), "3": ("EN_U2", "K")},
+    )
+
+
+def plant_dip_switch(toy: Toy) -> None:
+    """Blocker: a DIP switch element across the two enables."""
+    toy.add(
+        "SW1",
+        "SW",
+        "Switch:SW_DIP_x02",
+        {"1": ("EN_U2", "~"), "2": ("S2", "~"), "3": ("S3", "~"), "4": ("EN_U3", "~")},
+    )
+
+
+def plant_custom_array(toy: Toy) -> None:
+    """Blocker: a resistor array from a custom library across the enables."""
+    pads = {str(n): (f"A{n}", "~") for n in range(2, 8)}
+    pads.update({"1": ("EN_U2", "~"), "8": ("EN_U3", "~")})
+    toy.add("RN1", "4x10k", "Custom_Resistors:CAY16", pads)
+
+
+@pytest.mark.parametrize(
+    ("plant", "path"),
+    [
+        (plant_dual_diode_from_u3, "(EN_U2 - D9 - EN_U3)"),
+        (plant_dip_switch, "(EN_U2 - SW1 - EN_U3)"),
+        (plant_custom_array, "(EN_U2 - RN1 - EN_U3)"),
+    ],
+)
+def test_each_multi_pad_bypass_of_the_third_review_fails(
+    tmp_path: Path, plant: Callable[[Toy], None], path: str
+) -> None:
+    """Fail each part with three or more pads that joins the enables."""
+    toy = board()
+    plant(toy)
+    entry = go(tmp_path, "multi", toy).entry(CHECK)
+    assert entry["outcome"] == "failed"
+    assert path in entry["message"], entry["message"]
+
+
+def test_an_open_strap_and_a_diode_or_after_the_link_pass(tmp_path: Path) -> None:
+    """Pass an open jumper from EN_U2 to GND and a BAT54C OR behind the link."""
+    toy = board()
+    toy.add(
+        "JP3",
+        "Open",
+        "Jumper:SolderJumper_2_Open",
+        {"1": ("EN_U2", "A"), "2": ("GND", "B")},
+    )
+    del toy.parts["R8"], toy.pins["R8"]
+    check_toy.resistor(toy, "R8", "0", "EN_ALL", "X")
+    toy.add(
+        "D9",
+        "BAT54C",
+        "Diode:BAT54C",
+        {"1": ("X", "A1"), "2": ("PG_U1", "A2"), "3": ("EN_U3", "K")},
+    )
+    result = go(tmp_path, "strap-or", toy)
+    assert result.outcome(CHECK) == "passed", result.entry(CHECK)
+
+
+def pull_downs(toy: Toy) -> Toy:
+    """Pull both enables down to GND through 100k."""
+    check_toy.resistor(toy, "R20", "100k", "EN_U2", "GND")
+    check_toy.resistor(toy, "R21", "100k", "EN_U3", "GND")
+    return toy
+
+
+@pytest.mark.parametrize(
+    "ground", ['\nGROUND_NET = "GND"\n', "", '\nGROUND_NET = "AGND"\n']
+)
+def test_ground_net_or_its_default_stops_the_walk(tmp_path: Path, ground: str) -> None:
+    """Pass pull-downs to GND when GND is GROUND_NET, or by default, but not listed.
+
+    With ``GROUND_NET = "AGND"`` the walk stops at AGND and crosses GND, so the
+    pull-downs join the enables and the check fails.
+    """
+    toy = pull_downs(board())
+    toy.add("U9", "X", "Sensor:X", {"1": ("AGND", "GND")})
+    specs = SPECS + TABLE.replace('"GND", ', "") + ground
+    entry = go(tmp_path, "ground", toy, specs).entry(CHECK)
+    want = "failed" if "AGND" in ground else "passed"
+    assert entry["outcome"] == want, entry

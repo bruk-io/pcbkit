@@ -167,7 +167,8 @@ def test_a_link_replaced_by_a_resistor_fails_naming_the_part_and_its_value() -> 
     report = check(toy)
     assert report.problems == [
         "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL "
-        "(R7 (10k) joins them but is not a link)"
+        "(R7 (10k) joins them but is not a link: its value is not 0 ohm or a "
+        "not-fitted mark)"
     ]
     assert report.links == {"U2": None, "U3": "R8"}
 
@@ -221,7 +222,9 @@ def test_a_regulator_listed_on_two_pads_is_keyed_by_its_pad() -> None:
     toy.pins["U2"]["4"] = ("EN_U2", "EN2")
     report = check(toy, {"EN_ALL": [("U2", "3"), ("U2", "4")]})
     assert list(report.links) == ["U2 pad 3", "U2 pad 4"]
-    assert "U2 and U2 share the link R7" in report.problems[0]
+    assert report.problems == [
+        "U2 pad 3 and U2 pad 4 share the link R7: each regulator needs its own"
+    ]
 
 
 def test_the_tables_are_this_modules_and_read_ints_as_pad_text() -> None:
@@ -286,8 +289,8 @@ BYPASSES = [
     (
         bypass_through_two_parts,
         "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the shared "
-        "net EN_ALL (EN_U2 - R9 - MID - R10 - EN_ALL); if MID is a supply, add it "
-        "to specs.SUPPLY_NETS",
+        "net EN_ALL (EN_U2 - R9 - MID - R10 - EN_ALL) (if MID is a supply rail, "
+        "declare it in specs.SUPPLY_NETS; if it is a signal, this path is real)",
     ),
 ]
 
@@ -324,8 +327,9 @@ def test_enables_bridged_through_a_net_named_like_a_supply_fail(middle: str) -> 
     report = check(toy)
     assert (
         "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the enable "
-        f"net EN_U3 of U3 (EN_U2 - R9 - {middle} - R10 - EN_U3); if {middle} is a "
-        "supply, add it to specs.SUPPLY_NETS"
+        f"net EN_U3 of U3 (EN_U2 - R9 - {middle} - R10 - EN_U3) (if {middle} is a "
+        "supply rail, declare it in specs.SUPPLY_NETS; if it is a signal, this path "
+        "is real)"
     ) in report.problems
 
 
@@ -422,8 +426,8 @@ def test_pull_ups_to_an_undeclared_supply_fail_with_a_way_out() -> None:
     report = check(toy)
     assert (
         "U2 pad 3: removing R7 does not isolate it: EN_U2 still reaches the enable "
-        "net EN_U3 of U3 (EN_U2 - R20 - 3V3 - R21 - EN_U3); if 3V3 is a supply, "
-        "add it to specs.SUPPLY_NETS"
+        "net EN_U3 of U3 (EN_U2 - R20 - 3V3 - R21 - EN_U3) (if 3V3 is a supply "
+        "rail, declare it in specs.SUPPLY_NETS; if it is a signal, this path is real)"
     ) in report.problems
 
 
@@ -435,7 +439,10 @@ def test_the_hint_names_every_net_between_and_none_that_is_an_enable() -> None:
     check_toy.resistor(toy, "R22", "1k", "B", "EN_ALL")
     report = check(toy)
     assert any(
-        p.endswith("if any of A, B is a supply, add it to specs.SUPPLY_NETS")
+        p.endswith(
+            "(if any of A, B is a supply rail, declare it in specs.SUPPLY_NETS; if "
+            "they are signals, this path is real)"
+        )
         for p in report.problems
     ), report.problems
     assert not any("if EN_" in p for p in check(board()).problems)
@@ -609,7 +616,8 @@ def test_a_pack_element_is_not_a_link_even_at_zero_ohms() -> None:
     report = check(toy)
     assert report.problems == [
         "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL "
-        "(RN1 (0) joins them but is not a link)"
+        "(RN1 (0) joins them but is not a link: it is a resistor pack, network or "
+        "multi-pad resistor)"
     ]
 
 
@@ -772,7 +780,7 @@ def test_a_capacitor_between_the_enable_nets_does_not_connect_them() -> None:
         "Device:FerriteBead",
         "Device:Fuse",
         "Switch:SW",
-        "Connector_Generic:Conn_01x02",
+        "Custom:Weird2",
     ],
 )
 def test_any_other_two_pin_part_but_a_capacitor_conducts_for_the_walk(
@@ -929,3 +937,303 @@ def test_the_same_pad_listed_twice_is_a_duplicate_row() -> None:
     report = check(board(), {"EN_ALL": [("U2", "3"), ("U2", "3"), ("U3", "3")]})
     assert report.problems == ["U2 pad 3 is listed twice"]
     assert report.links == {"U2": "R7", "U3": "R8"}
+
+
+# ------------------------------------------- third review: walk everything by default
+def multi(
+    toy: Toy, ref: str, kind: str, pads: dict[str, object], value: str = "x"
+) -> None:
+    """Add ``ref`` with ``{pad: net or (net, pin name)}``."""
+    toy.add(
+        ref,
+        value,
+        kind,
+        {
+            pad: (net, "~") if isinstance(net, str) else net  # type: ignore[misc]
+            for pad, net in pads.items()
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("ref", "kind", "pads"),
+    [
+        (
+            "RN1",
+            "Custom_Resistors:CAY16",
+            {"1": "EN_U2", "8": "EN_U3", "2": "a", "7": "b", "3": "c", "6": "d"},
+        ),
+        (
+            "SW1",
+            "Switch:SW_DIP_x02",
+            {"1": "EN_U2", "2": "S3", "3": "S4", "4": "EN_U3"},
+        ),
+        ("SW1", "Switch:SW_SPDT", {"1": "EN_U2", "2": "EN_U3", "3": "GND"}),
+        (
+            "L9",
+            "Device:L_Coupled_1423",
+            {"1": "EN_U2", "4": "EN_U3", "2": "X2", "3": "X3"},
+        ),
+        ("C9", "Device:C_Feedthrough", {"1": "EN_U2", "2": "EN_U3", "3": "GND"}),
+        ("R9", "Device:R_Shunt", {"1": "EN_U2", "2": "EN_U3", "3": "S3", "4": "S4"}),
+        ("X9", "Mystery:Part3", {"1": "EN_U2", "2": "M", "3": "EN_U3"}),
+    ],
+)
+def test_a_passive_part_with_three_or_more_pads_is_walked_through_every_pad(
+    ref: str, kind: str, pads: dict[str, object]
+) -> None:
+    """Fail a bridge through any part of any library that is not on the closed list."""
+    toy = board()
+    multi(toy, ref, kind, pads)
+    report = check(toy)
+    assert any(f"(EN_U2 - {ref} - EN_U3)" in p for p in report.problems), (
+        report.problems
+    )
+
+
+@pytest.mark.parametrize(
+    ("ref", "kind"),
+    [
+        ("U9", "Logic:74LVC1G08"),
+        ("IC4", "Custom:Sequencer"),
+        ("Q1", "Device:Q_NMOS_GSD"),
+        ("J5", "Connector_Generic:Conn_02x02_Odd_Even"),
+        ("P3", "Connector:Conn_01x02"),
+        ("TP1", "Custom:Probe"),
+        ("X2", "Connector:TestPoint_2Pole"),
+        ("C9", "Custom:Cap"),
+    ],
+)
+def test_the_parts_on_the_closed_list_are_not_walked(ref: str, kind: str) -> None:
+    """Leave ICs, transistors, connectors, test points and two-pad capacitors alone."""
+    toy = board()
+    pads: dict[str, object] = {"1": "EN_U2", "2": "EN_U3"}
+    if not ref.startswith("C"):
+        pads["3"] = "GND"
+    multi(toy, ref, kind, pads)
+    assert check(toy).problems == []
+
+
+def bat54c(toy: Toy, a1: str, a2: str, k: str) -> None:
+    """Add a common-cathode dual diode, its pins named A1, A2 and K as KiCad does."""
+    toy.add(
+        "D9",
+        "BAT54C",
+        "Diode:BAT54C",
+        {"1": (a1, "A1"), "2": (a2, "A2"), "3": (k, "K")},
+    )
+
+
+def test_a_dual_diode_from_another_enable_into_this_one_fails() -> None:
+    """Fail when EN_U3 drives EN_U2 through one half of a BAT54C."""
+    toy = board()
+    bat54c(toy, "PG_U1", "EN_U3", "EN_U2")
+    report = check(toy)
+    assert any("(EN_U2 - D9 - EN_U3)" in p for p in report.problems), report.problems
+
+
+def test_a_dual_diode_or_after_the_link_passes() -> None:
+    """Pass EN_ALL - R7 - X, with X and PG_U1 ORed into EN_U2 by a BAT54C."""
+    toy = board()
+    replace(toy, "R7")
+    check_toy.resistor(toy, "R7", "0", "EN_ALL", "X")
+    bat54c(toy, "X", "PG_U1", "EN_U2")
+    report = check(toy)
+    assert report.problems == []
+    assert report.links["U2"] == "R7"
+
+
+def test_a_series_dual_diode_beside_the_link_fails() -> None:
+    """Fail a Device dual diode from EN_ALL to EN_U2, pins keyed by pad, not name."""
+    toy = board()
+    toy.add(
+        "D9",
+        "D",
+        "Device:D_Dual_Series_AKC",
+        {"1": ("EN_ALL", "A"), "2": ("X", "K"), "3": ("EN_U2", "K")},
+    )
+    assert check(toy).problems != []
+
+
+def test_diode_pins_are_keyed_by_pad_so_repeated_names_do_not_collapse() -> None:
+    """Give each pad named A an arc to each pad named K."""
+    toy = Toy()
+    toy.add(
+        "D9",
+        "D",
+        "Device:D_Dual",
+        {"1": ("N1", "A"), "2": ("N2", "K"), "3": ("N3", "A"), "4": ("N4", "K")},
+    )
+    found = sorted(links.arcs(netlist(toy), "D9"))
+    assert found == [("1", "2"), ("1", "4"), ("3", "2"), ("3", "4")]
+
+
+# should-fix 2: open jumpers are not fitted for the tie rule
+@pytest.mark.parametrize("value", ["Open", "DNP"])
+def test_an_open_jumper_strap_to_a_supply_is_not_a_tie(value: str) -> None:
+    """Pass a SolderJumper_2_Open from EN_U2 to GND: it is not fitted."""
+    toy = board()
+    toy.add(
+        "JP3",
+        value,
+        "Jumper:SolderJumper_2_Open",
+        {"1": ("EN_U2", "A"), "2": ("GND", "B")},
+    )
+    assert check(toy).problems == []
+
+
+# should-fix 3: a link is a zero-ohm R from any library
+@pytest.mark.parametrize("kind", ["MyLib:R_0402", "easyeda2kicad:0402WGF0000TCE"])
+def test_a_zero_ohm_resistor_from_any_library_is_a_link(kind: str) -> None:
+    """Take a two-pad part with reference R and value 0 from a custom library."""
+    toy = board()
+    replace(toy, "R7")
+    with_part(toy, "R7", "0Ω", "EN_U2", "EN_ALL", kind)
+    report = check(toy)
+    assert report.problems == []
+    assert report.links["U2"] == "R7"
+
+
+def test_a_zero_ohm_part_that_is_not_a_resistor_says_why_it_is_not_a_link() -> None:
+    """Name the reference rule when a 0 ohm ferrite FB1 joins the nets."""
+    toy = board()
+    replace(toy, "R7")
+    with_part(toy, "FB1", "0", "EN_U2", "EN_ALL", "Device:FerriteBead")
+    assert check(toy).problems == [
+        "U2 pad 3: no 0 ohm resistor or jumper joins EN_U2 to EN_ALL (FB1 (0) joins "
+        "them but is not a link: a link is a resistor (reference R) or a two-pad "
+        "jumper)"
+    ]
+
+
+# should-fix 4: tie gaps
+def test_a_bridged_three_pad_jumper_strapping_the_enable_to_a_supply_is_a_tie() -> None:
+    """Fail JP2 (Bridged12) with pad 1 on VIN and pad 2 on EN_U2."""
+    toy = board()
+    toy.add(
+        "JP2",
+        "J",
+        "Jumper:SolderJumper_3_Bridged12",
+        {"1": ("VIN", "A"), "2": ("EN_U2", "C"), "3": ("GND", "B")},
+    )
+    assert check(toy).problems == [
+        "U2 pad 3: JP2 (J) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so the "
+        "link R7 controls nothing"
+    ]
+
+
+def test_a_three_pad_jumper_whose_bridged_pads_miss_the_supply_is_not_a_tie() -> None:
+    """Pass Bridged12 with pad 3 on GND: pads 2 and 3 are not bridged."""
+    toy = board()
+    toy.add(
+        "JP2",
+        "J",
+        "Jumper:SolderJumper_3_Bridged12",
+        {"1": ("X", "A"), "2": ("EN_U2", "C"), "3": ("GND", "B")},
+    )
+    assert check(toy).problems == []
+
+
+def test_a_zero_ohm_pack_element_tying_the_enable_to_a_supply_is_a_tie() -> None:
+    """Fail RN2 (R_Pack02, 0) with pad 1 on EN_U2 and pad 4 on VIN."""
+    toy = board()
+    add_part(
+        toy,
+        "RN2",
+        "Device:R_Pack02",
+        {"1": "EN_U2", "4": "VIN", "2": "q", "3": "r"},
+        "0",
+    )
+    assert check(toy).problems == [
+        "U2 pad 3: RN2 (0) ties EN_U2 to VIN, a net in specs.SUPPLY_NETS, so the "
+        "link R7 controls nothing"
+    ]
+
+
+# Low: a 0 ohm option in series with a pull-up is a pull-up, not a tie
+def test_a_pull_up_with_a_zero_ohm_option_in_series_passes() -> None:
+    """Pass EN_U2 - R30 (100k) - PU - R31 (0) - VIN."""
+    toy = board()
+    check_toy.resistor(toy, "R30", "100k", "EN_U2", "PU")
+    check_toy.resistor(toy, "R31", "0", "PU", "VIN")
+    assert check(toy).problems == []
+
+
+def test_a_tie_through_two_zero_ohm_parts_off_the_enable_still_fails() -> None:
+    """Fail EN_U2 - R30 (0) - X - R31 (0) - GND: the enable is held at ground."""
+    toy = board()
+    check_toy.resistor(toy, "R30", "0", "EN_U2", "X")
+    check_toy.resistor(toy, "R31", "0", "X", "GND")
+    assert check(toy).problems == [
+        "U2 pad 3: R31 (0) ties X to GND, a net in specs.SUPPLY_NETS, so the link R7 "
+        "controls nothing"
+    ]
+
+
+# Low: a three-pad jumper with a pad left off the netlist is still three pads
+def test_a_three_pad_jumper_with_a_pad_off_the_netlist_is_not_a_link() -> None:
+    """Read the pad count from the symbol name, not from the pads on a net."""
+    toy = board()
+    toy.add(
+        "JP1",
+        "J",
+        "Jumper:SolderJumper_3_Open",
+        {"1": ("EN_U2", "A"), "2": ("EN_ALL", "C")},
+    )
+    assert not links.is_link(netlist(toy), "JP1")
+
+
+# should-fix 5: the search is bounded
+def grid(toy: Toy, size: int, value: str) -> None:
+    """Add a ``size`` by ``size`` mesh of resistors of ``value`` on nets N<i>_<j>."""
+    for i in range(size):
+        for j in range(size):
+            if i + 1 < size:
+                check_toy.resistor(
+                    toy, f"RG{i}_{j}a", value, f"N{i}_{j}", f"N{i + 1}_{j}"
+                )
+            if j + 1 < size:
+                check_toy.resistor(
+                    toy, f"RG{i}_{j}b", value, f"N{i}_{j}", f"N{i}_{j + 1}"
+                )
+
+
+def test_a_dense_zero_ohm_mesh_with_ten_regulators_is_searched_in_bounded_steps() -> (
+    None
+):
+    """Count steps, not seconds: each regulator costs a few walks of the mesh."""
+    toy = Toy()
+    grid(toy, 30, "0")
+    rows = []
+    for r in range(10):
+        regulator(toy, f"U{r}", f"EN_U{r}")
+        check_toy.resistor(toy, f"R{900 + r}", "0", f"EN_U{r}", "EN_ALL")
+        check_toy.resistor(toy, f"R{950 + r}", "10k", f"EN_U{r}", f"N{r}_{r}")
+        rows.append((f"U{r}", "3"))
+    nl = netlist(toy)
+    report = links.check_enable_net(nl, "EN_ALL", {"EN_ALL": rows}, SUPPLIES)
+    assert len(report.problems) == 10
+    edges = sum(len(nl.functions(r)) for r in nl.parts)
+    assert report.steps < 10 * 2 * edges, report.steps
+
+
+def test_a_big_board_with_an_undeclared_rail_is_searched_in_bounded_steps() -> None:
+    """Search 3,000 pull-ups to an undeclared 3V3 and 40 regulators in bounded steps."""
+    toy = Toy()
+    for i in range(3000):
+        check_toy.resistor(toy, f"RS{i}", "10k", f"S{i}", "3V3")
+    rows = []
+    for r in range(40):
+        regulator(toy, f"U{r}", f"EN_U{r}")
+        check_toy.resistor(toy, f"R{900 + r}", "0", f"EN_U{r}", "EN_ALL")
+        check_toy.resistor(toy, f"R{980 + r}", "100k", f"EN_U{r}", "3V3")
+        rows.append((f"U{r}", "3"))
+    nl = netlist(toy)
+    report = links.check_enable_net(nl, "EN_ALL", {"EN_ALL": rows}, SUPPLIES)
+    assert len(report.problems) == 40
+    edges = sum(len(nl.functions(r)) for r in nl.parts)
+    assert report.steps < 40 * 2 * edges, report.steps
+    declared = links.check_enable_net(
+        nl, "EN_ALL", {"EN_ALL": rows}, [*SUPPLIES, "3V3"]
+    )
+    assert declared.problems == []
