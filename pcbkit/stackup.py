@@ -116,8 +116,17 @@ def core_mm(config: StackupConfig) -> float:
 def build_stackup(config: StackupConfig) -> Stackup:
     """Return the layer model for a validated ``[stackup]`` table.
 
-    Raise ValueError if the core would be under ``MIN_CORE_MM`` on a four-layer board.
+    Raise ValueError if ``layers`` is not 2 or 4, if ``inner`` does not hold
+    ``layers - 2`` entries, or if the core would be under ``MIN_CORE_MM`` on a
+    four-layer board. A core of exactly ``MIN_CORE_MM`` is accepted.
     """
+    if config.layers not in (2, 4):
+        raise ValueError(f"a board has 2 or 4 layers, got {config.layers!r}")
+    if len(config.inner) != config.layers - 2:
+        raise ValueError(
+            f"a {config.layers}-layer board needs {config.layers - 2} inner entries, "
+            f"got {len(config.inner)}"
+        )
     core = core_mm(config)
     if config.layers == 2:
         specs = [("top", "F.Cu", "signal", None, config.copper_mm)]

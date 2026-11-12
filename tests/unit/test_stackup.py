@@ -164,6 +164,37 @@ def test_a_core_under_the_minimum_is_refused() -> None:
         build_stackup(thin)
 
 
+def test_a_core_of_exactly_the_minimum_is_accepted() -> None:
+    """Build the stack when the core is MIN_CORE_MM: the limit is "at least"."""
+    exact = StackupConfig(4, 0.64, 0.035, 0.035, 0.2, FOUR.inner)
+    assert core_mm(exact) == MIN_CORE_MM
+    assert build_stackup(exact).gaps_mm == (0.2, MIN_CORE_MM, 0.2)
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        (StackupConfig(4, 1.6, 0.035), "a 4-layer board needs 2 inner entries, got 0"),
+        (
+            StackupConfig(4, 1.6, 0.035, inner=FOUR.inner[:1]),
+            "a 4-layer board needs 2 inner entries, got 1",
+        ),
+        (
+            StackupConfig(2, 1.6, 0.035, inner=FOUR.inner),
+            "a 2-layer board needs 0 inner entries, got 2",
+        ),
+        (
+            StackupConfig(3, 1.6, 0.035, inner=FOUR.inner[:1]),
+            "a board has 2 or 4 layers, got 3",
+        ),
+    ],
+)
+def test_an_ill_formed_config_is_refused(config: StackupConfig, message: str) -> None:
+    """Raise ValueError for a layer count other than 2 or 4 or a wrong inner count."""
+    with pytest.raises(ValueError, match=message):
+        build_stackup(config)
+
+
 def test_the_model_is_frozen() -> None:
     """Refuse to change a built stackup."""
     stack = build_stackup(FOUR)
