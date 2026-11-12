@@ -343,6 +343,8 @@ changed stops and asks.
 
 - **Goal:** answer K1-K16 on one generic four-layer board, and capture the two-layer byte
   baseline (K0).
+- **Script:** `tools/wp15_spike/spike.py` runs K1-K17 and the K0 baseline in one command
+  on the Mac (`tools/wp15_spike/README.md` has the commands).
 - **Touches:**
   - `tests/fixtures/four_layer/`: a saved board, a DSN, a SES, a job file and the Gerber
     file listing, from the generic board, renamed as CLAUDE.md asks.
