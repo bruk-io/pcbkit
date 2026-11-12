@@ -78,6 +78,17 @@ Signs. A "-" glued to the front of a number is read only where its role is certa
   ``_OPENERS`` ("(", "=", ":", "<", ...), or follows a word of ``_FUNCTION_WORDS``
   ("to", "from", "and", ...) after white space: none of those can be a range's first
   end or the left side of a subtraction;
+- a sign, when it follows a cell gap (two or more plain spaces or a tab on one line,
+  or a blank line) after a word with no digit that is not a unit or prefix, an
+  exponent letter or "x" (W1): "VIN    –0.3", "Tstg    –65". Why it is safe: a
+  subtraction such as "VIN − 0.3" is set inside one table cell with at most one
+  space around its minus, and pdftotext's ``-layout`` puts two or more spaces only
+  between separate text blocks, so the dash cannot join the word before it. A number
+  before the gap is still excluded ("2.7    –3.6" may be a range whose space before
+  the dash was widened), and so is a unit ("2.7 V    –3.6 V"), an exponent letter
+  ("1.5 E    -3") and "x". What it can still get wrong: a cell holding an offset from
+  a rail ("VCC    –0.4" meaning VCC minus 0.4) backs -0.4, which is the "offset from
+  a rail" blind spot below;
 - "+/-", glued: plus-minus;
 - a range dash, when it is glued between two decimals (a unit, "%" or "°C" may be
   glued to the first), the first is not 10, and the first is less than the second:
@@ -115,7 +126,11 @@ Context. A number is unknown when any of these touch it:
   it is an integer, or a decimal with exactly three digits after the point (then the
   next integer may have one to three): "100 000" may be 100000, so both halves are
   unknown. A table row "1.5 250" is not refused: no grouped number has a group after a
-  fraction shorter than three digits;
+  fraction shorter than three digits. Nor is a cell gap (W2: "–65    150",
+  "0.594    0.6"): a thousands separator is at most one character wide, a thin,
+  no-break or plain space, and pdftotext never makes it two spaces, a tab or a blank
+  line. A single line break, indented or not, may still split a group, so it is no
+  gap and the rule fires across it;
 - a dash standing alone before it, across white space ("VEE- 12V", "3.0 - 5.5");
 - a times-ten form: "x", "X" or "×" before the number 10 makes the number before it,
   the 10 and the next number after the 10 (across white space and one sign) unknown
@@ -632,6 +647,38 @@ def _is_foreign(lexeme: _Lexeme | None) -> bool:
     )
 
 
+def _is_gap(space: str) -> bool:
+    """Say whether a white-space run is a table-cell gap of ``pdftotext -layout`` text.
+
+    A gap is two or more spaces or a tab on one line, or a blank line. Only plain
+    spaces count: a run with a no-break, thin or other grouping space is no gap. A
+    single line break is no gap, with or without indentation after it.
+    """
+    if any(c not in _PLAIN_SPACE for c in space):
+        return False
+    lines = space.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if len(lines) == 1:
+        return "\t" in space or "  " in space
+    return len(lines) > 2
+
+
+def _signs_after_gap(word: _Lexeme | None) -> bool:
+    """Say whether a dash after ``word`` and a cell gap is a sign (W1).
+
+    The word must be a symbol or label: no digit (a number may be a range's first
+    end), not a unit or prefix ("2.7 V  -3.6 V" may be a range), not an exponent
+    letter ("1.5 E  -3") and not a times sign ("x").
+    """
+    return (
+        word is not None
+        and word.lex is _Lex.WORD
+        and not any(_is_digit(c) for c in word.text)
+        and not _is_unit(word.text)
+        and not _EXPONENT_WORD.fullmatch(word.text)
+        and word.text not in ("x", "X")
+    )
+
+
 def _past_space(lexemes: Sequence[_Lexeme], index: int, step: int) -> int:
     """Return the first index from ``index`` on, going by ``step``, not white space."""
     while 0 <= index < len(lexemes) and lexemes[index].lex is _Lex.SPACE:
@@ -694,6 +741,8 @@ def _dash_role(
         if previous is None or _is_char(previous, _OPENERS):
             return _Role.SIGN, -1
         if previous.lex is _Lex.WORD and previous.text in _FUNCTION_WORDS:
+            return _Role.SIGN, -1
+        if _is_gap(before.text) and _signs_after_gap(previous):
             return _Role.SIGN, -1
         return _Role.UNKNOWN, previous_index if previous_index in at else -1
     if _is_char(before, "/") and _is_char(_get(lexemes, dash - 2), "+"):
@@ -832,7 +881,8 @@ def _read(text: str) -> _Reading:
             ):
                 forget(index - 1, index + 1)  # a grouping space between digits
             elif (
-                left_token.kind is _Kind.DECIMAL
+                not _is_gap(lexeme.text)
+                and left_token.kind is _Kind.DECIMAL
                 and not left_token.unit
                 and _is_digit(right.text[0])
             ):

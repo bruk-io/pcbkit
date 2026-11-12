@@ -1066,6 +1066,92 @@ def test_widenings_still_refuse_the_wrong_readings(value: str, quote: str) -> No
     assert check_citation(value, quote, 1, [quote]) is not None
 
 
+# W1: a dash glued to a number, after a symbol or label word and a table-cell gap of
+# -layout text (two or more spaces, a tab, or a blank line), is a sign.
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("-0.3 V", "Input voltage    VIN      –0.3     19     V"),
+        ("-2 V", "Switch node SW      –2      32      V"),
+        ("-65 °C", "Storage temperature, Tstg      –65      150     °C"),
+        ("-40 °C", "Ambient TA\t–40\t125\t°C"),
+        ("-0.5 V", "VIL\n\n–0.5 0.8 V"),  # a blank line: a gap in raw text
+        ("-0.3 to 19 V", "Input voltage    VIN      –0.3     19     V"),
+    ],
+)
+def test_w1_a_dash_after_a_word_and_a_cell_gap_is_a_sign(value: str, page: str) -> None:
+    """Accept a negative number after a symbol in its own table cell."""
+    assert check_citation(value, page, 1, [page]) is None
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        # A single space: "VIN -0.3" may be VIN minus 0.3.
+        ("-0.3 V", "Input voltage VIN –0.3 19 V"),
+        ("0.3 V", "Input voltage    VIN      –0.3     19     V"),
+        # A single line break, with or without indentation, is no gap.
+        ("-0.3 V", "Input voltage VIN\n–0.3 19 V"),
+        ("-0.3 V", "Input voltage VIN\n        –0.3 19 V"),
+        # A grouping space in the run: no gap.
+        ("-0.3 V", "Input voltage VIN \u00a0 –0.3 19 V"),
+        # After a number (M2 of the third review), a unit, an exponent letter or "x".
+        ("-3.6 V", "Supply voltage 2.7     –3.6 V"),
+        ("-3.6 V", "Supply voltage 2.7 V     –3.6 V"),
+        ("-70 °C", "Operating temp 0     –70 °C"),
+        ("-3", "Value level 1.5 E     -3 ohm"),
+        ("-6", "Leakage level 1 x     -6 A"),
+        # After ")": not a word, so not widened.
+        ("-5 V", "SW (<10ns transient)     –5     35     V"),
+        # The dash after a gap but spaced from the number.
+        ("-0.3 V", "Input voltage    VIN      –  0.3     19     V"),
+    ],
+)
+def test_w1_still_refuses_a_dash_of_uncertain_role(value: str, page: str) -> None:
+    """Refuse a sign after one space, a line break, a number, a unit or a ")"."""
+    assert rule(check_citation(value, page, 1, [page])) is Rule.NUMBER
+
+
+# W2: the three-digit grouping rule does not fire across a cell gap: a thousands
+# separator is at most one character wide, never two spaces, a tab or a blank line.
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("-65 to 150 °C", "Tstg      –65      150     °C"),
+        ("0.6 V", "VFB      0.594      0.6      0.606     V"),
+        ("150 °C", "Temperature Rising      150     165     °C"),
+        ("300 µA", "Charge pump current      162     300     600     µA"),
+        ("100 to 200 kHz", "Frequency\t100\t200\tkHz"),
+        ("100 cycles", "Endurance 100\n\n000 cycles"),
+    ],
+)
+def test_w2_three_digits_across_a_cell_gap_are_not_a_group(
+    value: str, page: str
+) -> None:
+    """Accept numbers of a table row whose cells hold three-digit numbers."""
+    assert check_citation(value, page, 1, [page]) is None
+
+
+@pytest.mark.parametrize(
+    "value, page",
+    [
+        ("100 cycles", "Write endurance 100 000 cycles"),
+        ("100 cycles", "Write endurance 100\n000 cycles"),
+        ("100 cycles", "Write endurance 100\n      000 cycles"),
+        ("0.6 V", "VFB 0.594 0.6 0.606 V"),
+        ("100 cycles", "Write endurance 100 \u2009 000 cycles"),  # grouping space
+        ("1 mA", "Output current 1\u00a0 000 mA max"),
+    ],
+)
+def test_w2_still_refuses_a_possible_group(value: str, page: str) -> None:
+    """Refuse halves of a possible group: one space, one line break, a thin space."""
+    assert rule(check_citation(value, page, 1, [page])) is Rule.NUMBER
+
+
 # Right values that the grammar still refuses, on purpose. Each is pinned so that a
 # change to it is a decision, not an accident. The value must be written as the page
 # writes it, or marked derived.
