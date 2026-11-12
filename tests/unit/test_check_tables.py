@@ -15,10 +15,14 @@ import subprocess
 import sys
 import textwrap
 import types
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import numpy  # noqa: F401  (loaded before any restored_imports(): a C extension loads once)
+import openpyxl  # noqa: F401
 import pytest
+import scipy  # noqa: F401
 
 from pcbkit.check import runner, tables
 from pcbkit.check.results import RESULTS_FILE
@@ -33,12 +37,14 @@ from pcbkit.check.tables import (
     Int,
     ListOf,
     Mm,
+    Mm2,
     Net,
     Nullable,
     Ohms,
     OneOf,
     Opt,
     Pad,
+    Pairs,
     Record,
     Ref,
     TableError,
@@ -48,9 +54,22 @@ from pcbkit.check.tables import (
     Window,
 )
 from tests import check_toy
+from tests.board_files import restored_imports
+from tests.check_group_specs import COPPER_SPECS, FAB_SPECS
 from tests.unit.test_cli import invoke
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _undo_imports() -> Iterator[None]:
+    """Leave ``sys.modules`` and ``sys.path`` as they were after every test.
+
+    ``pcbkit specs`` imports the project's ``specs.py`` in this process, under the bare
+    name ``specs``; left there it fails the next test module that expects none.
+    """
+    with restored_imports():
+        yield
 
 
 def errors(shape: Any, value: Any, name: str = "T") -> list[str]:
@@ -68,7 +87,7 @@ def errors(shape: Any, value: Any, name: str = "T") -> list[str]:
         (Net(), "+3V3", 5, "specs.T: expected net, got 5"),
         (Ref(), "U1", "U 1", "specs.T: expected ref, got 'U 1'"),
         (Pad(), "A1", "", "specs.T: expected pad, got ''"),
-        (Bool(), True, 1, "specs.T: expected true or false, got 1"),
+        (Bool(), True, 1, "specs.T: expected True or False, got 1"),
         (Int("n", lo=0), 3, 3.0, "specs.T: expected n of at least 0, got 3.0"),
         (Int("n", lo=0), 0, -1, "specs.T: expected n of at least 0, got -1"),
         (Volts(), -3.3, "3", "specs.T: expected V, got '3'"),
@@ -156,6 +175,8 @@ def test_a_pad_is_an_int_or_a_str_and_reads_as_a_str() -> None:
     assert found == []
     assert out == {"1": "2", "3": "A4"}
     assert errors(Pad(), True) == ["specs.T: expected pad, got True"]
+    assert errors(Pad(), "1 2") == ["specs.T: expected pad, got '1 2'"]
+    assert errors(Pad(), " 1") == ["specs.T: expected pad, got ' 1'"]
     assert errors(Pad(), -1) == ["specs.T: expected pad, got -1"]
 
 
@@ -171,12 +192,12 @@ def test_a_wrong_length_row_is_one_error_for_the_row_at_its_path() -> None:
     value = {
         "logic_absent": {
             "scenario": {"vin": 5.0},
-            "pins": [("U2", 1, (0, 0.4)), ("U2", "EN")],
+            "pins": [("U2", 1, (0, 0.4)), ("U2", 5)],
         }
     }
     assert tables.validate("FAULT_STATES", value, shape) == [
         'specs.FAULT_STATES["logic_absent"]["pins"][1]: expected '
-        "(ref, pad, (min V, max V)), got ('U2', 'EN')"
+        "(ref, pad, (min V, max V)), got ('U2', 5)"
     ]
 
 
@@ -509,14 +530,14 @@ def test_specs_on_a_bad_fault_states_row_prints_its_path_and_exits_1(
     root = project_with(
         tmp_path,
         check_toy.SPECS
-        + "\nFAULT_STATES = {'c': {'scenario': {}, 'pins': [('U2', 'EN')]}}\n",
+        + "\nFAULT_STATES = {'c': {'scenario': {}, 'pins': [('U2', 5)]}}\n",
     )
     monkeypatch.chdir(root)
     result = invoke("specs")
     assert result.exit_code == 1
     assert (
         'specs.FAULT_STATES["c"]["pins"][0]: expected '
-        "(ref, pad, (min V, max V)), got ('U2', 'EN')"
+        "(ref, pad, (min V, max V)), got ('U2', 5)"
     ) in result.output
     assert "1 problem(s) in" in result.output
 
@@ -606,3 +627,880 @@ def test_a_table_error_while_parametrising_fails_that_one_check_by_name(
     assert 'specs.PIN_NETS["J1"][1]: expected net or None, got 5' in bad["message"]
     assert entries["test_other[R1]"]["outcome"] == "passed"
     assert not [k for k in entries if "missing-spec" in k]
+
+
+# --- the follow-ups of the slice 2 review -------------------------------------------
+#
+# Each section says which item of /tmp/wp17/slice2-followups.md it holds. The rule for
+# the shapes of the existing tables: exactly as permissive as the check that reads the
+# table (never refuse what a check accepts), and refusing what makes that check crash.
+
+
+class Unprintable:
+    """A value whose ``repr`` raises, as a project's own object might."""
+
+    def __repr__(self) -> str:
+        """Raise instead of printing."""
+        raise RuntimeError("no repr")
+
+
+GOOD_EXISTING: dict[str, Any] = {
+    "PCBWAY": {
+        "min_annular": 0.15,
+        "min_drill": 0.3,
+        "min_plated_slot": 0.5,
+        "silk_min_height": 0.8,
+        "silk_min_stroke": 0.15,
+        "min_track_2oz": 0.2,
+        "min_space_2oz": 0.2,
+        "extra": "ignored",
+    },
+    "WIRE_PADS": {"J1": (1, "2")},
+    "DECOUPLING": [("U1", 8, ("C1", "C2"), 3.0)],
+    "POWER_FOOTPRINTS": [
+        {"ref": "Q1", "tab_pad": 2, "tab_net": "VBUS", "smaller": [(1, 2), (3, 2)]},
+        {"ref": "J1", "drill_mm": {"1": 1.0}},
+        {"ref": "Q2", "tab_pad": 2, "tab_net": None},
+    ],
+    "I2C_BUSES": {
+        "main": ("SDA", "SCL", 400e3, [("DISPLAY", 0x3C, 10), ("PROBE", 0x3D, None)])
+    },
+    "I2C_TR_MAX": {400e3: 300e-9},
+    "I2C_PIN_C": 10e-12,
+    "TRACE_C_PER_MM": 0.1e-12,
+    "I2C_CABLE_LEN": 0.3,
+    "I2C_CABLE_C_PER_M": 100e-12,
+    "I2C_PULLUP_NET": "+3V3",
+    "I2C_DEVICE_PREFIXES": ["U", "A"],
+    "ASSEMBLY_TEXT_EXEMPT": ("J1",),
+    "RESERVED_COPPER": [
+        ("keepout", "top", 1.5, 3.6, 8.0, 6.8, {"/GND"}),
+        ("strip", "bottom", 1.5, 33.6, 58.5, 36.8, ["/GND", "/RTN"]),
+    ],
+    "SENSE_LOOPS": [
+        {
+            "name": "shunt",
+            "nets": ("SA", "SB"),
+            "from_ref": "R1",
+            "to_ref": "R2",
+            "to_pads": ("1", "2"),
+            "max_mm2": 60.0,
+        }
+    ],
+    "COPPER_SEGMENTS": [
+        {
+            "name": "vin_path",
+            "net": "VIN",
+            "heating": True,
+            "terminals": [("TP2", 1, -0.4, "load"), ("TP1", 1, 1.0, "source")],
+        },
+        {"name": "rtn", "net": "RTN", "terminals": [("TP5", 1, 1.0), ("TP4", 1, -1.0)]},
+    ],
+    "COPPER_BUDGETS": {
+        "i_cont": 4.0,
+        "i_peak": 8.0,
+        "segment_drop_max_v": 0.08,
+        "max_rise_c": 20.0,
+    },
+    "SUPPLY_REGULATION": {
+        "supply": "vin_path",
+        "ground": "rtn_path",
+        "label": "the far load",
+        "nominal_v": 12.0,
+        "max_fraction": 0.01,
+    },
+    "GROUND_NET": "GND",
+    "STITCH_BASIS": {"f_hz": 2.4e9, "er_fr4": 4.5},
+    "PINOUT": {"U1": {"1": "VDD", 2: ""}},
+    "PIN_ALIASES": {"IN": "VIN", "~": None},
+    "ABSENT_REFS": {"U9": "not fitted in this revision"},
+    "STRESS_SCENARIOS": [{"vin": 5.0, "drive": {"LED_DRV": 3.3}}, {}],
+    "RESISTOR_POWER_W": {"default": 0.1, "R1": 0.25},
+    "CAP_VRATED": {"CAP-10U": 10.0, "": 6.3},
+    "LED_REFS": ("D1", "panel_led"),
+    "LED_SCENARIO": {"vin": 5.0},
+    "LED_I_MIN": 0.3e-3,
+    "LED_I_MAX": 0.02,
+    "SUPPLY_SCENARIO": {"vin": 5.0},
+    "SUPPLY_PINS": [("U1", 1, (2.7, 5.5)), ["U2", "A1", [0, 3.6]]],
+    "SUPPLY_LIMITS": [("fits", 5.5, "<=", 6.0), lambda nl: ("f", 1, "<", 2)],
+    "I2C_IOL": {400e3: 3e-3},
+    "I2C_VDD": 3.3,
+    "DEVKIT_REF": "A1",
+    "DEVKIT_GPIO": {1: 4, "2": 5},
+    "ANALOG_NETS": ("SENSE",),
+    "STRAP_SCENARIO": {},
+    "GPIO_SOURCE_SCENARIO": {"vin": 5.0},
+    "GPIO_SCENARIOS": {"5.0-led": {"vin": 5.0}, 2: {}},
+    "OPEN_DRAIN_NETS": ["SDA", "SCL"],
+    "RAIL_3V3": "+3V3",
+    "ESP32_VDD": 3.3,
+    "ESP32_VIH": 2.475,
+    "ESP32_VIL": 0.825,
+    "ESP32_VOH_MIN": 2.64,
+    "ESP32_PIN_ABS_MAX": 3.6,
+    "ESP32_GPIO_SOURCE_MAX": 0.02,
+    "ESP32_INTERNAL_PULL": 45e3,
+    "RESERVED": frozenset({35, 36}),
+    "UART0": [43, 44],
+    "ADC1": range(1, 11),
+    "INPUT_ONLY": (),
+    "STRAPS": {0: ("high", "pullup"), 45: ["low", "pulldown"]},
+}
+
+
+def test_there_is_a_positive_example_for_every_existing_table() -> None:
+    """Keep an example per existing shape, so a new one cannot go without."""
+    assert set(GOOD_EXISTING) == set(tables.EXISTING)
+
+
+@pytest.mark.parametrize("name", sorted(tables.EXISTING))
+def test_each_existing_table_accepts_its_example(name: str) -> None:
+    """Accept a table written as the check that reads it takes it."""
+    assert tables.validate(name, GOOD_EXISTING[name], tables.EXISTING[name]) == []
+
+
+def test_the_copper_and_fab_group_specs_validate_clean() -> None:
+    """Accept the specs the kicad-marked group tests write, without pcbnew.
+
+    The integration tests of the copper and fab groups run these very texts through the
+    real checks on a real board, so the shapes are as permissive as the checks are on
+    real data. The counts keep the test from passing vacuously.
+    """
+    for text, count in ((COPPER_SPECS, 5), (FAB_SPECS, 11)):
+        module = types.ModuleType("specs")
+        exec(text, module.__dict__)
+        assert tables.check_module(module) == (count, [])
+
+
+# --- item 1: a range or a frozenset is a set of GPIO numbers ------------------------
+
+
+@pytest.mark.parametrize("name", ["ADC1", "RESERVED", "UART0", "INPUT_ONLY"])
+def test_a_gpio_set_may_be_any_iterable_that_the_pack_turns_into_a_frozenset(
+    name: str,
+) -> None:
+    """Accept a range, a set and a generator; refuse a str, a dict and a bad number.
+
+    ``packs/esp32s3.py`` reads each of these as ``frozenset(pick(NAME, default))``,
+    and its own default for ADC1 is ``frozenset(range(1, 11))``.
+    """
+    shape = tables.EXISTING[name]
+    for value in (range(1, 13), frozenset(range(1, 11)), {4, 5}, (n for n in (1, 2))):
+        assert errors(shape, value, name) == [], value
+    assert tables.convert(name, range(3), shape)[0] == [0, 1, 2]
+    assert errors(shape, "12", name) == [f"specs.{name}: expected [GPIO], got '12'"]
+    assert errors(shape, {1: 2}, name) == [
+        f"specs.{name}: expected [GPIO], got {{1: 2}}"
+    ]
+    assert errors(shape, [1, "2"], name) == [f"specs.{name}[1]: expected GPIO, got '2'"]
+
+
+# --- item 2: tab_net may be None ----------------------------------------------------
+
+
+def test_a_power_footprint_may_have_tab_net_none() -> None:
+    """Accept ``tab_net=None``, as ``test_power_footprints_match_datasheet`` does.
+
+    The check reads ``net = rule.get("tab_net")`` and tests ``net is not None``.
+    """
+    shape = tables.EXISTING["POWER_FOOTPRINTS"]
+    row = {"ref": "Q1", "tab_pad": 2, "tab_net": None}
+    assert errors(shape, [row], "POWER_FOOTPRINTS") == []
+    assert errors(shape, [{**row, "tab_net": 5}], "POWER_FOOTPRINTS") == [
+        'specs.POWER_FOOTPRINTS[0]["tab_net"]: expected net or None, got 5'
+    ]
+
+
+# --- item 3: a list of pairs where the check says dict(...) -------------------------
+
+PAIR_TABLES = {
+    "RESISTOR_POWER_W": [("default", 0.1), ("R1", 0.25)],
+    "ABSENT_REFS": [("U9", "not fitted")],
+    "PIN_ALIASES": [("IN", "VIN"), ("~", None)],
+    "STRAPS": [(0, ("high", "pullup")), (45, ("low", "pulldown"))],
+    "STITCH_BASIS": [("f_hz", 2.4e9), ("er_fr4", 4.5)],
+}
+
+
+@pytest.mark.parametrize("name", sorted(PAIR_TABLES))
+def test_a_table_the_check_reads_through_dict_may_be_a_list_of_pairs(name: str) -> None:
+    """Accept the pairs, and read them as the dict the check would make of them."""
+    pairs = PAIR_TABLES[name]
+    out, found = tables.convert(name, pairs, tables.EXISTING[name])
+    assert found == []
+    assert out == dict(pairs)
+    assert tables.describe(tables.EXISTING[name]) == tables.describe(
+        tables.EXISTING[name].inner
+    )
+
+
+def test_pairs_are_still_judged_row_by_row() -> None:
+    """Refuse a pair list with a missing required key, a bad value or a 3-row."""
+    shape = tables.EXISTING["RESISTOR_POWER_W"]
+    assert errors(shape, [("R1", 0.25)], "R") == ['specs.R: missing key "default"']
+    assert errors(shape, [("default", "x")], "R") == [
+        "specs.R[\"default\"]: expected W, got 'x'"
+    ]
+    assert errors(shape, [("default", 1, 2)], "R") == [
+        "specs.R: expected {ref or default: W}, got [('default', 1, 2)]"
+    ]
+    basis = tables.EXISTING["STITCH_BASIS"]
+    assert errors(basis, [("pitch", 1.0)], "S") == [
+        'specs.S: unknown key "pitch" (the keys are "f_hz", "er_fr4")'
+    ]
+    assert errors(Pairs(DictOf(Net(), Volts())), [("GND", "x")]) == [
+        "specs.T[\"GND\"]: expected V, got 'x'"
+    ]
+
+
+# --- item 4: allowed nets of a reserved region may be one string --------------------
+
+
+def test_allowed_nets_of_a_region_may_be_a_string_or_a_list() -> None:
+    """Accept both; the list is the intended form, and a bad list item is named.
+
+    ``intruders`` tests ``what.split()[-1] not in allowed``, which a string answers by
+    substring.
+    """
+    shape = tables.EXISTING["RESERVED_COPPER"]
+    row = ("keepout", "top", 0, 0, 5, 5)
+    for allowed in ("/GND", ["/GND"], ("/GND",), {"/GND"}, []):
+        assert errors(shape, [(*row, allowed)], "R") == [], allowed
+    assert errors(shape, [(*row, ["/GND", 5])], "R") == [
+        "specs.R[0][6][1]: expected allowed net, got 5"
+    ]
+    assert errors(shape, [(*row, 5)], "R") == [
+        "specs.R[0][6]: expected allowed net or [allowed net], got 5"
+    ]
+
+
+# --- item 5: what the checks accept that the shapes refused -------------------------
+
+
+def test_heating_may_be_0_or_1_as_the_check_tests_its_truth() -> None:
+    """Accept 0 and 1 for ``heating`` and read them as False and True.
+
+    ``test_copper_segment`` does ``segment.get("heating", True)`` and tests it.
+    """
+    shape = tables.EXISTING["COPPER_SEGMENTS"]
+    base = {"name": "s", "net": "VIN", "terminals": [("TP1", 1, 1.0)]}
+    for given, want in ((0, False), (1, True), (False, False), (True, True)):
+        out, found = tables.convert("S", [{**base, "heating": given}], shape)
+        assert found == []
+        assert out[0]["heating"] is want
+    assert errors(shape, [{**base, "heating": 2}], "S") == [
+        'specs.S[0]["heating"]: expected True or False, got 2'
+    ]
+    assert errors(shape, [{**base, "heating": "no"}], "S") == [
+        "specs.S[0][\"heating\"]: expected True or False, got 'no'"
+    ]
+
+
+def test_an_off_board_device_may_have_no_capacitance() -> None:
+    """Accept None for the third field of an I2C device, which no check reads."""
+    shape = tables.EXISTING["I2C_BUSES"]
+    bus = ("SDA", "SCL", 400e3, [("DISPLAY", 0x3C, None)])
+    assert errors(shape, {"main": bus}, "B") == []
+    assert errors(shape, {"main": ("SDA", "SCL", 400e3, [("D", 0x3C, "10")])}, "B") == [
+        "specs.B[\"main\"][3][0][2]: expected pF or None, got '10'"
+    ]
+
+
+def test_the_texts_a_check_copes_with_empty_may_be_empty() -> None:
+    """Accept "" for a limit's name, a capacitor with no MPN, and an I2C prefix.
+
+    A capacitor without an MPN looks up ``CAP_VRATED[""]``; ``r[0] in prefixes`` is
+    False for an empty prefix; the name of a supply limit only goes into a message.
+    """
+    limits = tables.EXISTING["SUPPLY_LIMITS"]
+    assert errors(limits, [("", 1, "<", 2)], "L") == []
+    assert errors(tables.EXISTING["CAP_VRATED"], {"": 6.3}, "C") == []
+    prefixes = tables.EXISTING["I2C_DEVICE_PREFIXES"]
+    assert errors(prefixes, "", "P") == []
+    assert errors(prefixes, ["U", ""], "P") == []
+    assert errors(prefixes, ["U", 5], "P") == ["specs.P[1]: expected prefix, got 5"]
+
+
+# --- item 6: PCBWAY needs all seven numbers -----------------------------------------
+
+PCBWAY_ALL = dict.fromkeys(tables._PCBWAY_KEYS, 0.2)
+
+
+def test_pcbway_names_the_key_the_fab_checks_would_fail_on() -> None:
+    """Require each of the seven keys the fab checks read with ``limits["..."]``."""
+    shape = tables.EXISTING["PCBWAY"]
+    assert errors(shape, PCBWAY_ALL, "PCBWAY") == []
+    assert len(PCBWAY_ALL) == 7
+    for key in PCBWAY_ALL:
+        short = {k: v for k, v in PCBWAY_ALL.items() if k != key}
+        assert errors(shape, short, "PCBWAY") == [f'specs.PCBWAY: missing key "{key}"']
+    assert errors(shape, {}, "PCBWAY") == [
+        f'specs.PCBWAY: missing key "{key}"' for key in PCBWAY_ALL
+    ]
+
+
+# --- item 7: COPPER_BUDGETS ---------------------------------------------------------
+
+BUDGETS = {"i_cont": 4.0, "i_peak": 8.0, "segment_drop_max_v": 0.08}
+
+
+def test_copper_budgets_need_the_three_numbers_every_segment_reads() -> None:
+    """Require ``i_cont``, ``i_peak`` and ``segment_drop_max_v``; ``max_rise_c`` is not.
+
+    ``max_rise_c`` is read only for a segment that heats, which the table cannot know.
+    """
+    shape = tables.EXISTING["COPPER_BUDGETS"]
+    assert errors(shape, BUDGETS, "B") == []
+    assert errors(shape, {**BUDGETS, "max_rise_c": 20}, "B") == []
+    for key in BUDGETS:
+        short = {k: v for k, v in BUDGETS.items() if k != key}
+        assert errors(shape, short, "B") == [f'specs.B: missing key "{key}"']
+    assert errors(shape, {}, "B") == [
+        f'specs.B: missing key "{key}"' for key in BUDGETS
+    ]
+
+
+@pytest.mark.parametrize("key", ["i_cont", "i_peak"])
+@pytest.mark.parametrize("bad", [0, -1.0])
+def test_copper_budget_currents_are_above_zero(key: str, bad: float) -> None:
+    """Refuse a zero or negative current: the peak drop divides by ``i_cont``."""
+    shape = tables.EXISTING["COPPER_BUDGETS"]
+    assert errors(shape, {**BUDGETS, key: bad}, "B") == [
+        f"specs.B[{json.dumps(key)}]: expected A (above 0), got {bad}"
+    ]
+
+
+# --- item 8: to_pads are texts, as the board's pad numbers are ----------------------
+
+
+def test_sense_loop_pads_are_texts_because_the_check_compares_them_as_texts() -> None:
+    """Refuse ``to_pads=[1]``: ``loop_area`` never matches an int pad and fails."""
+    shape = tables.EXISTING["SENSE_LOOPS"]
+    row = {
+        "name": "shunt",
+        "nets": ("SA", "SB"),
+        "from_ref": "R1",
+        "to_ref": "R2",
+        "max_mm2": 60.0,
+    }
+    assert errors(shape, [{**row, "to_pads": ["1", "2"]}], "S") == []
+    assert errors(shape, [{**row, "to_pads": [1]}], "S") == [
+        'specs.S[0]["to_pads"][0]: expected pad, got 1'
+    ]
+
+
+class _Pad:
+    """A pad of the stub board: a number, a net and a place."""
+
+    def __init__(self, number: str, net: str, x: int) -> None:
+        """Keep the three."""
+        self.number, self.net, self.x = number, net, x
+
+    def GetNumber(self) -> str:  # noqa: N802
+        """Return the pad number as pcbnew does: a str."""
+        return self.number
+
+    def GetNetname(self) -> str:  # noqa: N802
+        """Return the net, with KiCad's leading slash."""
+        return self.net
+
+    def GetX(self) -> int:  # noqa: N802
+        """Return the place in internal units."""
+        return self.x
+
+    def GetY(self) -> int:  # noqa: N802
+        """Return the place in internal units."""
+        return 0
+
+
+class _Footprint:
+    """A footprint of the stub board."""
+
+    def __init__(self, ref: str, pads: list[_Pad]) -> None:
+        """Keep the reference and the pads."""
+        self.ref, self.pads = ref, pads
+
+    def GetReference(self) -> str:  # noqa: N802
+        """Return the reference."""
+        return self.ref
+
+    def Pads(self) -> list[_Pad]:  # noqa: N802
+        """Return the pads."""
+        return self.pads
+
+
+class _Board:
+    """A board with two parts on a sense pair, and nothing else."""
+
+    def GetFootprints(self) -> list[_Footprint]:  # noqa: N802
+        """Return R1 and R2, each with a pad on both nets of the pair."""
+        return [
+            _Footprint("R1", [_Pad("1", "/SA", 0), _Pad("2", "/SB", 0)]),
+            _Footprint("R2", [_Pad("1", "/SA", 1000000), _Pad("2", "/SB", 1000000)]),
+        ]
+
+
+def test_an_int_pad_in_to_pads_is_a_bare_key_error_in_loop_area(
+    fake_pcbnew: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Show why: ``p.GetNumber() in to_pads`` compares a str with the table's value."""
+    from pcbkit.check import coupling
+
+    monkeypatch.setattr(coupling, "_track_path", lambda board, net, a, z: [a, z])
+    board = _Board()
+    got = coupling.loop_area(board, ("SA", "SB"), "R1", "R2", ["1", "2"])
+    assert got[0] == 0
+    with pytest.raises(KeyError):
+        coupling.loop_area(board, ("SA", "SB"), "R1", "R2", [1, 2])
+
+
+# --- item 9: a zero that the check divides by ---------------------------------------
+
+
+def test_the_numbers_a_check_divides_by_are_above_zero() -> None:
+    """Refuse a zero sink current, nominal voltage and stitching frequency."""
+    assert errors(tables.EXISTING["I2C_IOL"], {400e3: 0}, "I") == [
+        "specs.I[400000.0]: expected A (above 0), got 0"
+    ]
+    reg = dict(GOOD_EXISTING["SUPPLY_REGULATION"])
+    assert errors(
+        tables.EXISTING["SUPPLY_REGULATION"], {**reg, "nominal_v": 0}, "R"
+    ) == ['specs.R["nominal_v"]: expected V (above 0), got 0']
+    for given in ({"f_hz": 0}, [("f_hz", 0)]):
+        assert errors(tables.EXISTING["STITCH_BASIS"], given, "S") == [
+            'specs.S["f_hz"]: expected Hz (above 0), got 0'
+        ]
+
+
+def test_the_zeros_do_divide_in_the_code_that_reads_them() -> None:
+    """Tie the three refusals to the divisions: each is a ZeroDivisionError."""
+    from pcbkit.check.stitching import Basis
+
+    with pytest.raises(ZeroDivisionError):
+        Basis(5.0, f_hz=0).lambda_mm  # noqa: B018
+    assert (3.3 - 0.4) / 3e-3  # test_i2c_single_pullup_and_sink_current, nonzero
+    with pytest.raises(ZeroDivisionError):
+        (3.3 - 0.4) / 0  # the same line with I2C_IOL[hz] == 0
+
+
+# --- item 10: an int too large for a float ------------------------------------------
+
+
+def test_an_int_too_large_for_a_float_is_not_a_finite_number_and_loses_nothing() -> (
+    None
+):
+    """Report it at its path, with the other errors, not an OverflowError."""
+    assert tables._number(10**400) is False
+    found = errors(Volts(), 10**400)
+    assert len(found) == 1
+    assert found[0].startswith("specs.T: expected V, got 1000")
+    module = types.SimpleNamespace(
+        SUPPLY_PINS=[("U1", 1, (0, 10**400))], I2C_VDD="3.3", LED_I_MAX=0.02
+    )
+    count, found = tables.check_module(module)
+    assert count == 3
+    assert len(found) == 2
+    assert found[0].startswith("specs.I2C_VDD: expected V")
+    assert found[1].startswith("specs.SUPPLY_PINS[0][2][1]: expected V, got 1000")
+
+
+# --- item 12: error lines survive an object that cannot print itself ----------------
+
+
+def test_a_value_whose_repr_raises_is_reported_and_loses_no_other_error() -> None:
+    """Say the repr failed in its place, and go on to the next error."""
+    found = errors(Volts(), Unprintable())
+    assert found == ["specs.T: expected V, got <Unprintable object whose repr failed>"]
+    shape = DictOf(Text("k"), Volts())
+    assert errors(shape, {Unprintable(): 1, "b": "x"}) == [
+        "specs.T[<Unprintable object whose repr failed>]: expected k, got "
+        "<Unprintable object whose repr failed>",
+        "specs.T[\"b\"]: expected V, got 'x'",
+    ]
+
+
+def test_one_table_that_cannot_be_checked_hides_no_other_table() -> None:
+    """Name the table whose check raised, as a bug in pcbkit, and carry on."""
+
+    class Evil:
+        def __iter__(self) -> Iterator[Any]:
+            raise RuntimeError("no iterating")
+
+    module = types.SimpleNamespace(ADC1=Evil(), I2C_VDD="x", GROUND_NET="GND")
+    count, found = tables.check_module(module)
+    assert count == 3
+    assert found == [
+        "specs.ADC1: pcbkit could not check this table (RuntimeError: no iterating); "
+        "this is a bug in pcbkit",
+        "specs.I2C_VDD: expected V, got 'x'",
+    ]
+
+
+# --- item 16: OneOf says what is wrong inside the closest alternative ---------------
+
+
+def test_a_semi_vrated_row_with_one_bad_key_names_that_key() -> None:
+    """Report the closest alternative's error, not a description of both."""
+    shape = tables.PROPOSED["SEMI_VRATED"]
+    assert errors(shape, {"Q-1": {"vds": 20}}, "S") == [
+        'specs.S["Q-1"]: missing key "vgs"'
+    ]
+    assert errors(shape, {"Q-1": {"vds": 20, "vgs": "x"}}, "S") == [
+        'specs.S["Q-1"]["vgs"]: expected V, got \'x\''
+    ]
+    assert errors(shape, {"D-1": {"vrrm": 40, "derate": 0.9}}, "S") == [
+        'specs.S["D-1"]["derate"]: expected fraction in (0, 0.8], got 0.9'
+    ]
+    # a value of neither kind keeps the one line that lists both
+    assert errors(shape, {"Q-1": 5}, "S")[0].startswith(
+        'specs.S["Q-1"]: expected {"vds": V, "vgs": V'
+    )
+
+
+def test_one_of_picks_the_alternative_with_fewest_errors() -> None:
+    """Choose by kind first, then by the number of errors."""
+    a = Record(required={"x": Volts(), "y": Volts(), "z": Volts()})
+    b = Record(required={"x": Volts(), "w": Volts()})
+    shape = OneOf(a, b)
+    assert errors(shape, {"x": 1}) == ['specs.T: missing key "w"']
+    assert errors(shape, 5) == [
+        'specs.T: expected {"x": V, "y": V, "z": V} or {"x": V, "w": V}, got 5'
+    ]
+    assert errors(OneOf(Text("t"), ListOf(Net())), ["a", 5]) == [
+        "specs.T[1]: expected net, got 5"
+    ]
+
+
+def test_a_bad_supply_limit_operator_is_named_inside_the_tuple() -> None:
+    """Report the tuple's own error, not "expected (...) or function"."""
+    shape = tables.EXISTING["SUPPLY_LIMITS"]
+    assert errors(shape, [("fits", 5, "=<", 6)], "L") == [
+        'specs.L[0][2]: expected "<" or "<=", got \'=<\''
+    ]
+    assert errors(shape, [("fits", 5)], "L") == [
+        'specs.L[0]: expected (what, value, "<" or "<=", limit) or function, '
+        "got ('fits', 5)"
+    ]
+
+
+# --- item 17: the registry ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("source", "declared"),
+    [
+        ("TABLES = {}\n", True),
+        ("TABLES: dict = {}\n", True),
+        ("TABLES: dict\n", False),
+        ("A, TABLES = 1, {}\n", True),
+        ("(A, TABLES) = 1, {}\n", True),
+        ("[TABLES, *REST] = {}, 1, 2\n", True),
+        ("if True:\n    TABLES = {}\n", True),
+        ("if False:\n    pass\nelse:\n    TABLES = {}\n", True),
+        ("try:\n    TABLES = {}\nexcept Exception:\n    TABLES = {}\n", True),
+        ("try:\n    import x\nexcept ImportError:\n    TABLES = {}\n", True),
+        ("try:\n    pass\nfinally:\n    TABLES = {}\n", True),
+        ("with open('x') as f:\n    TABLES = {}\n", True),
+        ("def f():\n    TABLES = {}\n", False),
+        ("class C:\n    TABLES = {}\n", False),
+        ("X = 1\n", False),
+        ("OTHER_TABLES = {}\n", False),
+    ],
+)
+def test_declares_tables_reads_the_source_the_way_python_binds_names(
+    tmp_path: Path, source: str, declared: bool
+) -> None:
+    """Find ``TABLES`` however it is bound at module level, and only then."""
+    path = tmp_path / "m.py"
+    path.write_text(source, encoding="utf-8")
+    assert tables._declares_tables(str(path)) is declared
+
+
+def test_a_module_that_only_annotates_tables_does_not_break_the_registry(
+    tmp_path: Path,
+) -> None:
+    """Skip a module with ``TABLES: dict`` and no value; read ones set under ``if``."""
+    pkg = make_package(
+        tmp_path,
+        "scratch_c",
+        {
+            "bare": "TABLES: dict\n",
+            "never": "if False:\n    TABLES = {'NEVER': 1}\n",
+            "tuple_target": """
+                from pcbkit.check.tables import Net
+                ONE, TABLES = 1, {"TUPLE_TABLE": Net()}
+            """,
+            "guarded": """
+                from pcbkit.check.tables import Net
+                try:
+                    TABLES = {"TRY_TABLE": Net()}
+                except Exception:
+                    TABLES = {}
+            """,
+        },
+    )
+    found = tables.registry(pkg)
+    assert {"TUPLE_TABLE", "TRY_TABLE"} <= set(found)
+    assert "NEVER" not in found
+
+
+def test_the_registry_finds_the_engine_modules_once_per_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cache the scan: ``read`` calls ``registry`` each time and must not re-parse."""
+    calls = []
+
+    def counting(package: Any = None) -> list[Any]:
+        calls.append(package)
+        return []
+
+    tables.clear_cache()
+    monkeypatch.setattr(tables, "engine_modules", counting)
+    try:
+        tables.registry()
+        tables.registry()
+        specs = types.SimpleNamespace(PIN_NETS={"J1": {1: "VIN"}})
+        tables.read(specs, "PIN_NETS")
+        tables.read(specs, "PIN_NETS")
+        assert len(calls) == 1
+        tables.clear_cache()
+        tables.registry()
+        assert len(calls) == 2
+    finally:
+        tables.clear_cache()
+
+
+# --- item 18: the proposed shapes ---------------------------------------------------
+
+
+def test_power_paths_parts_are_optional_and_filled_in_when_left_out() -> None:
+    """Read ``parts`` as ``{}`` and ``max_ohm`` as 10 when a table leaves them out."""
+    specs = types.SimpleNamespace(
+        POWER_PATHS={"nets": ["VIN", "+5V"], "paths": [("VIN", "+5V", ["U3"])]}
+    )
+    first = tables.read(specs, "POWER_PATHS")
+    assert first["parts"] == {}
+    assert first["max_ohm"] == 10
+    first["parts"]["U9"] = []  # a check that edits what it reads edits its own copy
+    assert tables.read(specs, "POWER_PATHS")["parts"] == {}
+
+
+def test_power_paths_max_ohm_is_above_zero() -> None:
+    """Refuse 0 and negative: no path would ever count."""
+    shape = tables.PROPOSED["POWER_PATHS"]
+    base = {"nets": [], "paths": []}
+    assert errors(shape, {**base, "max_ohm": 0}, "P") == [
+        'specs.P["max_ohm"]: expected ohm (above 0), got 0'
+    ]
+    assert errors(shape, {**base, "max_ohm": 0.5}, "P") == []
+
+
+def test_mating_rows_default_to_one_and_read_in() -> None:
+    """Fill in ``rows`` so a check reads it without a default of its own."""
+    specs = types.SimpleNamespace(
+        MATING={"P1": {"pins": ["VIN", None], "fits": ["J1"], "keyed": False}}
+    )
+    assert tables.read(specs, "MATING")["P1"]["rows"] == 1
+    specs.MATING["P1"]["rows"] = 2
+    assert tables.read(specs, "MATING")["P1"]["rows"] == 2
+    specs.MATING["P1"]["rows"] = 3
+    with pytest.raises(TableError):
+        tables.read(specs, "MATING")
+
+
+def test_semi_vrated_pins_go_with_the_rating_they_belong_to() -> None:
+    """Accept g/d/s with vds and vgs, a/k with vrrm; refuse them crossed."""
+    shape = tables.PROPOSED["SEMI_VRATED"]
+    fet = {"vds": 20, "vgs": 8}
+    diode = {"vrrm": 40}
+    assert errors(shape, {"Q": {**fet, "pins": {"g": 1, "d": 3, "s": 2}}}, "S") == []
+    assert errors(shape, {"D": {**diode, "pins": {"a": 1, "k": 2}}}, "S") == []
+    assert errors(shape, {"Q": {**fet, "pins": {"a": 1, "k": 2}}}, "S") == [
+        'specs.S["Q"]["pins"]: missing key "g"',
+        'specs.S["Q"]["pins"]: missing key "d"',
+        'specs.S["Q"]["pins"]: missing key "s"',
+        'specs.S["Q"]["pins"]: unknown key "a" (the keys are "g", "d", "s")',
+        'specs.S["Q"]["pins"]: unknown key "k" (the keys are "g", "d", "s")',
+    ]
+    assert errors(shape, {"D": {**diode, "pins": {"g": 1, "d": 3, "s": 2}}}, "S") == [
+        'specs.S["D"]["pins"]: missing key "a"',
+        'specs.S["D"]["pins"]: missing key "k"',
+        'specs.S["D"]["pins"]: unknown key "g" (the keys are "a", "k")',
+        'specs.S["D"]["pins"]: unknown key "d" (the keys are "a", "k")',
+        'specs.S["D"]["pins"]: unknown key "s" (the keys are "a", "k")',
+    ]
+
+
+def test_a_hot_loop_limit_is_an_area() -> None:
+    """Use the area type for ``max_mm2``: refuse a negative one, keep the label."""
+    assert isinstance(Mm2(), Mm2) and not isinstance(Mm2(), Mm)
+    assert errors(Mm2("max mm2", nonneg=True), 20.0) == []
+    assert errors(Mm2("max mm2", nonneg=True), -1) == [
+        "specs.T: expected max mm2 (at least 0), got -1"
+    ]
+    hot = tables.PROPOSED["HOT_LOOPS"].item.required["max_mm2"]
+    assert isinstance(hot, Mm2)
+    assert not isinstance(hot, Mm)
+
+
+# --- item 19: describe, and the docs of Table shapes --------------------------------
+
+
+def test_describe_writes_true_and_false_as_python_does() -> None:
+    """Say ``True or False``, in a shape and so in the docs rows made from it."""
+    assert tables.describe(Bool()) == "True or False"
+    assert "True or False" in tables.describe(tables.PROPOSED["MATING"])
+    assert "true" not in tables.describe(tables.PROPOSED["MATING"])
+    assert (
+        tables.describe(Opt(Choice(1, 2), default=1)) == "1 or 2 (optional, default 1)"
+    )
+
+
+# --- item 12: pcbkit specs tells specs.py's faults from pcbkit's own -----------------
+
+
+def test_a_syntax_error_in_specs_names_the_file_and_the_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Say ``specs.py could not be read`` with the line of the error."""
+    monkeypatch.chdir(project_with(tmp_path, "GROUND_NET = 'GND'\nX = (\n"))
+    result = invoke("specs")
+    assert result.exit_code == 1
+    assert "specs.py could not be read" in result.output
+    assert "(specs.py line 2)" in result.output or "(specs.py line 3)" in result.output
+
+
+def test_a_failure_at_a_line_of_specs_names_that_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Point at the line of specs.py, though a module it imports raised."""
+    root = project_with(tmp_path, "GROUND_NET = 'GND'\n\nimport helper\n\nX = 1\n")
+    (root / "helper.py").write_text("\n\nraise ValueError('deep')\n", encoding="utf-8")
+    monkeypatch.chdir(root)
+    result = invoke("specs")
+    assert result.exit_code == 1
+    assert "specs.py could not be read: ValueError('deep') (specs.py line 3)" in (
+        result.output
+    )
+
+
+def test_specs_that_calls_sys_exit_is_reported_not_exited(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catch ``sys.exit(3)``, which ``except Exception`` lets through."""
+    monkeypatch.chdir(project_with(tmp_path, "import sys\nsys.exit(3)\n"))
+    result = invoke("specs")
+    assert result.exit_code == 1, result.output
+    assert "specs.py could not be read: it called sys.exit(3)" in result.output
+    monkeypatch.chdir(project_with(tmp_path / "again", "import sys\nsys.exit()\n"))
+    assert "called sys.exit() while being imported" in invoke("specs").output
+
+
+def test_a_failure_of_the_validator_is_pcbkits_own_not_specs_pys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Say pcbkit failed, and do not call specs.py unreadable."""
+
+    def broken(package: Any = None) -> dict[str, Any]:
+        raise RuntimeError("registry is broken")
+
+    monkeypatch.chdir(project_with(tmp_path, "GROUND_NET = 'GND'\n"))
+    monkeypatch.setattr(tables, "registry", broken)
+    result = invoke("specs")
+    assert result.exit_code == 1
+    assert "pcbkit failed while checking the tables" in result.output
+    assert "RuntimeError: registry is broken" in result.output
+    assert "could not be read" not in result.output
+
+
+def test_an_exception_that_cannot_print_itself_still_gives_a_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fall back to the exception's type when its repr raises."""
+    specs = (
+        "class Odd(Exception):\n"
+        "    def __repr__(self):\n"
+        "        raise RuntimeError('no repr')\n\n"
+        "raise Odd()\n"
+    )
+    monkeypatch.chdir(project_with(tmp_path, specs))
+    result = invoke("specs")
+    assert result.exit_code == 1
+    assert "specs.py could not be read: Odd (specs.py line 5)" in result.output
+
+
+def test_a_value_that_cannot_print_itself_loses_no_other_error_in_the_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Print every problem, the unprintable one as a stand-in."""
+    specs = (
+        "class Odd:\n"
+        "    def __repr__(self):\n"
+        "        raise RuntimeError('no repr')\n\n"
+        "SUPPLY_PINS = [('U1', Odd(), (0, 1))]\n"
+        "I2C_VDD = 'x'\n"
+    )
+    monkeypatch.chdir(project_with(tmp_path, specs))
+    result = invoke("specs")
+    assert result.exit_code == 1
+    assert (
+        "specs.SUPPLY_PINS[0][1]: expected pad, got <Odd object whose repr failed>"
+        in result.output
+    )
+    assert "specs.I2C_VDD: expected V, got 'x'" in result.output
+    assert "2 problem(s)" in result.output
+
+
+# --- item 13: a table of the wrong shape read in a check's body ----------------------
+
+
+def run_toy_project(root: Path) -> dict[str, Any]:
+    """Run the project's own checks in a child pytest and return their results."""
+    subprocess.run(
+        runner.command(root, None, ["-q", "-p", "fake_nl"]),
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={**os.environ, "PYTHONPATH": str(root)},
+    )
+    got = json.loads((root / "out" / "checks" / RESULTS_FILE).read_text("utf-8"))
+    return {k.split("::", 1)[1]: v for k, v in got["checks"].items()}
+
+
+def test_a_table_error_in_a_check_body_fails_that_check_with_the_paths_only(
+    tmp_path: Path,
+) -> None:
+    """Fail ``test_reads`` with the paths and no traceback; the other check passes."""
+    root = project_with(
+        tmp_path, check_toy.SPECS + "\nPIN_NETS = {'J1': {1: 5, 2: 'VIN'}, 'J 2': {}}\n"
+    )
+    folder = root / "checks"
+    folder.mkdir()
+    (folder / "test_tables.py").write_text(
+        textwrap.dedent(
+            """
+            from pcbkit.check import tables
+
+            def test_reads(specs):
+                tables.read(specs, "PIN_NETS")
+                raise AssertionError("must not run: the table is the wrong shape")
+
+            def test_other(specs):
+                assert tables.read(specs, "LED_I_MAX") == 0.02
+            """
+        ),
+        encoding="utf-8",
+    )
+    entries = run_toy_project(root)
+    bad = entries["test_reads"]
+    assert bad["outcome"] == "failed"
+    # pytest.fail(..., pytrace=False) reports as "Failed: <message>"
+    assert bad["message"] == (
+        'Failed: specs.PIN_NETS["J1"][1]: expected net or None, got 5\n'
+        "specs.PIN_NETS[\"J 2\"]: expected ref, got 'J 2'"
+    )
+    assert "Traceback" not in bad["message"]
+    assert "TableError" not in bad["message"]
+    assert entries["test_other"]["outcome"] == "passed"

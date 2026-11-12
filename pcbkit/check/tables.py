@@ -30,6 +30,7 @@ the shape says, an ``Opt`` with a default fills in a missing key.
 from __future__ import annotations
 
 import ast
+import copy
 import importlib
 import json
 import math
@@ -59,11 +60,23 @@ class TableError(Exception):
 # --- paths ------------------------------------------------------------------------
 
 
+def _show(value: Any) -> str:
+    """Return ``repr(value)``, or a stand-in when the value's own ``repr`` raises.
+
+    An error line must never be lost because the value it is about cannot print
+    itself (a broken ``__repr__``, an int too long to print).
+    """
+    try:
+        return repr(value)
+    except Exception:  # noqa: BLE001 - any failure of the project's own object
+        return f"<{type(value).__name__} object whose repr failed>"
+
+
 def _key(key: Any) -> str:
     """Return a dict key as it is written in a path: ``"name"`` or ``5``."""
     if isinstance(key, str):
         return json.dumps(key, ensure_ascii=False)
-    return repr(key)
+    return _show(key)
 
 
 def _sequence(value: Any) -> bool:
@@ -71,13 +84,49 @@ def _sequence(value: Any) -> bool:
     return isinstance(value, (list, tuple, set, frozenset))
 
 
-def _number(value: Any) -> bool:
-    """Return True for a finite real number that is not a bool."""
-    return (
-        isinstance(value, numbers.Real)
-        and not isinstance(value, bool)
-        and math.isfinite(value)
+def _iterable(value: Any) -> bool:
+    """Return True for any iterable that is not a str, bytes or mapping.
+
+    A ``range`` or a generator counts: the checks of the tables that take these only
+    iterate them (``frozenset(...)``, ``in``).
+    """
+    return not isinstance(value, (str, bytes, bytearray, Mapping)) and hasattr(
+        value, "__iter__"
     )
+
+
+def _number(value: Any) -> bool:
+    """Return True for a finite real number that is not a bool.
+
+    An int too large for a float is not finite: ``math.isfinite`` raises OverflowError
+    for it.
+    """
+    try:
+        return (
+            isinstance(value, numbers.Real)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+        )
+    except OverflowError:
+        return False
+
+
+def _as_dict(value: Any) -> Any:
+    """Return ``value`` as a dict if ``dict()`` would take it, else unchanged.
+
+    ``dict(rows)`` takes a mapping or a list of ``(key, value)`` pairs; so does a check
+    that reads its table that way.
+    """
+    if isinstance(value, Mapping):
+        return value
+    if _sequence(value) and all(
+        isinstance(row, (list, tuple)) and len(row) == 2 for row in value
+    ):
+        try:
+            return dict(value)
+        except TypeError:  # an unhashable key: let the inner shape report it
+            return value
+    return value
 
 
 # --- the shapes -------------------------------------------------------------------
@@ -98,7 +147,7 @@ class Shape:
         self, value: Any, path: str, errors: list[str], extra: str = ""
     ) -> Any:
         """Add the standard "expected X, got Y" error and return None."""
-        errors.append(f"{path}: expected {self.describe()}{extra}, got {value!r}")
+        errors.append(f"{path}: expected {self.describe()}{extra}, got {_show(value)}")
         return None
 
 
@@ -192,16 +241,22 @@ class Pad(Shape):
 
 
 class Bool(Shape):
-    """True or False."""
+    """True or False; with ``allow_int``, 0 and 1 too (a check that tests truth)."""
+
+    def __init__(self, allow_int: bool = False) -> None:
+        """Say whether 0 and 1 are accepted, and read as False and True."""
+        self.allow_int = allow_int
 
     def describe(self) -> str:
-        """Return the words."""
-        return "true or false"
+        """Return the two values as Python writes them."""
+        return "True or False"
 
     def convert(self, value: Any, path: str, errors: list[str]) -> Any:
         """Return the bool, or add an error."""
         if isinstance(value, bool):
             return value
+        if self.allow_int and isinstance(value, int) and value in (0, 1):
+            return bool(value)
         return self._expected(value, path, errors)
 
 
@@ -312,15 +367,25 @@ class Ohms(Number):
 
     default_label = "ohm"
 
-    def __init__(self, label: str | None = None) -> None:
-        """Name the value in descriptions."""
-        super().__init__(label, lo=0)
+    def __init__(self, label: str | None = None, positive: bool = False) -> None:
+        """Name the value in descriptions; ``positive`` refuses zero as well."""
+        super().__init__(label, lo=0, lo_open=positive)
 
 
 class Mm(Number):
     """A length or position in millimetres; ``nonneg`` refuses a negative one."""
 
     default_label = "mm"
+
+    def __init__(self, label: str | None = None, nonneg: bool = False) -> None:
+        """Name the value in descriptions; ``nonneg`` bounds it at zero."""
+        super().__init__(label, lo=0 if nonneg else None)
+
+
+class Mm2(Number):
+    """An area in square millimetres; ``nonneg`` refuses a negative one."""
+
+    default_label = "mm2"
 
     def __init__(self, label: str | None = None, nonneg: bool = False) -> None:
         """Name the value in descriptions; ``nonneg`` bounds it at zero."""
@@ -479,7 +544,7 @@ class Opt(Shape):
     def describe(self) -> str:
         """Return the inner description and "(optional, default X)"."""
         if self.has_default:
-            return f"{self.inner.describe()} (optional, default {self.default!r})"
+            return f"{self.inner.describe()} (optional, default {_show(self.default)})"
         return f"{self.inner.describe()} (optional)"
 
     def convert(self, value: Any, path: str, errors: list[str]) -> Any:
@@ -512,11 +577,17 @@ class Tuple(Shape):
 
 
 class ListOf(Shape):
-    """Any number of items of one shape, in a list, tuple or set. Gives a list."""
+    """Any number of items of one shape, in a list, tuple or set. Gives a list.
 
-    def __init__(self, item: Shape) -> None:
-        """Keep the shape of an item."""
+    With ``iterable`` any iterable that is not a str or a mapping is taken (a
+    ``range``, a generator), for a table that a check only iterates or turns into a
+    ``frozenset``.
+    """
+
+    def __init__(self, item: Shape, iterable: bool = False) -> None:
+        """Keep the shape of an item and what counts as a sequence."""
         self.item = item
+        self.iterable = iterable
 
     def describe(self) -> str:
         """Return the item in brackets."""
@@ -524,13 +595,33 @@ class ListOf(Shape):
 
     def convert(self, value: Any, path: str, errors: list[str]) -> Any:
         """Return a list of the converted items."""
-        if not _sequence(value):
+        if not (_iterable(value) if self.iterable else _sequence(value)):
             return self._expected(value, path, errors)
         items = list(value)
         out = [
             self.item.convert(v, f"{path}[{i}]", errors) for i, v in enumerate(items)
         ]
         return out
+
+
+class Pairs(Shape):
+    """A dict, or a list of ``(key, value)`` pairs, as ``dict()`` takes it.
+
+    A check that reads ``dict(specs.NAME)`` takes either; the inner shape judges the
+    dict that results, and ``describe`` is the inner shape's.
+    """
+
+    def __init__(self, inner: Shape) -> None:
+        """Keep the shape of the dict."""
+        self.inner = inner
+
+    def describe(self) -> str:
+        """Return the inner description."""
+        return self.inner.describe()
+
+    def convert(self, value: Any, path: str, errors: list[str]) -> Any:
+        """Convert the value as a dict."""
+        return self.inner.convert(_as_dict(value), path, errors)
 
 
 class DictOf(Shape):
@@ -619,7 +710,7 @@ class Record(Shape):
             if name in value:
                 out[name] = shape.convert(value[name], f"{path}[{_key(name)}]", errors)
             elif isinstance(shape, Opt) and shape.has_default:
-                out[name] = shape.default
+                out[name] = copy.deepcopy(shape.default)
         known = set(self.required) | set(self.optional)
         for name in value:
             if name not in known:
@@ -647,12 +738,40 @@ class OneOf(Shape):
         return " or ".join(s.describe() for s in self.options)
 
     def convert(self, value: Any, path: str, errors: list[str]) -> Any:
-        """Return the first alternative's conversion that raises no error."""
+        """Return the first alternative's conversion that raises no error.
+
+        When none fits, the value may still be of the kind one of them describes (a
+        dict with a key missing, a list with one bad item): that alternative is the
+        closest, and its errors, which say what is wrong, are reported. An alternative
+        is of the kind when none of its errors is "expected ..." at this very path. Of
+        several, the one with fewest errors at this path itself (a key missing or not
+        known here, which says the row is of the other kind), then fewest in all. When
+        no alternative is of the kind, the one error lists them all.
+        """
+        attempts = []
         for option in self.options:
             found: list[str] = []
             out = option.convert(value, path, found)
             if not found:
                 return out
+            attempts.append(found)
+        close = [
+            found
+            for found in attempts
+            if not any(line.startswith(f"{path}: expected ") for line in found)
+        ]
+        if close:
+            here = f"{path}:"
+            errors.extend(
+                min(
+                    close,
+                    key=lambda found: (
+                        sum(line.startswith(here) for line in found),
+                        len(found),
+                    ),
+                )
+            )
+            return None
         return self._expected(value, path, errors)
 
 
@@ -672,7 +791,7 @@ def validate(name: str, value: Any, shape: Shape) -> list[str]:
     An empty list means the table has the shape. For example::
 
         specs.FAULT_STATES["c"]["pins"][1]: expected (ref, pad, (min V, max V)),
-        got ('U2', 'EN')
+        got ('U2', 5)
     """
     return convert(name, value, shape)[1]
 
@@ -718,11 +837,14 @@ _PCBWAY_KEYS = (
     "min_space_2oz",
 )
 
-_I2C_DEVICE = Tuple(Text("name"), Int("7-bit address"), Number("pF"))
+# the third field is not read by any check (the cable's capacitance comes from
+# ``I2C_CABLE_C_PER_M``), so None is as good as a number
+_I2C_DEVICE = Tuple(Text("name"), Int("7-bit address"), Nullable(Number("pF")))
+_POSITIVE_AMPS = Amps(lo=0, lo_open=True)
 
 EXISTING: dict[str, Shape] = {
     # fab
-    "PCBWAY": Record(optional={k: Mm() for k in _PCBWAY_KEYS}, open=True),
+    "PCBWAY": Record(required={k: Mm() for k in _PCBWAY_KEYS}, open=True),
     "WIRE_PADS": DictOf(Ref(), Tuple(Pad("positive pad"), Pad("negative pad"))),
     "DECOUPLING": ListOf(
         Tuple(Ref("ic"), Pad("pin"), ListOf(Ref("capacitor")), Mm("limit mm"))
@@ -732,7 +854,7 @@ EXISTING: dict[str, Shape] = {
             required={"ref": Ref()},
             optional={
                 "tab_pad": Pad(),
-                "tab_net": Net(),
+                "tab_net": Nullable(Net()),
                 "smaller": ListOf(Tuple(Pad("small pad"), Pad("large pad"))),
                 "drill_mm": DictOf(Pad(), Mm("drill mm")),
             },
@@ -754,7 +876,10 @@ EXISTING: dict[str, Shape] = {
     "I2C_CABLE_LEN": Number("m"),
     "I2C_CABLE_C_PER_M": Number("F per m"),
     "I2C_PULLUP_NET": Net(),
-    "I2C_DEVICE_PREFIXES": OneOf(Text("prefixes"), ListOf(Text("prefix"))),
+    "I2C_DEVICE_PREFIXES": OneOf(
+        Text("prefixes", allow_empty=True),
+        ListOf(Text("prefix", allow_empty=True)),
+    ),
     "ASSEMBLY_TEXT_EXEMPT": ListOf(Ref()),
     # copper (COUPLING is read by coupling.from_spec, which validates it)
     "RESERVED_COPPER": ListOf(
@@ -765,7 +890,9 @@ EXISTING: dict[str, Shape] = {
             Mm("y0"),
             Mm("x1"),
             Mm("y1"),
-            ListOf(Net("allowed net")),
+            # ``intruders`` tests ``in allowed``, so one string works (as a substring
+            # test); a list is the intended form
+            OneOf(Net("allowed net"), ListOf(Net("allowed net"))),
         )
     ),
     "SENSE_LOOPS": ListOf(
@@ -775,7 +902,8 @@ EXISTING: dict[str, Shape] = {
                 "nets": Tuple(Net(), Net()),
                 "from_ref": Ref(),
                 "to_ref": Ref(),
-                "to_pads": ListOf(Pad()),
+                # compared as str with the board's pad numbers, so 1 is not "1" here
+                "to_pads": ListOf(Text("pad")),
                 "max_mm2": Number("mm2"),
             },
             open=True,
@@ -793,17 +921,19 @@ EXISTING: dict[str, Shape] = {
                     )
                 ),
             },
-            optional={"heating": Bool()},
+            optional={"heating": Bool(allow_int=True)},
             open=True,
         )
     ),
+    # i_cont divides (the peak drop scales by i_peak / i_cont), so both are above 0;
+    # max_rise_c is read only for a segment that heats, which the table cannot know
     "COPPER_BUDGETS": Record(
-        optional={
-            "i_cont": Amps(),
-            "i_peak": Amps(),
+        required={
+            "i_cont": _POSITIVE_AMPS,
+            "i_peak": _POSITIVE_AMPS,
             "segment_drop_max_v": Volts(),
-            "max_rise_c": Number("C"),
         },
+        optional={"max_rise_c": Number("C")},
         open=True,
     ),
     "SUPPLY_REGULATION": Record(
@@ -811,25 +941,30 @@ EXISTING: dict[str, Shape] = {
             "supply": Text("segment"),
             "ground": Text("segment"),
             "label": Text(),
-            "nominal_v": Volts(),
+            "nominal_v": Volts(lo=0, lo_open=True),
             "max_fraction": Number("fraction"),
         },
         open=True,
     ),
     "GROUND_NET": Net(),
-    "STITCH_BASIS": Record(optional={"f_hz": Number("Hz"), "er_fr4": Number()}),
+    "STITCH_BASIS": Pairs(
+        Record(optional={"f_hz": Number("Hz", lo=0, lo_open=True), "er_fr4": Number()})
+    ),
     # circuit
     "PINOUT": DictOf(Ref(), DictOf(Pad(), Text("function", allow_empty=True))),
-    "PIN_ALIASES": DictOf(
-        Text("symbol pin", allow_empty=True),
-        Nullable(Text("datasheet function", allow_empty=True)),
+    "PIN_ALIASES": Pairs(
+        DictOf(
+            Text("symbol pin", allow_empty=True),
+            Nullable(Text("datasheet function", allow_empty=True)),
+        )
     ),
-    "ABSENT_REFS": DictOf(Ref(), Text("reason")),
+    "ABSENT_REFS": Pairs(DictOf(Ref(), Text("reason"))),
     "STRESS_SCENARIOS": ListOf(_scenario()),
-    "RESISTOR_POWER_W": DictOf(
-        Text("ref or default"), Number("W"), required=("default",)
+    "RESISTOR_POWER_W": Pairs(
+        DictOf(Text("ref or default"), Number("W"), required=("default",))
     ),
-    "CAP_VRATED": DictOf(Text("mpn"), Volts()),
+    # an MPN-less capacitor looks up the key ""
+    "CAP_VRATED": DictOf(Text("mpn", allow_empty=True), Volts()),
     "LED_REFS": ListOf(Text("ref")),
     "LED_SCENARIO": _scenario(),
     "LED_I_MIN": Amps(),
@@ -838,11 +973,16 @@ EXISTING: dict[str, Shape] = {
     "SUPPLY_PINS": ListOf(Tuple(Ref(), Pad(), Window(Volts()))),
     "SUPPLY_LIMITS": ListOf(
         OneOf(
-            Tuple(Text("what"), Number("value"), Choice("<", "<="), Number("limit")),
+            Tuple(
+                Text("what", allow_empty=True),
+                Number("value"),
+                Choice("<", "<="),
+                Number("limit"),
+            ),
             Callable(),
         )
     ),
-    "I2C_IOL": DictOf(Number("speed Hz"), Amps()),
+    "I2C_IOL": DictOf(Number("speed Hz"), _POSITIVE_AMPS),
     "I2C_VDD": Volts(),
     # esp32s3
     "DEVKIT_REF": Ref(),
@@ -860,24 +1000,20 @@ EXISTING: dict[str, Shape] = {
     "ESP32_PIN_ABS_MAX": Volts(),
     "ESP32_GPIO_SOURCE_MAX": Amps(),
     "ESP32_INTERNAL_PULL": Ohms(),
-    "RESERVED": ListOf(Int("GPIO")),
-    "UART0": ListOf(Int("GPIO")),
-    "ADC1": ListOf(Int("GPIO")),
-    "INPUT_ONLY": ListOf(Int("GPIO")),
-    "STRAPS": DictOf(Int("GPIO"), Tuple(Text("level"), Text("pull"))),
+    "RESERVED": ListOf(Int("GPIO"), iterable=True),
+    "UART0": ListOf(Int("GPIO"), iterable=True),
+    "ADC1": ListOf(Int("GPIO"), iterable=True),
+    "INPUT_ONLY": ListOf(Int("GPIO"), iterable=True),
+    "STRAPS": Pairs(DictOf(Int("GPIO"), Tuple(Text("level"), Text("pull")))),
 }
 
 
 # --- the shapes of the tables whose checks are not written yet --------------------
 
 _SIDE = Choice("top", "bottom")
-_SEMI_OPTIONAL = {
-    "derate": Fraction(hi=0.8),
-    "pins": OneOf(
-        Record(required={"g": Pad(), "d": Pad(), "s": Pad()}),
-        Record(required={"a": Pad(), "k": Pad()}),
-    ),
-}
+# a transistor's pads go with its vds and vgs, a diode's with its vrrm
+_SEMI_FET_PINS = Record(required={"g": Pad(), "d": Pad(), "s": Pad()})
+_SEMI_DIODE_PINS = Record(required={"a": Pad(), "k": Pad()})
 
 PROPOSED: dict[str, Shape] = {
     "CAP_DERATE": DictOf(Text("mpn"), Fraction(hi=0.8)),
@@ -894,9 +1030,13 @@ PROPOSED: dict[str, Shape] = {
         required={
             "nets": ListOf(Net()),
             "paths": ListOf(Tuple(Net("from net"), Net("to net"), ListOf(Ref()))),
-            "parts": DictOf(Ref(), ListOf(Tuple(Pad("in pad"), Pad("out pad")))),
         },
-        optional={"max_ohm": Opt(Ohms(), default=10)},
+        optional={
+            "parts": Opt(
+                DictOf(Ref(), ListOf(Tuple(Pad("in pad"), Pad("out pad")))), default={}
+            ),
+            "max_ohm": Opt(Ohms(positive=True), default=10),
+        },
     ),
     "PIN_NETS": DictOf(Ref(), DictOf(Pad(), Nullable(Net()))),
     "MATING": DictOf(
@@ -907,15 +1047,21 @@ PROPOSED: dict[str, Shape] = {
                 "fits": ListOf(Ref()),
                 "keyed": Bool(),
             },
-            optional={"rows": Choice(1, 2)},
+            optional={"rows": Opt(Choice(1, 2), default=1)},
         ),
     ),
     "NET_LIMITS": DictOf(Net(), Volts("max V")),
     "SEMI_VRATED": DictOf(
         Text("mpn"),
         OneOf(
-            Record(required={"vds": Volts(), "vgs": Volts()}, optional=_SEMI_OPTIONAL),
-            Record(required={"vrrm": Volts()}, optional=_SEMI_OPTIONAL),
+            Record(
+                required={"vds": Volts(), "vgs": Volts()},
+                optional={"derate": Fraction(hi=0.8), "pins": _SEMI_FET_PINS},
+            ),
+            Record(
+                required={"vrrm": Volts()},
+                optional={"derate": Fraction(hi=0.8), "pins": _SEMI_DIODE_PINS},
+            ),
         ),
     ),
     "I2C_EXPECTED": DictOf(Text("bus"), ListOf(Int("7-bit address", lo=0, hi=0x7F))),
@@ -960,7 +1106,7 @@ PROPOSED: dict[str, Shape] = {
                 "name": Text(),
                 "refs": ListOf(Ref()),
                 "pads": ListOf(Tuple(Ref(), Pad())),
-                "max_mm2": Mm("max mm2", nonneg=True),
+                "max_mm2": Mm2("max mm2", nonneg=True),
             }
         )
     ),
@@ -971,20 +1117,48 @@ PROPOSED: dict[str, Shape] = {
 # --- the registry -----------------------------------------------------------------
 
 
+def _assigned_names(statements: list[ast.stmt]) -> set[str]:
+    """Return the names a block of statements binds with a value, at its own level.
+
+    It follows ``if``, ``try`` and ``with`` blocks (a module may declare ``TABLES``
+    under ``if`` or ``try``), unpacks tuple and list targets, and counts an annotated
+    name only when it has a value: ``TABLES: dict[str, Shape]`` alone binds nothing.
+    """
+    names: set[str] = set()
+
+    def targets(node: ast.expr) -> None:
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            for item in node.elts:
+                targets(item)
+        elif isinstance(node, ast.Starred):
+            targets(node.value)
+
+    for node in statements:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                targets(target)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets(node.target)
+        elif isinstance(node, ast.If):
+            names |= _assigned_names(node.body) | _assigned_names(node.orelse)
+        elif isinstance(node, ast.With):
+            names |= _assigned_names(node.body)
+        elif isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
+            blocks = [node.body, node.orelse, node.finalbody]
+            blocks += [handler.body for handler in node.handlers]
+            for block in blocks:
+                names |= _assigned_names(block)
+    return names
+
+
 def _declares_tables(path: str | None) -> bool:
-    """Return True if the source file assigns ``TABLES`` at module level."""
+    """Return True if the source file binds ``TABLES`` at module level."""
     if not path or not path.endswith(".py"):
         return False
     tree = ast.parse(Path(path).read_text(encoding="utf-8"))
-    for node in tree.body:
-        targets = []
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-        if any(isinstance(t, ast.Name) and t.id == "TABLES" for t in targets):
-            return True
-    return False
+    return "TABLES" in _assigned_names(tree.body)
 
 
 def engine_modules(package: ModuleType | None = None) -> list[ModuleType]:
@@ -1007,13 +1181,26 @@ def engine_modules(package: ModuleType | None = None) -> list[ModuleType]:
     return found
 
 
+_ENGINE_MODULES: list[ModuleType] | None = None
+
+
+def clear_cache() -> None:
+    """Forget the engine modules ``registry`` found, so the next call looks again."""
+    global _ENGINE_MODULES
+    _ENGINE_MODULES = None
+
+
 def registry(package: ModuleType | None = None) -> dict[str, Shape]:
     """Return the shape of every registered table, by name.
 
     The sources are ``EXISTING``, ``PROPOSED`` and each engine module's ``TABLES``.
+    For the real package the engine modules are found once per process (reading their
+    source is the slow part); ``clear_cache`` makes the next call look again. A
+    ``package`` given is looked at every time.
 
     A name declared in two places raises ValueError naming both.
     """
+    global _ENGINE_MODULES
     merged: dict[str, tuple[str, Shape]] = {}
 
     def add(source: str, tables: Mapping[str, Shape]) -> None:
@@ -1024,11 +1211,26 @@ def registry(package: ModuleType | None = None) -> dict[str, Shape]:
                 )
             merged[name] = (source, shape)
 
+    if package is not None:
+        modules = engine_modules(package)
+    else:
+        if _ENGINE_MODULES is None:
+            _ENGINE_MODULES = engine_modules()
+        modules = _ENGINE_MODULES
     add("pcbkit.check.tables.EXISTING", EXISTING)
     add("pcbkit.check.tables.PROPOSED", PROPOSED)
-    for module in engine_modules(package):
-        add(module.__name__, module.TABLES)
+    for module in modules:
+        # a TABLES bound only under a condition that did not hold is not there
+        add(module.__name__, getattr(module, "TABLES", {}))
     return {name: shape for name, (_, shape) in merged.items()}
+
+
+def _safe_str(err: BaseException) -> str:
+    """Return ``str(err)``, or the type's name when that raises."""
+    try:
+        return str(err)
+    except Exception:  # noqa: BLE001
+        return type(err).__name__
 
 
 def check_module(
@@ -1047,5 +1249,11 @@ def check_module(
         if not hasattr(module, name):
             continue
         checked += 1
-        errors.extend(validate(name, getattr(module, name), shapes[name]))
+        try:
+            errors.extend(validate(name, getattr(module, name), shapes[name]))
+        except Exception as err:  # noqa: BLE001 - one table's failure hides no other
+            errors.append(
+                f"specs.{name}: pcbkit could not check this table "
+                f"({type(err).__name__}: {_safe_str(err)}); this is a bug in pcbkit"
+            )
     return checked, errors
