@@ -2,9 +2,17 @@
 
 The functions from a Mouser answer to a row are pure: they take the answer as it came
 (a decoded dict, whatever its age) and the time, and touch no network and no disk.
-``fetch_answers`` is the one function that asks, through ``pcbkit.parts``, ten part
-numbers to a request and spaced apart, like ``pcbkit datasheet find``. The rows and the
-exit code are what ``pcbkit.cli`` prints.
+``fetch_answers`` is the one function that asks, ten part numbers to a request and
+spaced apart, like ``pcbkit datasheet find``. The rows and the exit code are what
+``pcbkit.cli`` prints.
+
+It asks Mouser directly (``mouser.send`` and ``cache.write``), not through
+``parts.ask_mouser``. That is a work-around for this slice's file limits, not a design
+choice. The follow-up: give ``cache.fetch`` and ``parts.ask_mouser`` the future-date
+rule (a future-dated entry is not fresh; today ``ask_mouser`` treats it as fresh, a
+latent bug for ``datasheet find`` too) and a keep-on-write-failure path, have
+``mouser.send`` wrap ``http.client.HTTPException`` as ``MouserError`` with a retry,
+then point ``stock`` back at ``parts.ask_mouser``.
 
 Mouser's field names are the one thing here that is partly assumed. They are all in the
 block below, and nowhere else in pcbkit's code reads them for stock. The first
@@ -74,7 +82,7 @@ NOT_FOUND = "not-found"
 AMBIGUOUS = "ambiguous"
 NO_MPN = "no-mpn"
 NOT_ASKED = "not-asked"
-# Not in the plan's list: Mouser answered, but not in a shape that can be judged.
+# Mouser answered, but not in a shape that can be judged (added by the slice 5 review).
 UNREADABLE = "unreadable"
 # The answer used is older than --max-age (or dated in the future) and Mouser was not
 # asked afresh: what it says may no longer be true.
