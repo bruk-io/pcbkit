@@ -37,9 +37,10 @@ def board() -> Toy:
     toy.add(
         "JP1",
         "Jumper",
-        "Device:R",
+        "Jumper:SolderJumper_2_Open",
         {"1": ("SDA", "~"), "2": ("SCL", "~")},
     )
+    toy.add("TP1", "TP", "Connector:TestPoint", {"1": ("SDA", "1")})
     toy.add(
         "U1",
         "Controller",
@@ -50,13 +51,49 @@ def board() -> Toy:
     return toy
 
 
-def test_a_connector_is_from_a_connector_library_or_a_j_reference() -> None:
-    """Take J1 (a J), P2 (the Connector library), a J-part from anywhere; not R1, U1."""
+def test_a_connector_is_from_a_connector_library_or_has_exactly_the_letter_j() -> None:
+    """Take J1 (a J), P2 (the Connector library); not JP1 (a jumper), R1 or U1."""
     nl = netlist(board())
-    assert ports.connectors(nl) == ["J1", "JP1", "P2"]
+    assert ports.connectors(nl) == ["J1", "P2"]
     assert ports.is_connector(nl, "P2")
+    assert not ports.is_connector(nl, "JP1")
     assert not ports.is_connector(nl, "U1")
     assert not ports.is_connector(nl, "R1")
+
+
+@pytest.mark.parametrize(
+    ("ref", "lib_part", "expected"),
+    [
+        ("J1", "Anything:Thing", True),
+        ("J12", "Anything:Thing", True),
+        ("P1", "Connector:Conn_01x02", True),
+        ("X1", "Connector_Generic:Conn_01x02", True),
+        ("JP1", "Jumper:SolderJumper_2_Open", False),
+        ("JP2", "Device:R", False),
+        ("J2", "Jumper:SolderJumper_2_Open", False),
+        ("TP1", "Connector:TestPoint", False),
+        ("TP2", "Connector:Conn_01x01", False),
+        ("J3", "Connector:TestPoint", False),
+        ("J4", "TestPoint:TestPoint_Pad_D1.0mm", False),
+        ("J5", "Connector:TestPoint_Probe", False),
+        ("W1", "Connector:TestPoint_Loop", False),
+        ("JACK1", "Anything:Thing", False),
+        ("CN1", "Custom_Lib:Socket", False),
+        ("P3", "Custom_Lib:Socket", False),
+        ("X2", "Custom_Lib:Socket", False),
+    ],
+)
+def test_the_connector_rule_leaves_out_test_points_and_jumpers(
+    ref: str, lib_part: str, expected: bool
+) -> None:
+    """Take a library starting Connector or the letter J, never a test point or jumper.
+
+    A connector from a custom library with reference P3, CN1 or X2 is not found: it
+    must be listed by hand to be checked.
+    """
+    toy = Toy()
+    toy.add(ref, "x", lib_part, {"1": ("A", "1")})
+    assert ports.is_connector(netlist(toy), ref) is expected
 
 
 def test_the_library_rule_is_a_prefix_not_a_substring() -> None:
@@ -116,13 +153,26 @@ def test_a_pad_the_row_says_is_wired_but_is_not_is_named_unconnected() -> None:
     assert report.wrong == ["pad 2: expected unconnected, found GND"]
 
 
-def test_a_listed_pad_the_part_does_not_have_is_unconnected() -> None:
-    """Treat a pad on no net like an unwired one: the netlist cannot tell them."""
+@pytest.mark.parametrize("net", [None, "X"])
+def test_a_listed_pad_the_part_does_not_have_fails_as_not_a_pad(
+    net: str | None,
+) -> None:
+    """Say ``not a pad of J1`` whether the row gives the pad a net or None."""
     nl = netlist(board())
-    assert ports.compare(nl, "J1", {"1": "VIN", "2": "GND", "9": None}).wrong == []
-    assert ports.compare(nl, "J1", {"1": "VIN", "2": "GND", "9": "X"}).wrong == [
-        "pad 9: expected X, found unconnected"
+    report = ports.compare(nl, "J1", {"1": "VIN", "2": "GND", "9": net})
+    assert report.wrong == ["pad 9: not a pad of J1"]
+    assert report.found["9"] is None
+
+
+def test_a_net_written_with_a_leading_slash_says_names_carry_none() -> None:
+    """Explain "/VIN" when VIN is what the netlist has, and only then."""
+    nl = netlist(board())
+    report = ports.compare(nl, "J1", {"1": "/VIN", "2": "GND", "3": None})
+    assert report.wrong == [
+        "pad 1: expected /VIN, found VIN (net names carry no leading slash)"
     ]
+    report = ports.compare(nl, "J1", {"1": "/GND", "2": "GND", "3": None})
+    assert report.wrong == ["pad 1: expected /GND, found VIN"]
 
 
 def test_a_wired_connector_pad_the_row_leaves_out_is_unlisted() -> None:
@@ -141,19 +191,17 @@ def test_a_part_that_is_not_a_connector_needs_only_its_listed_pads() -> None:
     assert report.unlisted == {}
 
 
-def test_a_part_missing_from_the_design_reports_every_pad_unconnected() -> None:
-    """Compare against nothing: each wired pad of the row is wrong."""
+def test_a_part_missing_from_the_design_has_no_pad_of_the_row() -> None:
+    """Compare against nothing: each pad of the row is not a pad."""
     nl = netlist(board())
-    assert ports.compare(nl, "J9", {"1": "VIN"}).wrong == [
-        "pad 1: expected VIN, found unconnected"
-    ]
+    assert ports.compare(nl, "J9", {"1": "VIN"}).wrong == ["pad 1: not a pad of J9"]
 
 
 def test_unlisted_connectors_are_the_ones_that_are_not_keys() -> None:
     """Name each connector the map leaves out, in natural order."""
     nl = netlist(board())
-    assert ports.unlisted_connectors(nl, {"J1": {}, "U1": {}}) == ["JP1", "P2"]
-    assert ports.unlisted_connectors(nl, {"J1": {}, "JP1": {}, "P2": {}}) == []
+    assert ports.unlisted_connectors(nl, {"J1": {}, "U1": {}}) == ["P2"]
+    assert ports.unlisted_connectors(nl, {"J1": {}, "P2": {}}) == []
 
 
 def test_a_design_with_no_connector_needs_an_empty_map_only() -> None:
@@ -166,7 +214,7 @@ def test_a_design_with_no_connector_needs_an_empty_map_only() -> None:
 def test_the_port_map_as_found_covers_every_connector() -> None:
     """Return each connector with all its pads, unwired ones as None."""
     found = ports.port_map_found(netlist(board()))
-    assert list(found) == ["J1", "JP1", "P2"]
+    assert list(found) == ["J1", "P2"]
     assert found["J1"] == {"1": "VIN", "2": "GND", "3": None}
     assert found["P2"] == {"1": "SDA", "2": "SCL"}
 

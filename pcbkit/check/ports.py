@@ -7,9 +7,17 @@ the pad numbers the netlist writes. The functions here compare the map with a
 ``TABLES``.
 
 A connector is a part whose symbol library starts with ``Connector``, or whose
-reference starts with ``J``. Every connector must be in the map, and every pad of one
-that is wired must be listed. A part that is not a connector (a controller whose pins
-the spec also fixes) may be listed too, and only the pads listed are compared.
+reference letters (the reference without its number) are exactly ``J``, unless it is a
+test point (reference letters ``TP``, or ``TestPoint`` in its symbol name or library)
+or a jumper (reference letters ``JP``, or a library starting ``Jumper``). Every
+connector must be in the map, and every pad of one that is wired must be listed. A part
+that is not a connector (a controller whose pins the spec also fixes) may be listed
+too, and only the pads listed are compared. The rule does not find a connector from a
+custom library whose reference is ``P1``, ``CN1`` or ``X1``: list it by hand to have it
+checked.
+
+A net name carries no leading slash (``VIN``, not ``/VIN``), and a pad listed that the
+part does not have is wrong, whatever net it is given.
 
 KiCad gives a pin the schematic leaves unwired the net ``unconnected-(...)``; that and
 a pad that is on no net at all both count as unwired here.
@@ -30,12 +38,26 @@ TABLES: dict[str, Shape] = {
 UNCONNECTED = "unconnected-("
 
 
+def letters(ref: str) -> str:
+    """Return a reference's letters, the reference without its number: ``J`` of J12."""
+    return ref.rstrip("0123456789")
+
+
 def is_connector(nl: Netlist, ref: str) -> bool:
-    """Return True for a part from a ``Connector`` library or with a J... reference."""
+    """Return True for a connector: a ``Connector`` library or the letter J.
+
+    A test point (letters ``TP``, or ``TestPoint`` in the symbol name or library) and a
+    jumper (letters ``JP``, or a library starting ``Jumper``) are never one.
+    """
     part = nl.parts.get(ref)
-    return ref.startswith("J") or (
-        part is not None and str(part["lib"]).startswith("Connector")
-    )
+    if part is None:
+        return False
+    lib, name = str(part["lib"]), str(part["part"])
+    if letters(ref) in ("TP", "JP") or lib.startswith("Jumper"):
+        return False
+    if "testpoint" in lib.lower() or "testpoint" in name.lower():
+        return False
+    return lib.startswith("Connector") or letters(ref) == "J"
 
 
 def connectors(nl: Netlist) -> list[str]:
@@ -85,9 +107,16 @@ def compare(nl: Netlist, ref: str, row: dict[str, str | None]) -> PortReport:
     for pad in sorted(row, key=natkey):
         got = actual.get(pad)
         report.found[pad] = got
-        if got != row[pad]:
+        if pad not in actual:
+            report.wrong.append(f"pad {pad}: not a pad of {ref}")
+        elif got != row[pad]:
+            slash = (
+                " (net names carry no leading slash)"
+                if got is not None and row[pad] is not None and row[pad] == "/" + got
+                else ""
+            )
             report.wrong.append(
-                f"pad {pad}: expected {_net(row[pad])}, found {_net(got)}"
+                f"pad {pad}: expected {_net(row[pad])}, found {_net(got)}{slash}"
             )
     if is_connector(nl, ref):
         report.unlisted = {

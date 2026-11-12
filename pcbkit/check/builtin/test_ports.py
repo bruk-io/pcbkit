@@ -39,9 +39,10 @@ def test_port_pins_carry_their_nets(
     Records ``pins``: ``{pad: net or None}`` as the netlist has each listed pad.
     """
     row = tables.read(specs, "PIN_NETS")[ref]
-    assert ref in nl.parts, f"{ref} is in specs.PIN_NETS but not in the design"
     report = ports.compare(nl, ref, row)
     record("pins", report.found)
+    if ref not in nl.parts:
+        raise AssertionError(f"{ref} is in specs.PIN_NETS but not in the design")
     problems = list(report.wrong)
     problems += [
         f"pad {pad}: wired to {net} but not listed"

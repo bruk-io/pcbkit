@@ -145,12 +145,54 @@ def test_a_row_for_a_part_that_is_not_in_the_design_fails_by_name(
     """Fail the row of ``J9``, saying the part is not in the design."""
     specs = SPECS + PORT_MAP.replace('"A1":', '"J9": {1: "VIN"},\n    "A1":')
     result = go(tmp_path, "ghost", board(), specs)
+    entry = result.entry(f"{PER_PART}[J9]")
     assert outcomes(result)[f"{PER_PART}[J9]"] == "failed"
-    assert (
-        "J9 is in specs.PIN_NETS but not in the design"
-        in (result.entry(f"{PER_PART}[J9]")["message"])
+    assert entry["message"].strip() == (
+        "AssertionError: J9 is in specs.PIN_NETS but not in the design"
     )
+    assert entry["numbers"] == {"pins": {"1": None}}
     assert outcomes(result)[f"{PER_PART}[J1]"] == "passed"
+
+
+def test_a_jumper_and_a_test_point_are_not_connectors(tmp_path: Path) -> None:
+    """Pass a correct board that has JP1 and TP1 and does not list them."""
+    toy = board()
+    toy.add(
+        "JP1",
+        "Open",
+        "Jumper:SolderJumper_2_Open",
+        {"1": ("SDA", "A"), "2": ("SCL", "B")},
+    )
+    toy.add("TP1", "TP", "Connector:TestPoint", {"1": ("SDA", "1")})
+    result = go(tmp_path, "jp-tp", toy)
+    assert result.done.returncode == 0, result.done.stdout
+    assert result.outcome(COMPLETE) == "passed"
+    assert set(result.entry(COMPLETE)["numbers"]["port map"]) == {"J1"}
+
+
+def test_a_net_written_with_a_leading_slash_says_names_carry_none(
+    tmp_path: Path,
+) -> None:
+    """Fail ``/VIN`` against VIN, and say why."""
+    specs = SPECS + PORT_MAP.replace('1: "VIN"', '1: "/VIN"')
+    entry = go(tmp_path, "slash", board(), specs).entry(f"{PER_PART}[J1]")
+    assert entry["outcome"] == "failed"
+    assert (
+        "pad 1: expected /VIN, found VIN (net names carry no leading slash)"
+        in entry["message"]
+    )
+
+
+@pytest.mark.parametrize("net", ['"X"', "None"])
+def test_a_pad_the_connector_does_not_have_fails_as_not_a_pad(
+    tmp_path: Path, net: str
+) -> None:
+    """Fail pad 9 of J1, listed with a net or with None."""
+    specs = SPECS + PORT_MAP.replace("5: None}", f"5: None, 9: {net}}}")
+    entry = go(tmp_path, "no-pad", board(), specs).entry(f"{PER_PART}[J1]")
+    assert entry["outcome"] == "failed"
+    assert "pad 9: not a pad of J1" in entry["message"]
+    assert entry["numbers"]["pins"]["9"] is None
 
 
 def test_a_controller_pad_on_the_wrong_net_fails_its_own_row(tmp_path: Path) -> None:

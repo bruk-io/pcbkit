@@ -949,11 +949,13 @@ netlist, at the `sch` gate:
 
 | Name | Shape | Holds |
 |---|---|---|
-| `PIN_NETS` | `{ref: {pad: net or None}}` | The spec's port map: the net each pad of a connector carries, in the pad numbers the netlist writes (`None`: wired to nothing). Every connector, a part from a `Connector` library or whose reference starts with `J`, must be a key and every wired pad of one must be listed. Any other part may be a key too (a controller whose pins the spec fixes), and only the pads listed are compared. |
+| `PIN_NETS` | `{ref: {pad: net or None}}` | The spec's port map: the net each pad of a connector carries, in the pad numbers the netlist writes (`None`: wired to nothing). Net names carry no leading slash: write `VIN`, not `/VIN` (a row that differs only by the slash fails and says so). A pad listed that the part does not have fails as "not a pad of J1", whatever net it is given. Every connector must be a key and every wired pad of one must be listed. A connector is a part from a library whose name starts with `Connector`, or whose reference letters are exactly `J` (`J1`, `J12`), unless it is a test point (letters `TP`, or `TestPoint` in its symbol name or library) or a jumper (letters `JP`, or a library starting `Jumper`). The rule does not find a connector from a custom library whose reference is `P1`, `CN1` or `X1`: list it by hand to have it checked. Any other part may be a key too (a controller whose pins the spec fixes), and only the pads listed are compared. |
 
 `test_port_pins_carry_their_nets[ref]` (one per key) fails naming each pad that carries
-another net than its row, and each wired pad of a connector the row leaves out; it
-records `pins`, `{pad: net or None}` for the listed pads.
+another net than its row, each listed pad the part does not have, and each wired pad of a
+connector the row leaves out; it records `pins`, `{pad: net or None}` for the listed pads
+(`None` for a pad the part does not have), before it fails, also when the part is not in
+the design.
 `test_every_connector_is_in_the_port_map` fails naming each connector that is not a key;
 it records `port map`, every connector of the design as `{ref: {pad: net or None}}`,
 before it fails. A pad the schematic leaves unwired (KiCad's `unconnected-(...)` net, or
