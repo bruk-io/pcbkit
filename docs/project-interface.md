@@ -100,7 +100,7 @@ it takes the default below.
 | `stitch.dense` | list of boxes | `[]` | Boxes, each `[x0, y0, x1, y1, pitch]` in layout millimetres with `x0 < x1` and `y0 < y1`, where the stitching grid uses `pitch` instead. Use it under a switching regulator, for example. |
 | `stitch.gap_limit_mm` | number | `3.4` | Largest distance from any point with ground on both layers to the nearest ground via or plated ground pad. pcbkit adds vias until nothing is further away. Choose it a little under the limit you care about (a twentieth of a wavelength at your highest frequency, say). |
 | `fab.profile` | string | `"pcbway"` | Whose limits and order forms to use. `"pcbway"` is the only profile so far. |
-| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`, `ports`, `power`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
+| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`, `ports`, `power`, `bringup`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
 
 How the file is read:
 
@@ -974,6 +974,20 @@ more than one link in parallel, or shares its link with another regulator. It re
 `enable links`, `{net: {ref: link ref or None}}`, before it fails (a regulator listed on
 two pads is keyed `"U3 pad 4"`).
 
+**`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
+name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the
+`sch` gate:
+
+| Name | Shape | Holds |
+|---|---|---|
+| `I2C_EXPECTED` | `{bus: [7-bit address]}` | The addresses a scan of each bus must show, the spec's bring-up expectation. The buses must be keys of `I2C_BUSES` (a bus that is not fails, naming it). The addresses found are those of the on-board devices `circuits.i2c_devices(nl)` reports on the bus's SDA net plus the bus's off-board devices from `I2C_BUSES`; a device that answers an all-call or general-call address must be reported at that address as well, or the scan will not match. |
+
+`test_i2c_bus_answers_exactly_the_expected_addresses[bus]` (one per key) fails naming the
+addresses that are missing and those that are extra (with the devices that answer
+there). It records `expected`, `found`, `missing` and `extra`, each a list of `0x3c` text
+and lowest first, before it fails. Two devices at one address are the business of
+`test_i2c_addresses_unique_per_bus` (`circuit`).
+
 ### Table shapes
 
 Every table the built-in checks read has a *shape*, defined in one place
@@ -1015,7 +1029,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 | `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": True or False, "rows": 1 or 2 (optional, default 1)}}` | mis-plug (`ports`) |
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
 | `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
-| `I2C_EXPECTED` | `{bus: [7-bit address]}` | exact bus scan (`bringup`); the buses should be keys of `I2C_BUSES` (the check says so, this shape does not) |
 | `TEST_POINTS` | `[(net, max ground mm)]` | test points (later) |
 | `PROBE_KEEPAWAY` | `[(name, x0, y0, x1, y1)]` | test points, in layout mm (later) |
 | `REFERENCE_PLANES` | `{net: "top" or "bottom" or ("top" or "bottom", max unreferenced mm)}` | two-layer reference planes (later) |

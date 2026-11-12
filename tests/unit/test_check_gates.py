@@ -63,6 +63,8 @@ FROZEN = {
     "test_fab::test_decoupling_caps_are_close": "place",
     "test_fab::test_power_footprints_match_datasheet": "place",
     "test_fab::test_i2c_rise_time": "route",
+    # test_i2c_expected
+    "test_i2c_expected::test_i2c_bus_answers_exactly_the_expected_addresses": "sch",
     # test_kicad
     "test_kicad::test_erc_clean": "sch",
     "test_kicad::test_drc_clean_with_schematic_parity": "route",
@@ -149,7 +151,7 @@ def test_the_gate_the_rule_gives_is_the_frozen_one(key: str) -> None:
 def test_the_gates_have_the_counts_the_design_gives() -> None:
     """Count the checks at each gate, so a bulk change cannot pass quietly."""
     counts = {gate: list(FROZEN.values()).count(gate) for gate in GATES}
-    assert counts == {"sch": 20, "place": 2, "route": 15, "order": 6}
+    assert counts == {"sch": 21, "place": 2, "route": 15, "order": 6}
 
 
 def test_the_exceptions_are_real_checks_whose_gate_the_fixtures_get_wrong() -> None:

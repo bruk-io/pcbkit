@@ -49,6 +49,7 @@ CHECK_GROUPS = (
     "esp32s3",
     "ports",
     "power",
+    "bringup",
 )
 
 # Fab profiles pcbkit has code for.

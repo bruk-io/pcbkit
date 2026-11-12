@@ -78,6 +78,7 @@ def test_the_modules_are_found() -> None:
         "test_enable_links.py",
         "test_esp32s3.py",
         "test_fab.py",
+        "test_i2c_expected.py",
         "test_kicad.py",
         "test_outputs.py",
         "test_ports.py",

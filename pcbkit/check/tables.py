@@ -1062,7 +1062,6 @@ PROPOSED: dict[str, Shape] = {
             ),
         ),
     ),
-    "I2C_EXPECTED": DictOf(Text("bus"), ListOf(Int("7-bit address", lo=0, hi=0x7F))),
     "TEST_POINTS": ListOf(Tuple(Net(), Mm("max ground mm", nonneg=True))),
     "PROBE_KEEPAWAY": ListOf(Box(Text("name"))),
     "REFERENCE_PLANES": DictOf(
