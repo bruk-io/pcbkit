@@ -162,9 +162,12 @@ def table_row_names(text: str) -> list[str]:
     ]
 
 
-def group_block(group: str) -> str:
-    """Return the doc's block for ``group``: from its ``**`group`**`` paragraph on."""
-    section = checks_section()
+def group_block(group: str, section: str | None = None) -> str:
+    """Return the block for ``group``: from its ``**`group`**`` paragraph on.
+
+    ``section`` defaults to the doc's checks section.
+    """
+    section = checks_section() if section is None else section
     found = re.search(rf"^\*\*`{group}`\*\*", section, re.MULTILINE)
     assert found, f"no block for the {group} group"
     after = re.search(r"^\*\*`", section[found.end() :], re.MULTILINE)
@@ -196,9 +199,16 @@ def test_every_built_table_has_one_row_and_it_is_in_its_groups_block() -> None:
 
 
 def test_the_row_finder_sees_a_duplicate_and_a_row_in_the_wrong_block() -> None:
-    """Count two rows of one name, so a shadowing copy cannot hide."""
+    """Count two rows of one name, and find a row only in the block it is in."""
     text = "| `A` | x | y |\ntext\n| `B` | x |\n| `A` | q | r |\n"
     assert table_row_names(text) == ["A", "B", "A"]
+    section = (
+        "**`power`** (opt-in)\n\n| `B` | x | y |\n\n"
+        "**`ports`** (opt-in)\n\n| `A` | x | y |\n"
+    )
+    assert table_row_names(group_block("power", section)) == ["B"]
+    assert table_row_names(group_block("ports", section)) == ["A"]
+    assert "A" not in table_row_names(group_block("power", section))
 
 
 def test_every_registered_table_that_is_not_an_existing_one_has_a_generated_row() -> (
