@@ -54,6 +54,7 @@ BUILTIN_GROUPS = {
     "test_circuit": "circuit",
     "test_esp32s3": "esp32s3",
     "test_ports": "ports",
+    "test_enable_links": "power",
 }
 
 # The design gates, earliest first. A gated run keeps the checks up to its own gate.

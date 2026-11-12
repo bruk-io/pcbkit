@@ -100,7 +100,7 @@ it takes the default below.
 | `stitch.dense` | list of boxes | `[]` | Boxes, each `[x0, y0, x1, y1, pitch]` in layout millimetres with `x0 < x1` and `y0 < y1`, where the stitching grid uses `pitch` instead. Use it under a switching regulator, for example. |
 | `stitch.gap_limit_mm` | number | `3.4` | Largest distance from any point with ground on both layers to the nearest ground via or plated ground pad. pcbkit adds vias until nothing is further away. Choose it a little under the limit you care about (a twentieth of a wavelength at your highest frequency, say). |
 | `fab.profile` | string | `"pcbway"` | Whose limits and order forms to use. `"pcbway"` is the only profile so far. |
-| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`, `ports`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
+| `checks.groups` | list of strings | `["kicad", "outputs"]` | Built-in check groups to run: `kicad`, `outputs`, `fab`, `copper`, `circuit`, `esp32s3`, `ports`, `power`. The default groups need nothing from `specs.py`; add the others as you write the numbers they read. |
 
 How the file is read:
 
@@ -959,6 +959,21 @@ it records `port map`, every connector of the design as `{ref: {pad: net or None
 before it fails. A pad the schematic leaves unwired (KiCad's `unconnected-(...)` net, or
 none) is `None`.
 
+**`power`** (opt-in, like `ports`: a board that has not listed it is untouched; once it is
+on, a missing table fails by name and `{}` says "none here"). It runs on the netlist, at
+the `sch` gate:
+
+| Name | Shape | Holds |
+|---|---|---|
+| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | The regulators that share an enable net, so each can be brought up alone at bring-up. Each `(ref, pad)` must reach the shared net through a link of its own: its enable pad is on a net of its own, and one two-pin part joins that net to the shared one, a `Device:R` whose value reads as 0 (`0`, `0R`) or a part from a library whose name starts with `Jumper`. No two regulators may share a link. |
+
+`test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key) fails naming
+each regulator whose enable pad is wired straight to the shared net, has no link (and,
+when a part such as a 10 k resistor does join the two nets, which one and its value), has
+more than one link in parallel, or shares its link with another regulator. It records
+`enable links`, `{net: {ref: link ref or None}}`, before it fails (a regulator listed on
+two pads is keyed `"U3 pad 4"`).
+
 ### Table shapes
 
 Every table the built-in checks read has a *shape*, defined in one place
@@ -1001,7 +1016,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
 | `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional)}}` | semiconductor voltage (`power`); `pins` names the pads when the symbol's pins are not G/D/S or A/K |
 | `I2C_EXPECTED` | `{bus: [7-bit address]}` | exact bus scan (`bringup`); the buses should be keys of `I2C_BUSES` (the check says so, this shape does not) |
-| `ENABLE_LINKS` | `{enable net: [(regulator ref, enable pad)]}` | enable links (`power`) |
 | `TEST_POINTS` | `[(net, max ground mm)]` | test points (later) |
 | `PROBE_KEEPAWAY` | `[(name, x0, y0, x1, y1)]` | test points, in layout mm (later) |
 | `REFERENCE_PLANES` | `{net: "top" or "bottom" or ("top" or "bottom", max unreferenced mm)}` | two-layer reference planes (later) |

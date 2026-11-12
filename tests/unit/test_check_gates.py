@@ -45,6 +45,8 @@ FROZEN = {
     "test_copper::test_sense_pair_loop_area": "route",
     "test_copper::test_copper_segment": "route",
     "test_copper::test_load_supply_regulation": "route",
+    # test_enable_links
+    "test_enable_links::test_each_regulator_on_a_shared_enable_has_its_own_link": "sch",
     # test_esp32s3
     "test_esp32s3::test_esp32_reserved_and_uart0_pins_unconnected": "sch",
     "test_esp32s3::test_analog_inputs_are_on_adc1": "sch",
@@ -147,7 +149,7 @@ def test_the_gate_the_rule_gives_is_the_frozen_one(key: str) -> None:
 def test_the_gates_have_the_counts_the_design_gives() -> None:
     """Count the checks at each gate, so a bulk change cannot pass quietly."""
     counts = {gate: list(FROZEN.values()).count(gate) for gate in GATES}
-    assert counts == {"sch": 19, "place": 2, "route": 15, "order": 6}
+    assert counts == {"sch": 20, "place": 2, "route": 15, "order": 6}
 
 
 def test_the_exceptions_are_real_checks_whose_gate_the_fixtures_get_wrong() -> None:
