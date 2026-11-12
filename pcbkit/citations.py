@@ -10,8 +10,9 @@ evidence against the PDF's own text, with no model and no judgement:
 - the quote is on that page (``quote_on_page``), and neither end of it cuts a number
   of the page;
 - every number of the value is a *known* number of the page inside the quote, of the
-  same kind and sign, at every place the quote occurs on the page, unless the value is
-  marked as worked out from the quote (``derived``), which a person then checks;
+  same kind and sign, and of the same unit and prefix where both state one, at every
+  place the quote occurs on the page, unless the value is marked as worked out from
+  the quote (``derived``), which a person then checks;
 - the PDF is the one the values were read from (``check_pin``).
 
 It proves the text exists, not that it is the right row, part variant or test
@@ -125,6 +126,18 @@ Context. A number is unknown when any of these touch it:
 
 A range whose one end is unknown makes the other unknown too.
 
+Units. A number's stated unit is the unit glued to it ("19V", "4.7k", "85%", "25°C")
+or the word right after it across spaces or tabs on the same line ("19 V", "45  µA"),
+when that word is a unit of ``_UNITS``, a prefix, or a prefix and a unit, or is "%"
+or "°" with "C", "F" or "K". Never across a line break. Where the value's number and
+the page's number both state a unit, the two must be the same text, after the
+folding above (micro sign and mu, ohm sign and omega) and with a "u" prefix read as
+micro: "10 Ω" is refused against "10 kΩ", "3.3 V" against "3.3 A", "100 nF" against
+"100 µF". Nothing else is equated: "K" is not "k" (it may be kelvin) and "ohm" is not
+"Ω", so those are refused. Where either side states none ("1.25" against "1.25 V",
+or a page whose unit is in another cell, on another line or before the number, as
+in "kHz 500") the units are not compared.
+
 Values. The value is read like a page, with the same rules, and every number in it must
 be known. A value with an unknown character anywhere, or with no number at all, is
 refused (``Rule.VALUE``), unless it is marked ``text_only``: then its words, joined as
@@ -136,8 +149,9 @@ Quote. The quote is looked for in the page's normalised text: the read text with
 soft hyphens and zero-width characters removed, and white space removed except between
 two digits, where any run of it is one space ("-0.3 6 V" is never "-0.36 V"). Case is
 kept: "mA" and "MA" are nine orders of magnitude apart. An occurrence is refused if
-either end falls inside a number of the page (a number's span takes its sign and any
-unknown character glued to it) or if it starts on a dash outside a number. The quote's
+either end falls inside a number of the page (a number's span takes its sign, its
+glued unit or prefix and any unknown character glued to it, so "R1 is 10" does not
+cut "10k") or if it starts on a dash outside a number. The quote's
 numbers are the page's own numbers inside the occurrence, with the page's spacing and
 context, never the quote's. Where the quote occurs more than once, every occurrence
 must back the value.
@@ -146,8 +160,8 @@ What is checked, refused and blind
 ----------------------------------
 
 Checked: the page, the quote's length and presence, the quote's ends, each number of
-the value against the known numbers inside every occurrence (kind, digits, sign), the
-words of a ``text_only`` value, and the PDF's SHA-256.
+the value against the known numbers inside every occurrence (kind, digits, sign, and
+unit where both state one), the words of a ``text_only`` value, and the PDF's SHA-256.
 
 Refused as unknown (right values among them; write the value as the page writes it,
 or mark it derived): everything listed under Context and Signs; superscript powers
@@ -159,7 +173,9 @@ with a spaced dash ("3.0 - 5.5") or with units and spaces ("2.7 V-3.6 V"); hex r
 
 Blind, not detectable from the text at all:
 
-- Units and SI prefixes are not compared: "1.25 mV" passes against "1.25 V".
+- A unit or prefix that only one side states is not compared: "1.25 mV" passes
+  against a bare "1.25" whose "V" is in another cell, on the next line or before the
+  number, and "10" passes against "10k".
 - A footnote digit glued to a number ("3.61" for 3.6 and footnote 1), and a power of
   ten that pdftotext flattened with no mark left ("106" for 10⁶, or "10 6" with plain
   space): the text is a plain number.
@@ -323,9 +339,11 @@ class Problem:
 class _Token:
     """One word with a digit: its kind, sign, spans and whether it is known.
 
-    ``start`` takes the sign; ``end`` ends the number (before a glued unit), so a quote
-    may stop between "19" and "V". ``lump_start`` and ``lump_end`` widen the span over
-    unknown characters glued to it, which a quote may not cut off either.
+    ``start`` takes the sign; ``end`` ends the number (before a glued unit).
+    ``lump_start`` and ``lump_end`` widen the span over the glued unit and any unknown
+    characters glued to it, none of which a quote may cut off. ``stated`` is the unit
+    the text states for the number, glued or after plain spaces on the same line
+    ("" for none), with a "u" prefix read as micro.
     """
 
     kind: _Kind
@@ -339,6 +357,7 @@ class _Token:
     word: int
     known: bool
     text: str
+    stated: str = ""
 
     @property
     def key(self) -> tuple[_Kind, str]:
@@ -367,6 +386,7 @@ def _backs(page: _Token, value: _Token) -> bool:
     return (
         page.key == value.key
         and page.sign in _SIGN_BACKED_BY[value.sign if value.kind in _SIGNABLE else ""]
+        and (not page.stated or not value.stated or page.stated == value.stated)
     )
 
 
@@ -560,6 +580,39 @@ def _read_word(word: str) -> tuple[_Kind, str, str]:
         if _is_unit(suffix) and not hex_like and not pin_like:
             return _Kind.DECIMAL, number, suffix
     return _Kind.CODE, word, ""
+
+
+def _stated_unit(lexemes: Sequence[_Lexeme], token: _Token) -> str:
+    """Return the unit the text states for a number: glued, or after plain spaces.
+
+    A unit is a word of the closed list (``_is_unit``), "%", or "°" and "C", "F" or
+    "K". It may be glued ("19V", "85%", "25°C") or follow after spaces or tabs on the
+    same line ("19 V", "45  µA"), never across a line break. A "u" prefix is micro.
+    """
+    if token.kind not in _SIGNABLE:
+        return ""
+    unit = token.unit
+    if not unit:
+        at = token.word + 1
+        between = _get(lexemes, at)
+        if between is not None and between.lex is _Lex.SPACE:
+            if any(c not in " \t" for c in between.text):
+                return ""
+            at += 1
+        following = _get(lexemes, at)
+        if following is None:
+            return ""
+        if following.lex is _Lex.WORD and _is_unit(following.text):
+            unit = following.text
+        elif _is_char(following, "%"):
+            unit = "%"
+        elif _is_char(following, "°"):
+            scale = _get(lexemes, at + 1)
+            if scale is not None and scale.text in ("C", "F", "K"):
+                unit = "°" + scale.text
+    if unit[:1] == "u":
+        unit = "μ" + unit[1:]
+    return unit
 
 
 def _get(lexemes: Sequence[_Lexeme], index: int) -> _Lexeme | None:
@@ -848,7 +901,7 @@ def _read(text: str) -> _Reading:
     tokens = []
     for t, token in enumerate(drafts):
         token_start = lexemes[start[t]].start if t in start else token.start
-        lump_start, lump_end = token_start, token.end
+        lump_start, lump_end = token_start, lexemes[token.word].end
         first = start.get(t, token.word)
         while _is_foreign(_get(lexemes, first - 1)):
             first -= 1
@@ -866,6 +919,7 @@ def _read(text: str) -> _Reading:
                 lump_end=lump_end,
                 known=t not in unknown,
                 text=text[token_start : token.end],
+                stated=_stated_unit(lexemes, token),
             )
         )
     return _Reading(text, tuple(lexemes), tuple(tokens))
@@ -1084,8 +1138,9 @@ def _check_value(
         Rule.NUMBER,
         f"the value {value!r} has {', '.join(missing)}, which the quote does not "
         f"have{where} as a number this check can read: a right quote with a wrong "
-        "number, or a number whose sign or grouping is not certain. If the value is "
-        "worked out from the quote, mark it derived and say how",
+        "number, a unit or prefix other than the page's (write it as the page does), "
+        "or a number whose sign or grouping is not certain. If the value is worked "
+        "out from the quote, mark it derived and say how",
     )
 
 

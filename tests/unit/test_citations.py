@@ -483,9 +483,62 @@ def test_hex_that_starts_with_a_letter_is_text_only() -> None:
     assert check_citation("FFh", quote, 1, [quote], text_only=True) is None
 
 
-def test_units_are_not_checked_a_known_blind_spot() -> None:
-    """Pin that "1.25 mV" passes against "1.25 V": units are not read, only numbers."""
-    assert missing("1.25 mV", "Reference voltage 1.25 V") == []
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        # The fourth review's cases: units and prefixes were not compared.
+        ("10 Ω", "Pull-up resistor R1 = 10 kΩ"),
+        ("100 nF", "Bypass capacitor 100 µF ceramic"),
+        ("3.3 V", "Output current 3.3 A max"),
+        ("1.25 mV", "Reference voltage 1.25 V"),
+        ("1.25 mV", "Reference voltage 1.25V typical"),  # glued on the page
+        ("1.25V", "Reference voltage 1.25 mV typical"),  # glued in the value
+        ("85 °C", "Shutdown threshold 85% falling"),
+        ("85%", "Shutdown threshold 85 °C rising"),
+        ("125 °C", "Shutdown threshold 125°F rising"),
+        ("45 μA", "Quiescent current IQ  45  mA"),  # across a cell gap
+        ("10 kohm", "Pull-up resistor R1 = 10 kΩ"),  # "ohm" and "Ω" are not folded
+        ("10 kΩ", "Pull-up resistor R1 = 10 KΩ"),  # nor "k" and "K"
+        ("-0.3 to 19 mV", "Input voltage range: –0.3 19 V"),
+    ],
+)
+def test_a_unit_stated_on_both_sides_must_be_the_same(value: str, quote: str) -> None:
+    """Refuse a value whose unit or prefix differs from the one the page states."""
+    assert rule(check_citation(value, quote, 1, [quote])) is Rule.NUMBER
+
+
+@pytest.mark.parametrize(
+    "value, quote, page",
+    [
+        ("10 kΩ", "Pull-up resistor R1 = 10 kΩ", None),
+        ("100 µF", "Bypass capacitor 100 μF ceramic", None),  # micro sign and mu
+        ("100 uF", "Bypass capacitor 100 μF ceramic", None),  # "u" is micro
+        ("10 kΩ", "Pull-up resistor R1 = 10 kΩ", None),  # ohm sign and omega
+        ("85%", "Shutdown threshold 85 % falling", None),
+        ("125 °C", "Shutdown threshold 125°C rising", None),
+        ("45 μA", "Quiescent current IQ  45  μA", None),
+        # Either side states none: as before, not compared.
+        ("1.25 mV", "Reference voltage 1.25", "Reference voltage 1.25\nmV typical"),
+        ("1.25", "Reference voltage 1.25 V typical", None),
+        ("500 kHz", "Switching frequency kHz 500", None),  # unit before the number
+        ("-0.3 to 19 V", "Input voltage range: –0.3 19 V", None),
+    ],
+)
+def test_a_unit_stated_on_one_side_only_is_not_compared(
+    value: str, quote: str, page: str | None
+) -> None:
+    """Accept the same unit however it is spelt, and a unit only one side states."""
+    assert check_citation(value, quote, 1, [quote if page is None else page]) is None
+
+
+def test_a_quote_may_not_end_between_a_number_and_its_glued_unit() -> None:
+    """Refuse a quote that stops at "10" of "10k": "10" against it is not certain."""
+    page = "Resistor R1 is 10k pull-up"
+    assert not citations.quote_on_page("Resistor R1 is 10", page)
+    assert rule(check_citation("10", "Resistor R1 is 10", 1, [page])) is Rule.QUOTE
+    assert not citations.quote_on_page("k pull-up to VDD", "R1 10k pull-up to VDD")
+    assert citations.quote_on_page("Resistor R1 is 10k", page)
+    assert citations.quote_on_page("Supply voltage 19", "Supply voltage 19 V")
 
 
 def test_check_citation_refuses_a_wrong_number() -> None:
@@ -651,12 +704,16 @@ def test_non_breaking_spaces_are_spaces_except_between_digits() -> None:
 
 
 # Generated cases. A fragment is a list of parts: ("token", text) is one page token,
-# never to be cut; ("dash", "-") is a range dash, which a quote may end after but not
-# start on; ("free", text) may be cut anywhere.
+# never to be cut; ("unit", text) is a unit glued to the token before it, which a quote
+# may not cut off or start on; ("dash", "-") is a range dash, which a quote may end
+# after but not start on; ("free", text) may be cut anywhere. Changed on purpose: the
+# glued units were "free" until a quote was refused an end between "19" and "V".
 
 FRAGMENTS = {
     "decimal": [("token", "1.25")],
-    "decimal-unit": [("token", "19"), ("free", "V")],
+    "decimal-unit": [("token", "19"), ("unit", "V")],
+    "decimal-prefix": [("token", "10"), ("unit", "k"), ("free", " pull-up")],
+    "decimal-prefix-unit": [("token", "4.7"), ("unit", "kΩ")],
     "fraction": [("token", ".25")],
     "negative": [("token", "-40")],
     "negative-fraction": [("token", "-0.3")],
@@ -676,10 +733,10 @@ FRAGMENTS = {
     "range": [("token", "2.7"), ("dash", "-"), ("token", "3.6")],
     "range-units": [
         ("token", "2.7"),
-        ("free", "V"),
+        ("unit", "V"),
         ("dash", "-"),
         ("token", "3.6"),
-        ("free", "V"),
+        ("unit", "V"),
     ],
     "range-integers": [("token", "5"), ("dash", "-"), ("token", "40")],
     "table-cells": [("token", "-0.3"), ("free", " "), ("token", "19"), ("free", " V")],
@@ -709,6 +766,8 @@ def _cuts() -> list[tuple[str, str, str, bool]]:
         for role, text in parts:
             if role == "token":
                 no_end.update(range(at + 1, at + len(text)))
+            if role == "unit":
+                no_end.update(range(at, at + len(text)))
             if role == "dash":
                 no_start.add(at)
             at += len(text)
