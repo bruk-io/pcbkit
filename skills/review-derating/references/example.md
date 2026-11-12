@@ -1,83 +1,85 @@
 # Worked examples: my-board
 
-A generic board, made up to show the reasoning: a 24 V input (20 to 28 V) through a
-6 A fuse F1, four DC gear motors on four 2-pin headers, a buck making 12 V, a buck
-making 5 V for an off-board display, and a 3.3 V logic rail. Numbers marked
-illustrative show the arithmetic and are not to be reused.
+A generic LED lighting driver, made up to show the reasoning: a 36 V input (30 to 42 V)
+through a 5 A fuse F1 into three constant-current buck LED drivers, U3 to U5, one per
+channel at 1.5 A into a string of about 24 V; a buck making 3.3 V for the controller;
+the board sealed inside a luminaire housing. Numbers marked illustrative show the
+reasoning and are not to be reused. Every stress below came from a check's record or a
+solve of `circuits.scenario`, never from arithmetic in the conversation.
 
-## 1. Display power through a 4-pin signal connector
+## 1. A common return through one contact
 
-- **Draft:** 5 V at 3 A to the display through a 4-pin 1.25 mm-pitch connector whose
-  contacts are rated about 1 A each, two contacts on 5 V and two on GND.
-- **Per contact:** 1.5 A each against about 1 A: 150 % of rating, `FAIL`. Judged per
-  connector ("4 pins, 4 A") it looks fine, which is the trap.
-- **Fix:** power on its own 2-pin connector rated 5 A per contact: 3 / 5 = 60 %, `OK`,
-  provided the cable uses the wire gauge the rating assumes. Data on the 4-pin one, with
-  its own ground contact so signal return does not ride the power ground.
-- **Written:** `CONTACT_RATINGS` rows for both connectors (proposed table: `add-check`
-  writes the check).
+- **Draft:** the three strings share one return wire, which leaves through one contact
+  of a 4-pin 2.0 mm-pitch wire-to-board header rated about 2 A per contact; the three
+  channel outputs use the other three.
+- **Per contact:** the return carries all three channels, 4.5 A, through one contact
+  rated about 2 A: `FAIL`. Judged per connector ("4 pins at 2 A, 8 A") it looks fine,
+  which is the trap; the failure is a return contact that runs hot and loosens.
+- **Fix:** a connector whose return has as many contacts as the channels, or a
+  terminal block rated for the total per position, with the wire gauge its rating
+  assumes.
+- **Written:** a `CONTACT_RATINGS` row for the header with `GND` at 4.5 A and each
+  channel at 1.5 A (proposed table: `add-check` writes the check, which fails on the
+  draft).
 
-## 2. Motor stall on 2.54 mm headers
+## 2. Inductor saturation at the housing's temperature
 
-- **Stress:** stall assumed at 1.8 A per motor against header contacts rated about
-  2.2 A: 82 %, over the 80 % target, `MARGINAL`, and the figure is `assumed`.
-- **The finding is the assumption.** Stall current scales with the voltage across the
-  winding: measure it at the rail's highest voltage, shaft locked, on a current-limited
-  bench supply, for a second or two.
-- **Fix limits:** the motor's own plug and lead are the same class of contact, so a
-  better board-side header helps only if the plug changes too.
+- **Stress:** peak inductor current is the 1.5 A load plus half the ripple at the
+  highest input, 0.3 A illustrative, so 1.8 A. The inductor's Isat at 100 C is 1.9 A
+  from its curve: 95 % of capability, `MARGINAL`.
+- **The finding is the assumption.** The ambient inside the sealed housing is
+  `assumed` at 60 C. Measure it: thermocouple on the inductor at full output for an
+  hour, housing closed.
+- **Written:** a `SUPPLY_LIMITS` row, U3's current limit against Isat at the hottest
+  ambient, with the curve and its operating point beside it.
 
-## 3. Four motors behind one 6 A fuse
+## 3. Three channels behind one 5 A fuse
 
-- **Budget:** 4 x 1.8 A stall = 7.2 A behind a fuse that should carry no more than about
-  75 % of 6 A, 4.5 A, after rerating.
-- **Is simultaneous stall credible?** A jammed mechanism or a start from rest loads
-  several motors at once. Nobody has said how many can stall together: `UNSTATED`, and
-  the first finding. Decide it and write down who decided (firmware limit, staggered
-  starts, a measured worst case).
-- **Inrush:** illustrative: 28 V into 220 uF through 0.1 ohm in total gives I2t = V2C /
-  (2R) = 28 x 28 x 220e-6 / 0.2 = about 0.86 A2s. Compare with the fuse's melting I2t
-  after its pulse derating factor: `LOOKUP` in the fuse datasheet.
-- **Written:** two `SUPPLY_LIMITS` rows, the budget and the I2t, and a `STRESS_SCENARIOS`
-  row at 28 V with the motors stalled.
+- **Budget:** at the lowest input, all three channels at full draw about 3.9 A from the
+  input (the solve at the `30 V, all channels on` scenario), against a fuse that should
+  carry no more than 75 % of 5 A, 3.75 A, after rerating.
+- **Is all-on credible?** Full white on every channel is the product's normal use, not
+  a fault. Nobody has said whether firmware caps the total: `UNSTATED`, and the first
+  finding. Decide it and write down who decided.
+- **Inrush:** illustrative: 42 V into 100 uF through 0.15 ohm in total gives
+  I2t = V2C / (2R), about 0.59 A2s; the real row is a `SUPPLY_LIMITS` function that
+  sums the capacitance after F1 from the netlist (not shown). Compare with the fuse's melting I2t after its
+  pulse derating factor: `LOOKUP` in the fuse datasheet.
 
-## 4. 10 uF 35 V ceramics on the 24 V input
+## 4. 4.7 uF 50 V ceramics on the 42 V input
 
-- **Stress:** 28 V is 80 % of 35 V before any hot-plug ringing, which can approach twice
-  the input undamped. `test_capacitor_voltage_derated` reports it at the edge once the
-  28 V row is in `STRESS_SCENARIOS`; with a transient row it fails.
+- **Stress:** `test_capacitor_voltage_derated` fails once the 42 V corner is in
+  `STRESS_SCENARIOS`: 84 % of 50 V, before any hot-plug ringing on long supply leads.
 - **Real capacitance:** `LOOKUP`. Enter the exact part number in the maker's tool at
-  28 V and the hottest ambient. Expect well under half; write no number until the tool
-  gives one.
-- **Fix options:** 50 V parts in a larger case, more in parallel, and a bulk polymer or
-  electrolytic capacitor at the input whose ESR damps the ringing.
+  42 V and the hottest ambient; write no number until the tool gives one.
+- **Fix options:** 100 V parts in a larger case, and a bulk electrolytic at the input
+  whose ESR damps the ringing.
 
-## 5. A 12 V rail from an input that sags
+## 5. LED current set by a sense resistor
 
-- **Low end:** at stall the input sags to 13 V at the buck. The buck runs at maximum
-  duty and its output follows the input down, less the drop across the switch, the
-  inductor, the fuse and the connector.
-- **High end:** a 1 % reference with 1 % divider resistors can land the 12 V set-point
-  near 12.4 V; compare that with each load's maximum.
-- **Written:** a `SUPPLY_LIMITS` function row that reads the divider from the netlist,
-  so a changed resistor is judged again:
+- **High end:** each driver sets its current as a sense threshold over a shunt. With a
+  3 % threshold and a 1 % shunt, the worst-case current sits above nominal; compare it
+  with the strip's maximum.
+- **Written:** a `SUPPLY_LIMITS` function row that reads the shunt from the netlist, so
+  a changed resistor is judged again:
 
 ```python
 from pcbkit.check.netlist import parse_value
 
 
-def divider_high(nl):
-    """Return the 12 V rail's worst-case high against the motors' maximum."""
-    top, bottom = (parse_value(nl.parts[r]["value"]) for r in ("R20", "R21"))
-    v = 0.8 * 1.01 * (1 + top * 1.01 / (bottom * 0.99))  # U5 VREF 0.8 V, 1 %
-    return ("12 V rail, worst case high (V)", round(v, 2), "<=", 12.6)
+def led_current_high(nl):
+    """Return channel 1's worst-case LED current against the strip's maximum."""
+    shunt = parse_value(nl.parts["R11"]["value"])
+    amps = 0.2 * 1.03 / (shunt * 0.99)  # U3 sense threshold 0.2 V +/-3 % (illustrative)
+    return ("channel 1 LED current, worst case high (A)", round(amps, 2), "<=", 1.8)
 
 
 SUPPLY_LIMITS = [
-    ("motors stalling together (A)", 4 * 1.8, "<=", 0.75 * 6),  # F1 rerating 75 %
-    divider_high,
+    # 3.9 A: the solve at the 30 V all-on scenario; F1 rerated to 75 %
+    ("all channels on at 30 V, input current (A)", 3.9, "<=", 0.75 * 5),
+    led_current_high,
 ]
 ```
 
-The first row fails until the simultaneous stall is settled: that is the point. It
-stays red in `out/checks/results.json` until the design or a sourced decision changes it.
+The first row fails until the all-on question is settled: that is the point. It stays
+red in `out/checks/results.json` until the design or a sourced decision changes it.
