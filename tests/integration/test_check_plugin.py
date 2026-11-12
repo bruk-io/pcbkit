@@ -322,6 +322,45 @@ def test_gated_out_checks_are_counted_apart_from_k_deselections(
     assert selection["keyword"] == "test_nets or test_tracks"
 
 
+def test_an_item_that_is_not_a_function_is_not_gated_and_does_not_crash(
+    gated_project: Path,
+) -> None:
+    """Run a plugin's own kind of item at every gate instead of reading its fixtures."""
+    (gated_project / "checks" / "conftest.py").write_text(
+        textwrap.dedent(
+            """
+            import pytest
+
+
+            class Plain(pytest.Item):
+                def runtest(self):
+                    pass
+
+                def reportinfo(self):
+                    return self.path, 0, "plain"
+
+
+            class PlainFile(pytest.File):
+                def collect(self):
+                    yield Plain.from_parent(self, name="plain")
+
+
+            def pytest_collect_file(file_path, parent):
+                if file_path.suffix == ".plain":
+                    return PlainFile.from_parent(parent, path=file_path)
+            """
+        ),
+        encoding="utf-8",
+    )
+    (gated_project / "checks" / "one.plain").write_text("x\n", encoding="utf-8")
+    done = run(gated_project, gate="sch")
+    assert done.done.returncode == 0, done.done.stdout + done.done.stderr
+    assert "checks/one.plain::plain" in done.checks
+    assert done.checks["checks/one.plain::plain"]["outcome"] == "passed"
+    assert "checks/one.plain::plain" not in done.results["waiting"]
+    assert "checks/test_board_side.py::test_tracks" in done.results["waiting"]
+
+
 def test_a_marker_that_names_no_gate_is_a_usage_error(gated_project: Path) -> None:
     """Refuse a misspelt gate in a marker, naming the check."""
     checks_file(

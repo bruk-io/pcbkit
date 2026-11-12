@@ -491,6 +491,11 @@ def pytest_collection_modifyitems(
     builtin = builtin_dir()
     kept = []
     for item in items:
+        if not isinstance(item, pytest.Function):
+            # Only a Function has fixtures to read a gate from. Any other item (a
+            # doctest, a plugin's own kind) is not gated, so it runs at every gate.
+            kept.append(item)
+            continue
         path = Path(str(item.path)).resolve()
         function = getattr(item, "originalname", None) or item.name
         try:
