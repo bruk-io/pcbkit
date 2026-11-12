@@ -333,7 +333,8 @@ def _own_link(
     to_net = next((p for p in whole if p[-1] == net), None)
     if to_net is None:
         return None, [f"{what}: no 0 ohm resistor or jumper joins {own} to {net}"]
-    region = {n for p in whole for n in p[::2]}
+    # a supply ends every path through it, so a link on one is on no path but to net
+    region = {n for p in whole for n in p[::2] if n == net or n not in walker.supplies}
     candidates = sorted(
         {r for n in region for r in nl.refs_on(n) if is_link(nl, r)}, key=natkey
     )

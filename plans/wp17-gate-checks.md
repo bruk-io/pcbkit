@@ -615,3 +615,35 @@ The independent review of slices 4, 7, 8 and 10 rejected slice 8 and accepted th
 - **Bus scan (slice 10):** an unreadable `circuits.i2c_devices` result, two devices at one address, an address listed twice in `I2C_EXPECTED` and an SDA net that is not in the design (the `/SDA` spelling especially) fail by name; `devices` (names per address) is recorded.
 - **Docs test:** each built table has exactly one row outside the proposed block, in its group's block.
 - **Not done:** the changelog line ("`pcbkit report` now shortens any recorded value with more than eight entries, including existing ones") is in `docs/project-interface.md`; `docs/changelog.md` only includes the root `CHANGELOG.md`, which this follow-up may not touch, so the line is still to be added there at release.
+
+## Enable links rebuilt after the second review (2026-11-12)
+
+The second independent review rejected slice 8 again for false passes (B1, B2) and listed
+false failures (S1 to S5, L1). Both rejections came from one root: the walk guessed which
+nets are supplies from their names and pin names, and the guess is wrong both ways
+(`VBUS_EN` read as a rail and not walked across; `3V3` not read as one and walked across).
+No name rule fixes that, so names are no longer guessed.
+
+- **`SUPPLY_NETS` (new table, `power` group, in `pcbkit/check/links.py`):** `[net]`, the
+  supply and ground nets. The walk refuses to cross exactly these and `GROUND_NET` when
+  that is defined. Like every table in an opt-in group a missing one fails by name, and a
+  listed net that is not in the design fails by name. A supply left out is walked: that is
+  a false failure, never a false pass, and the message ends with the way out ("if 3V3 is
+  a supply, add it to specs.SUPPLY_NETS") whenever the path passes through a net that is
+  no listed enable.
+- **Targets are table-wide (B2):** each case still runs per shared net, but every walk
+  stops on any shared net of the table and any other listed regulator's own enable net.
+- **A link may sit anywhere on the path (S2):** a regulator's link is the one two-pad link
+  part whose removal leaves its enable net reaching no target; none fails naming the path
+  that is left, and two in series fail ("exactly one link").
+- **A straight tie to a supply (S4):** a fitted 0 ohm resistor or two-pad jumper from any
+  net on the regulator's side of the link to a supply fails: the link controls nothing.
+- Packs by their real pinout (S3), unknown packs join all pads, three-pad jumpers named as
+  not links (S5), diodes with pins A/K walked in the direction of current, and a path
+  counts in either direction (the target driving the enable, or the enable driving it).
+- **Size:** the plan sized slice S "small". It was not: three rounds of review, a new
+  table, and a rewritten walk. The rule looked like a two-net question and is a
+  reachability question over the whole board.
+- **For the power-paths slice (B):** `POWER_PATHS["nets"]` and `SUPPLY_NETS` describe
+  overlapping things (the board's rails). Reconcile them there: one declared list of
+  supplies that both checks read, or a documented reason they differ.
