@@ -8,7 +8,21 @@ whatever sources and loads a scenario adds.
 
 ``build`` knows the stock KiCad symbols it names (``Device:R``, ``Device:LED``, three
 FETs); a board that uses other parts adds them to the circuit itself in its own
-``scenario()`` (see ``Circuit.R``, ``Circuit.D``, ``Circuit.fets``).
+``scenario()`` (see ``Circuit.R``, ``Circuit.D``, ``Circuit.fets``). A resistor whose
+value is 0 is modelled as 1 milliohm, and one whose value is a not-fitted mark alone
+(``DNP``) is left out.
+
+``build(nl, extended=True)`` is opt-in and also models ``Device:R_Small``, ``R_US`` and
+``R_Small_US``; the two-pad ``Device`` diodes ``D``, ``D_Small``, ``D_Schottky_Small``,
+``D_Zener``, ``D_Zener_Small``, ``D_TVS`` and ``D_TVS_Small`` by their A and K pins,
+forward only (no breakdown; a TVS whose pins are A1 and A2 is held as an open element,
+``<ref>.open``); the generic ``Device:Q_NMOS_*`` and ``Q_PMOS_*`` FETs, their gate,
+drain and source read from the pin names; and a body diode for every FET
+(``<ref>.body``, source to drain for an N-FET, drain to source for a P-FET). In extended
+mode a part ``build`` models cannot be added to the circuit again, and no ref can be
+added twice: ``Circuit.R``, ``Circuit.D`` and ``Circuit.fets`` raise ValueError naming
+the part, so a scenario that also models a part by hand is told instead of doubling it.
+Without ``extended`` nothing about this changes.
 """
 
 from __future__ import annotations
@@ -20,6 +34,64 @@ import numpy as np
 from pcbkit.check.netlist import Netlist, parse_value
 
 LED_VF = {"red": 2.0, "yellow": 2.0, "green": 2.9, "blue": 3.0, "white": 3.0}
+
+# A resistor whose value reads as 0 (an enable link): low enough to be a short, and not
+# a division by zero in the solve.
+ZERO_OHM = 1e-3
+# Values that mean the part is not fitted, written alone (case ignored).
+NOT_FITTED = frozenset({"DNP", "DNF", "DNI", "NF", "NP", "NC", "NM", "NL", "NOPOP"})
+# What a TVS whose pins are A1 and A2 (bidirectional) is held as: open below breakdown.
+OPEN_OHM = 1e12
+
+RESISTORS = ("Device:R",)
+EXTENDED_RESISTORS = ("Device:R_Small", "Device:R_US", "Device:R_Small_US")
+# two-pad diodes extended mode reads by their A and K pins: forward drop, on-resistance
+EXTENDED_DIODES = {
+    "Device:D": (0.7, 0.05),
+    "Device:D_Small": (0.7, 0.05),
+    "Device:D_Schottky_Small": (0.40, 0.05),
+    "Device:D_Zener": (0.7, 0.05),
+    "Device:D_Zener_Small": (0.7, 0.05),
+    "Device:D_TVS": (0.7, 0.05),
+    "Device:D_TVS_Small": (0.7, 0.05),
+}
+BODY_VF = 0.7
+BODY_RON = 0.05
+GENERIC_FET_RON = 0.05
+
+
+def _part_of(ref: str) -> str:
+    """Return the part an element belongs to: ``Q1`` of ``Q1.body``."""
+    return ref.split(".", 1)[0]
+
+
+class _GuardedFets(list):  # type: ignore[type-arg]
+    """``Circuit.fets`` in extended mode: every FET added is checked by the circuit."""
+
+    def __init__(self, circuit: Circuit, items: list[dict[str, Any]]) -> None:
+        """Keep the circuit whose guard checks each FET's ref."""
+        super().__init__(items)
+        self.circuit = circuit
+
+    def append(self, item: dict[str, Any]) -> None:
+        """Check the FET's ref, then add it."""
+        self.circuit._claim(str(item.get("ref", "")))
+        super().append(item)
+
+    def extend(self, items: Any) -> None:
+        """Check and add each FET."""
+        for item in items:
+            self.append(item)
+
+    def insert(self, index: Any, item: dict[str, Any]) -> None:
+        """Check the FET's ref, then insert it."""
+        self.circuit._claim(str(item.get("ref", "")))
+        super().insert(index, item)
+
+    def __iadd__(self, items: Any) -> _GuardedFets:
+        """Check and add each FET (``fets += [...]``)."""
+        self.extend(items)
+        return self
 
 
 class Circuit:
@@ -35,10 +107,35 @@ class Circuit:
         # S to ground on every net so floating nets solve to ~0 V
         self.leak = 1e-9
         self.state: dict[str, list[bool]] = {}
+        # extended mode only: the parts build modelled, and the refs added since
+        self._built: set[str] | None = None
+        self._added: set[str] = set()
+
+    def _guard(self) -> None:
+        """Start refusing a second model of a part (``build(nl, extended=True)``)."""
+        built = {ref for *_x, ref in self.res} | {ref for *_x, ref in self.diodes}
+        built |= {str(f.get("ref", "")) for f in self.fets}
+        self._built = {_part_of(r) for r in built if r}
+        self.fets = _GuardedFets(self, list(self.fets))
+
+    def _claim(self, ref: str) -> None:
+        """Raise ValueError if ``ref`` would model a part a second time (extended)."""
+        if self._built is None or not ref:
+            return
+        part = _part_of(ref)
+        if part in self._built:
+            raise ValueError(
+                f"{part} is already modelled by dc.build(extended=True): remove the "
+                "hand model from circuits.scenario, or build without extended"
+            )
+        if ref in self._added:
+            raise ValueError(f"{ref} is already modelled in this circuit")
+        self._added.add(ref)
 
     # ---- building
     def R(self, a: str | None, b: str | None, r: float, ref: str = "") -> None:
         """Add a resistor between nets ``a`` and ``b`` (ignored if either is open)."""
+        self._claim(ref)
         if a and b and a != b:
             self.res.append((a, b, float(r), ref))
 
@@ -46,6 +143,7 @@ class Circuit:
         self, a: str | None, c: str | None, vf: float, ron: float = 1.0, ref: str = ""
     ) -> None:
         """Add a diode from anode ``a`` to cathode ``c``: Vf plus Ron when on."""
+        self._claim(ref)
         if a and c:
             self.diodes.append((a, c, vf, ron, ref))
 
@@ -174,7 +272,10 @@ class Solution:
         return {ref: (self[a] - self[b]) ** 2 / r for a, b, r, ref in self.c.res}
 
     def floating(self, net: str) -> bool:
-        """Return True if no conducting path joins ``net`` to a driven net."""
+        """Return True if no conducting path joins ``net`` to a driven net.
+
+        A driven net is one the circuit fixes or a current source (``inject``) feeds.
+        """
         adj: dict[str, set[str]] = {}
 
         def link(a: str, b: str) -> None:
@@ -189,13 +290,14 @@ class Solution:
         for k, f in enumerate(self.c.fets):
             if self.c.state["fets"][k]:
                 link(f["d"], f["s"])
+        sources = {n for n, _ in self.c.isrc}
         seen: set[str] = set()
         stack = [net]
         while stack:
             n = stack.pop()
             if n in seen:
                 continue
-            if n in self.c.fixed:
+            if n in self.c.fixed or n in sources:
                 return False
             seen.add(n)
             stack += list(adj.get(n, ()))
@@ -220,17 +322,66 @@ def _fet(
     return {"kind": kind, "g": g, "d": d, "s": s, "vth": vth, "ron": ron, "ref": ref}
 
 
-def build(nl: Netlist, nfet_vth: float = 2.0, pfet_vth: float = -2.0) -> Circuit:
-    """Return a circuit with every passive and discrete part of the netlist."""
+def _resistance(value: str) -> float | None:
+    """Return a resistor's value in ohms; None for a not-fitted mark, 1 mohm for 0."""
+    if value.strip().upper() in NOT_FITTED:
+        return None
+    r = parse_value(value)
+    return ZERO_OHM if r == 0 else r
+
+
+def _pads_by_name(
+    nl: Netlist, ref: str, names: tuple[str, ...]
+) -> dict[str, str] | None:
+    """Return ``{name: net}`` when each pin name in ``names`` is on exactly one net.
+
+    Every pad of the part must carry one of ``names`` (case ignored); otherwise, or when
+    one name's pads are on two nets, return None and the part is not modelled.
+    """
+    found: dict[str, set[str]] = {}
+    for pad, func in nl.functions(ref).items():
+        name = func.strip().upper()
+        if name not in names:
+            return None
+        found.setdefault(name, set()).add(str(nl.net(ref, pad)))
+    if set(found) != set(names) or any(len(n) != 1 for n in found.values()):
+        return None
+    return {name: next(iter(nets)) for name, nets in found.items()}
+
+
+def _body(c: Circuit, kind: str, d: str | None, s: str | None, ref: str) -> None:
+    """Add a FET's body diode: source to drain (N), drain to source (P)."""
+    if kind == "n":
+        c.D(s, d, BODY_VF, BODY_RON, ref + ".body")
+    else:
+        c.D(d, s, BODY_VF, BODY_RON, ref + ".body")
+
+
+def build(
+    nl: Netlist,
+    nfet_vth: float = 2.0,
+    pfet_vth: float = -2.0,
+    extended: bool = False,
+) -> Circuit:
+    """Return a circuit with every passive and discrete part of the netlist.
+
+    ``extended`` (opt-in, default False) adds the models the module docstring lists
+    and refuses a part modelled twice; without it the circuit is built as it always
+    was. Raise ValueError for a resistor value that is neither a value nor a not-fitted
+    mark.
+    """
     c = Circuit()
+    resistors = RESISTORS + (EXTENDED_RESISTORS if extended else ())
     for ref, p in nl.parts.items():
         kind = nl.kind(ref)
 
         def pn(pin: int, ref: str = ref) -> str | None:
             return nl.net(ref, pin)
 
-        if kind == "Device:R":
-            c.R(pn(1), pn(2), parse_value(p["value"]), ref)
+        if kind in resistors:
+            r = _resistance(p["value"])
+            if r is not None:
+                c.R(pn(1), pn(2), r, ref)
         elif kind == "Device:R_Pack04":
             r = parse_value(p["value"])
             for a, b in ((1, 8), (2, 7), (3, 6), (4, 5)):
@@ -252,4 +403,37 @@ def build(nl: Netlist, nfet_vth: float = 2.0, pfet_vth: float = -2.0) -> Circuit
             c.D(pn(3), pn(2), 0.7, 0.05, ref + ".body")
         elif kind == "Transistor_FET:2N7002":
             c.fets.append(_fet("n", pn(1), pn(3), pn(2), nfet_vth, 5.0, ref))
+            if extended:
+                _body(c, "n", pn(3), pn(2), ref)
+        elif extended:
+            _build_extended(nl, c, ref, kind, nfet_vth, pfet_vth)
+    if extended:
+        c._guard()
     return c
+
+
+def _build_extended(
+    nl: Netlist, c: Circuit, ref: str, kind: str, nfet_vth: float, pfet_vth: float
+) -> None:
+    """Add the extended model of one part, if ``kind`` has one."""
+    if kind in EXTENDED_DIODES:
+        vf, ron = EXTENDED_DIODES[kind]
+        ak = _pads_by_name(nl, ref, ("A", "K"))
+        if ak is not None:
+            c.D(ak["A"], ak["K"], vf, ron, ref)
+        elif kind.startswith("Device:D_TVS"):
+            both = _pads_by_name(nl, ref, ("A1", "A2"))
+            if both is not None:
+                c.R(both["A1"], both["A2"], OPEN_OHM, ref + ".open")
+        return
+    for prefix, fet_kind, vth in (
+        ("Device:Q_NMOS_", "n", nfet_vth),
+        ("Device:Q_PMOS_", "p", pfet_vth),
+    ):
+        if kind.startswith(prefix):
+            gds = _pads_by_name(nl, ref, ("G", "D", "S"))
+            if gds is not None:
+                g, d, s = gds["G"], gds["D"], gds["S"]
+                c.fets.append(_fet(fet_kind, g, d, s, vth, GENERIC_FET_RON, ref))
+                _body(c, fet_kind, d, s, ref)
+            return
