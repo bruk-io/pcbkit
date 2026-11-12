@@ -1,0 +1,163 @@
+# Bench method reference
+
+Detail behind the method in SKILL.md. Assumes hobbyist equipment: a multimeter,
+a current-limited bench supply (typically 30 V / 3-5 A), possibly a basic
+two-channel scope.
+
+## Contents
+
+- Stage structure
+- Pre-power inspection
+- Resistance checks
+- Choosing the current limit
+- Rail voltage tolerance
+- Isolation means
+- Firmware ladder
+- Exercising protection
+- Steps that need the scope
+- Moving to the battery
+
+## Stage structure
+
+Use these stages unless the power tree forces another order. Drop stages the
+board does not have.
+
+| Stage | Live | Typical limit |
+|-------|------|---------------|
+| 0 | Nothing. Inspection and resistance checks | - |
+| 1 | Logic only, from the lowest-energy source (USB VBUS or a logic-rail pad), bench supply | 2-3x expected idle, usually 100-200 mA |
+| 2 | Main input and protection stage only, all regulators held off | a few times the leakage and bias currents, usually 50-100 mA |
+| 3 | Each always-on or switch-enabled rail, one at a time | idle plus margin for soft-start into output caps |
+| 4 | Each load rail with no load, one at a time, then together | as stage 3, per rail added |
+| 5 | Smallest real load on one rail, then more | above the load's idle and running draw, below its stall draw |
+| 6 | Battery, after every earlier step has passed | fuse only |
+
+## Pre-power inspection
+
+- Orientation of every polarised part: diodes (including Schottky OR-ing
+  diodes and TVS), electrolytic and tantalum caps, ICs and modules (pin 1),
+  connector keys. Compare against the assembly drawing, not memory.
+- Solder bridges on fine-pitch and QFN parts, especially regulator switch
+  nodes next to input or ground pins. Use a loupe or microscope.
+- Shunt resistor and high-current connector joints: full fillets.
+- Set every isolation element to its first-power state and write that state in
+  the plan's "Initial state" line.
+
+## Resistance checks
+
+Measure each rail to ground, both meter polarities (semiconductor junctions make
+readings polarity-dependent), and let the reading settle (bulk capacitance
+charges and the reading climbs). Also measure adjacent rails to each other to
+catch bridges between them.
+
+Order-of-magnitude expectations, to be refined from the schematic:
+
+| Net | Usual reading | Stop if |
+|-----|---------------|---------|
+| Battery input / protected bus | climbs past 10 kOhm (dividers, bias networks, regulator inputs in shutdown) | under 1 kOhm |
+| Regulated rail with only a feedback divider and IC inputs | 1 kOhm to 100 kOhm, set by the divider | under 100 Ohm |
+| Logic rail feeding a microcontroller and many ICs | hundreds of Ohm to tens of kOhm | under 50 Ohm |
+| Rail to adjacent rail | over 100 kOhm or a diode-like reading | under 1 kOhm |
+
+Under 10 Ohm on any rail is a short until proved otherwise. With several boards
+from the same order, compare them: a board ten times lower than its siblings on
+the same rail is suspect even if it is inside the table. A milliohm shunt
+cannot be checked with a two-wire meter; skip it.
+
+## Choosing the current limit
+
+1. Sum the expected idle current of everything live in that step from the
+   datasheets' quiescent or typical supply currents, including LEDs, pull-ups,
+   dividers and bias resistors. For a regulator, refer its output load back to
+   its input: I_in = V_out x I_out / (V_in x efficiency).
+2. Set the limit at 2-3x that figure, at least 20 mA above it, and below the
+   level at which the most fragile part in the path is damaged if a short sits
+   behind it.
+3. Expect the supply to touch the limit briefly while bulk capacitors charge.
+   Constant current that persists more than about a second is a stop condition.
+4. Write the arithmetic in the cell, for example "200 mA = 3 x ~60 mA idle".
+
+Microcontroller rule of thumb: a blank or minimal-firmware microcontroller with
+radios off draws tens of mA; enabling a radio adds hundreds of mA peak. The
+bring-up firmware keeps radios off.
+
+## Rail voltage tolerance
+
+Tolerance = reference accuracy + feedback divider tolerance (roughly twice the
+resistor tolerance in the worst case) + load regulation. For a 1% reference with
+1% resistors, state +/-3%. State the absolute value above which the most
+sensitive part on the rail is at risk and make that the stop condition, with
+"remove power immediately".
+
+## Isolation means
+
+In order of preference for first power:
+
+- Enable pin held off by default (pull-down or hold-down transistor), released by
+  firmware. Isolates without rework, but only as a group if regulators share the
+  enable net.
+- Zero-ohm link or normally-closed solder jumper in a regulator's enable line,
+  a rail's output, or an open-drain power-good line feeding a shared net.
+  Cutting a solder jumper or lifting a 0603 link is acceptable bench rework.
+- Normally-open solder jumper, closed only after the section passes.
+- Part left unpopulated in the first order (`dnp=True` in design.py) (only if hand-fitting later is
+  realistic for the package).
+
+A section is isolated only if it can be powered and verified while everything
+downstream of it stays off, and powered off while everything upstream stays up.
+
+## Firmware ladder
+
+Each rung proves one thing; do not move to the next rung until it passes.
+
+1. Programming interface enumerates or responds (chip ID, flash ID).
+2. Heartbeat: LED and serial message with reset reason, running for several
+   minutes without brownout resets.
+3. Bus scan per bus (and per mux channel): the exact expected address set, taken
+   from the `i2c` numbers `test_i2c_addresses_unique_per_bus` records in
+   `out/checks/results.json`, not worked out again.
+   Record extra addresses as well as missing ones. Some parts answer at more
+   than one address by default (for example a PCA9685 also answers its
+   All Call address 0x70).
+4. Identity register of each device, read and compared against the datasheet
+   value. For parts without one, read a register with a documented reset value,
+   or write and read back a harmless register.
+5. Each peripheral's minimal function with its power stage still off (for
+   example PWM out on a pin, checked with scope or meter frequency mode).
+6. Control of power stages: enable lines, power-good inputs, monitor readings
+   compared against the bench supply readout.
+
+## Exercising protection
+
+- **Stop or kill input**: with rails up and no load, then with the first load.
+  Check the rails drop, power-good reports it, and what happens on release
+  (re-energises immediately, or waits for firmware). The intended behaviour comes
+  from the user (and `FAULT_STATES`, if `walk-fault-states` wrote it); the plan only checks it.
+- **Reverse polarity**: bench supply reversed through a pigtail at low voltage
+  (about the bottom of the input range) and a 50 mA limit, after the forward
+  input stage has passed. Then mid-range, then maximum, if the low-voltage test
+  draws under 1 mA. Never reverse a battery to test this.
+- **Over-current**: prefer the current monitor's alert threshold set low in
+  firmware and tripped by a small real load. A regulator's own current limit is
+  tested only with an electronic load or power resistor, and only if the user asks.
+- **Default-off states**: microcontroller unpowered, held in reset, and rebooting
+  (scope the enable net across a reset for glitches). Load rails must stay off in
+  all three.
+
+## Steps that need the scope
+
+- Rail start-up shape and overshoot (soft-start, monotonic, overshoot against the
+  load's maximum rating).
+- Switching ripple, measured with a spring ground tip on a nearby ground pad.
+- Enable and reset glitches across microcontroller boot.
+- Rail droop when a load steps.
+- Bus waveforms when a scan fails (pull-ups, rise time, stuck lines).
+- PWM or other signal outputs (a meter with frequency and duty mode can stand in).
+
+## Moving to the battery
+
+Only after every bench-supply step passes, on every board to be used. Charged
+pack checked with a meter first, fire-safe surface, attended. If the fuse holder
+accepts it, use a lower-value fuse for the first battery runs. Full-load tests
+beyond the bench supply's current belong to `review-derating`'s measurement list, not
+this plan.
