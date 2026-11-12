@@ -280,6 +280,12 @@ inner = [
   roles, thicknesses, z positions, `nearest_copper(layer)`,
   `gap_to_nearest_copper(layer)` and `span_mm(a, b)` from `StackupConfig`. Placement, the
   solver, coupling and the two follow-on checks all read it.
+- **`z_mm`** is the layer centre's depth below the top face of the top copper, positive
+  downward. A core of exactly `MIN_CORE_MM` (0.1 mm) is accepted; under it is refused.
+- **`span_mm`** runs from the outer face of one layer to the outer face of the other.
+  That is right as a via barrel length (top to bottom equals the board thickness), but
+  adjacent spans do not add up to the thickness: each counts the copper of both of its
+  layers. Slice 5c says which length each layer pair's joint uses.
 - **Geometry only:** the model does not decide which layer is a reference. D6's
   reference height (the dielectric to an adjacent `plane` or `split` layer, otherwise
   the board thickness) is worked out in slice 5c from layer roles, using the geometry
@@ -440,6 +446,9 @@ changed stops and asks.
   - Hooks: a `planes` that is not callable is a `ProjectError` naming it.
   - Order (fake pcbnew): `prerouted`, `keepouts`, plane zones, `planes`, edge strips.
   - A `split` layer with no `planes` hook stops `pre` with a message.
+  - Plane net names are only lightly checked in the config (a padded or odd name is
+    kept as written). The "plane net not in the netlist" stop is what covers this, and
+    its message must show the name as written (quoted, so padding is visible).
   - On the Mac: the DSN has In1/In2 typed as expected and plane entries as K5 found them;
     the two-layer blinky prerouted board and DSN match the K0 baseline byte for byte.
 - **Planted mistakes:**
@@ -544,6 +553,10 @@ changed stops and asks.
   twins).
 - **Must not touch:** the two-layer expectations in those integration tests.
 - **Acceptance:**
+  - Via lengths: `span_mm` runs outer face to outer face, so adjacent spans do not add
+    up to the board thickness (see D7). This slice must say which length each layer
+    pair's joint uses (barrel length for a via, or the dielectric between the pair) and
+    test it.
   - Two-layer solver drops and losses equal main's to the last recorded digit on the
     existing boards (`check_boards.power_tracks`).
   - Four layers:
@@ -621,6 +634,8 @@ changed stops and asks.
   - An e2e test with real Freerouting.
   - Re-run the K0 baseline diff on blinky and on Bruk's own two-layer boards.
 - **May touch:** `pcbkit/place.py`, `pcbkit/route/pre.py` (guard lines only),
+  `README.md` (line 12) and `docs/index.md` (line 39), which say pcbkit makes two-layer
+  boards only: that stays true until the guard is lifted, and changes here,
   `tests/integration/*four*`, `tests/e2e/*four*`.
 - **Acceptance:** all kicad and e2e tests green on the Mac, the K0 diff empty, DRC on the
   four-layer fixture clean with 0 unconnected.
