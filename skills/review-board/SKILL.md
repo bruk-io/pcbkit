@@ -1,9 +1,12 @@
 ---
 description: >-
   Review a routed pcbkit board's layout from pictures and the DRC report, and return only
-  the findings: signals running under switching regulators, copper pours sliced into
-  islands or thin necks, and slivers. Use when the user asks for a layout review, a second
-  look at the board, "does this layout look right", or a check before promote or ordering.
+  the findings: signals running under switching regulators, fast tracks crossing a gap
+  in their reference pour, copper pours sliced into islands or thin necks, and slivers.
+  Use when the user asks for a layout review of the routed board, a second look at the
+  copper, "does this layout look right", or a look before promote. Not for where
+  currents flow and return, grounding, hot loops or placement intent before routing:
+  that is review-current-paths.
 # The renders, crops and DRC listings it reads are noisy: only the findings come back.
 context: fork
 # The user reads the findings in the same turn, so the fork is waited for.
@@ -30,6 +33,9 @@ user named a focus (region names, or a concern), it is here: $ARGUMENTS
    eye". Look for:
    - signal tracks under or right beside a switching regulator's inductor, diode or switch
      node, where its edges couple into them;
+   - a fast signal track (a clock, PWM or another fast-edged net) on the top
+     crossing a gap in the filled bottom `GND` zone under it, where a bottom track or a
+     slot splits the zone and its return must detour around the gap;
    - ground or power pours cut into islands or thin necks by tracks, so that part of a pour
      is no longer connected or carries its current through a narrow bridge;
    - slivers: thin spikes or slits of copper between a track and a pour edge;
