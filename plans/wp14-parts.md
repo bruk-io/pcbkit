@@ -427,8 +427,9 @@ Two corruption measurements on the accepted values of all four:
   the same quote: the roles blind spot, which the eval measures.
 - **Units.** Swapping a value's unit or prefix for a neighbouring one ("4.5 A" for
   "4.5 V", "6.8 nF" for "6.8 pF"): 27 of 225 swaps pass. Every one is a number with
-  no unit anywhere on its line: the unit is before the number ("kHz 500"), in a
-  column header, or the row has none ("±2000" under "V(ESD)"). Before a number took
+  no unit column it can reach on its line: the unit is before the number ("kHz
+  500"), only in a column header ("±2000" under "V(ESD)"), past a mark ("–0.5
+  0.3×VVS V") or glued to another cell ("73.2 10 3.3 22uF"). Before a number took
   its row's unit column, 96 passed; before units were compared at all, every one.
 
 **The unit must travel inside the value.** The check compares a unit only if the

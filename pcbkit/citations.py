@@ -187,8 +187,9 @@ units with a spaced unit after the last ("500  5  73.2  10  3.3  22 µF") gives 
 cell that unit, so "73.2 kΩ" is refused there; on three datasheets and TLV62569 (179
 facts) it refused no right value. Before it, a unit swapped on an accepted value
 ("4.5 A" for "4.5 V" in "VIN 4.5 28 V") was accepted 96 times in 225; with it, 27
-times, every one a number with no unit anywhere on its line ("kHz 500", "±2000"
-under a header).
+times, every one a number with no unit column it can reach: the unit is before it
+("kHz 500"), only in a header ("±2000" under "V(ESD)"), past a mark ("–0.5
+0.3×VVS V") or glued to another cell ("73.2 10 3.3 22uF").
 
 Values. The value is read like a page, with the same rules, and every number in it must
 be known. A value with an unknown character anywhere, or with no number at all, is
