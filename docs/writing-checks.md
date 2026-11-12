@@ -159,9 +159,13 @@ out are listed as `waiting` in `results.json`, and the run counts as partial unt
 `order` gate. `--gate sch` needs only kicad-cli, so it runs before the project's `.venv`
 exists.
 
-pcbkit works out a check's gate from the fixtures it asks for: `board` makes it `route`,
-the fab files make it `order`, and a check that needs neither is `sch`. When that is
-wrong for one of your checks, say so with a marker, which wins:
+pcbkit works out a check's gate from the fixtures it asks for: `board` makes it `route`
+and a check that needs neither `board` nor the fab files is `sch`. The `fab_dir` fixture
+that makes a check `order` is defined in the built-in `test_outputs.py`, so a check of
+yours cannot ask for it. A check of yours that reads files through `project` (the
+`.kicad_pcb`, or anything in `out/fab`) asks for no fixture that says so, so it would be
+taken for `sch` and run too early. Such a check must carry
+`@pytest.mark.pcbkit_gate("route")` or `("order")`. The marker wins over the fixtures:
 
 ```python
 import pytest

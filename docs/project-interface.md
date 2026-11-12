@@ -800,6 +800,10 @@ A check's gate is the earliest gate at which its inputs exist, worked out in thi
    `board` gives `route`, and a check that needs neither is `sch`. `board` gives `route`
    and not `place` because the fixture cannot tell a placed board from a routed one, and
    running a check later than it could run is safe where running it too early is not.
+   `fab_dir` is defined in the built-in `test_outputs.py` module, so a check in your
+   `checks/` folder cannot request it. A check of yours that reads files through
+   `project` (the `.kicad_pcb`, `out/fab`) derives `sch` and runs too early, so it must
+   carry `@pytest.mark.pcbkit_gate("route")` or `("order")`.
 
 With a gate, `results.json` has `"gate"` (the gate asked for; null for a run with no
 gate), `"waiting"` (the id of each check held back, with its gate) and
