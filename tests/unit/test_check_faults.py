@@ -600,3 +600,65 @@ def test_a_partly_modelled_parts_pad_on_a_fixed_net_is_not_named() -> None:
         c.fix("SIG", 0.0)
 
     assert judge(toy, extra=model).not_modelled == {}
+
+
+def zener_into_enable() -> Toy:
+    """Return the board with a 12 V Zener from +24V (K) into EN (A)."""
+    toy = board()
+    toy.add("D2", "BZT", "Device:D_Zener", {"1": ("+24V", "K"), "2": ("EN", "A")})
+    return toy
+
+
+def test_a_forward_only_zener_reverse_biased_on_the_pins_nets_cannot_be_judged() -> (
+    None
+):
+    """extended holds the Zener forward only: 24 V reverse could break it down."""
+    nl = netlist(zener_into_enable())
+    c = build(nl, extended=True)
+    for net, v in {**RAILS, "+24V": 24.0}.items():
+        c.fix(net, v)
+    report = faults.judge(nl, c, c.solve(), [("U2", "3", OFF)])
+    assert report.problems == [
+        "U2 pad 3 (EN): D2 is modelled forward only (no breakdown) and has 24.00 V "
+        "across it in reverse, so whether it conducts is not known; model its "
+        "breakdown (circuit.D(cathode net, anode net, vz, ref='D2.breakdown')), or "
+        "fix the net it clamps"
+    ]
+
+
+def test_with_its_breakdown_modelled_the_zener_lifts_the_enable() -> None:
+    """The way out: 24 - 12 = 12 V into 100k: EN is on, outside the off window."""
+    nl = netlist(zener_into_enable())
+    c = build(nl, extended=True)
+    for net, v in {**RAILS, "+24V": 24.0}.items():
+        c.fix(net, v)
+    c.D("+24V", "EN", 12.0, ref="D2.breakdown")
+    (problem,) = faults.judge(nl, c, c.solve(), [("U2", "3", OFF)]).problems
+    assert problem == "U2 pad 3 (EN) is at 12.000 V, outside 0 to 0.4 V"
+
+
+def test_a_forward_only_zener_with_little_reverse_voltage_is_fine() -> None:
+    """Under 1 V reverse no Zener or TVS breaks down."""
+    nl = netlist(zener_into_enable())
+    c = build(nl, extended=True)
+    for net, v in {**RAILS, "+24V": 0.5}.items():
+        c.fix(net, v)
+    assert faults.judge(nl, c, c.solve(), [("U2", "3", OFF)]).problems == []
+
+
+def test_a_resistor_marked_not_fitted_alone_is_absent_not_left_out() -> None:
+    """``DNP`` alone: dc leaves it out and so does the check."""
+    toy = board()
+    check_toy.resistor(toy, "R2", "DNP", "EN", "+3V3")
+    assert judge(toy).problems == []
+
+
+def test_a_resistor_with_a_value_and_a_not_fitted_mark_cannot_be_judged() -> None:
+    """``100k DNP`` is modelled as fitted, but the board may not carry it."""
+    toy = board()
+    toy.set_value("R1", "100k DNP")
+    report = judge(toy)
+    assert report.not_modelled == {
+        "U2 pad 3": ["R1 pad 1 (Device:R) on EN: its value '100k DNP' also marks it "
+                     "not fitted; write the value alone or the mark alone"]
+    }  # fmt: skip

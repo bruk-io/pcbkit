@@ -60,7 +60,13 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from pcbkit.check.faults import element_nets, left_out, level_nets, undecided_fets
+from pcbkit.check.faults import (
+    element_nets,
+    left_out,
+    level_nets,
+    unclamped,
+    undecided_fets,
+)
 from pcbkit.check.netlist import Netlist, natkey
 from pcbkit.check.tables import (
     DictOf,
@@ -422,6 +428,43 @@ def _pad_list(
     return list(dict.fromkeys(found))
 
 
+def _against_the_circuit(nl: Netlist, ref: str, plan: Plan, circuit: Any) -> str:
+    """Return how the plan's elements contradict the circuit's model of the part, or "".
+
+    A diode element whose anode and cathode nets the circuit's own diode for the part
+    joins the other way round, or a FET element whose gate is not the circuit's FET
+    gate, is a row (or pin names) that says one thing while the model says another.
+    """
+    diodes = [
+        (a, c)
+        for a, c, *_x, r in circuit.diodes
+        if r
+        and str(r).split(".", 1)[0] == ref
+        and not str(r).endswith(".body")
+        and not str(r).endswith(".breakdown")
+    ]
+    fets = [f for f in circuit.fets if str(f.get("ref", "")).split(".", 1)[0] == ref]
+    for number, element in enumerate(plan.elements, start=1):
+        if FAMILY[plan.kind or FET] == DIODE and diodes:
+            an, kn = nl.net(ref, element["a"]), nl.net(ref, element["k"])
+            if (an, kn) not in diodes and (kn, an) in diodes:
+                return (
+                    f"its row's element {number} (anode pad {element['a']} on {an}, "
+                    f"cathode pad {element['k']} on {kn}) is not how the circuit "
+                    f"models it: its diode conducts from {kn} to {an}"
+                )
+        if FAMILY[plan.kind or FET] == FET and fets:
+            g = nl.net(ref, element["g"])
+            ds = {nl.net(ref, element["d"]), nl.net(ref, element["s"])}
+            if not any(f["g"] == g and {f["d"], f["s"]} == ds for f in fets):
+                return (
+                    f"its row's element {number} (gate pad {element['g']} on {g}) is "
+                    "not how the circuit models it: no FET of it there has that gate, "
+                    "drain and source"
+                )
+    return ""
+
+
 def _observe(
     nl: Netlist, ref: str, plan: Plan, index: int, solution: Any, seen: _Seen
 ) -> None:
@@ -438,6 +481,14 @@ def _observe(
             "extended=True), which models more symbols, or add it in "
             f"circuits.scenario with ref {ref!r} (circuit.D(anode net, cathode net, "
             f"vf, ref={ref!r}) for a diode, a circuit.fets entry for a FET)",
+        )
+        return
+    wrong = _against_the_circuit(nl, ref, plan, circuit)
+    if wrong:
+        seen.once(
+            "direction",
+            f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: {wrong}; correct "
+            "the row's pins",
         )
         return
     floating = _pad_list(nl, ref, plan, lambda n: not solution.floating(n))
@@ -463,6 +514,7 @@ def _observe(
         )
         return
     guessed = undecided_fets(circuit, solution, None, lnets)
+    guessed += unclamped(circuit, solution, lnets, skip={ref})
     if guessed:
         seen.once(
             "gate",
@@ -526,7 +578,7 @@ def _verdict(
                         "model has no breakdown, so this solve is not the board's; fix "
                         "the clamped net at its clamped voltage in that scenario, or "
                         "model the breakdown as a diode from cathode to anode with vf "
-                        f"{rated:g} V"
+                        f"{rated:g} V (ref '{ref}.breakdown')"
                     )
                 continue
             limit = None if rated is None or target is None else target * rated

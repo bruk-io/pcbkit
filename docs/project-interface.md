@@ -1101,11 +1101,21 @@ each listed pin that:
   in the condition's pins with its own window. A part the scenario models on some of its
   pads but not all (one diode of a pair) has the pads it leaves out named, wherever they
   are, since current can come in through them, unless the scenario fixes that pad's net;
+- has a resistor on those nets whose value is a real value with a not-fitted mark after
+  it (`100k DNP`): `dc.build` models it as fitted, but the netlist does not say which
+  build carries it, so the message asks for the value alone or the mark alone. A value
+  that is the mark alone (`DNP`) is a part that is not on the board: `dc.build` leaves
+  it out and the check does not name it;
 - depends on a FET whose state the solver guessed: a FET with any terminal on the nets
   that set the pin's level whose gate net is floating, or whose gate's level moves by
   more than 50 mV with a smaller leak. The leak holds such a gate near 0 V, so a P-FET
   would count as on and an N-FET as off whatever the board does. The message names the
   FET and its gate: pull the gate to a net the scenario fixes, or fix it;
+- depends on a Zener or TVS that `dc.build(nl, extended=True)` holds forward only (no
+  breakdown) and that has more than 1 V across it in reverse on those nets (no Zener or
+  TVS sold breaks down below that): whether it conducts is not known. Model its breakdown
+  as `circuit.D(cathode net, anode net, vz, ref="D2.breakdown")` (the one element
+  `extended` lets a scenario add to a part it built), or fix the net it clamps;
 - is outside its window;
 - reads its level only because of the 1 nS leak: the level moves by more than 50 mV
   when the leak is made 1000 times smaller, which happens when the pin is held through
@@ -1142,9 +1152,9 @@ clamp (`vz`) is not held to a rating: it fails when the model shows more than `v
 5 % across it, because the DC model has no breakdown, so such a solve is not the
 board's; the message says to fix the clamped net at its clamped voltage in that
 scenario, or to model the breakdown as a diode from cathode to anode with `vf` equal to
-`vz` (`circuit.D(cathode net, anode net, vz, ref="D2.z")`, which `extended` does not
-allow beside its own model of the part: fix the net instead). The parts it judges are any
-of these:
+`vz` (`circuit.D(cathode net, anode net, vz, ref="D2.breakdown")`, which `extended`
+allows beside its own forward model of a Zener or TVS). The parts it judges are any of
+these:
 
 - a part whose pins read as one FET or one diode: every pad on a net (not KiCad's
   `unconnected-(...)` one) has a pin name, and the names are exactly G, D and S (or
@@ -1182,7 +1192,14 @@ or, in a scenario (the first that shows each kind of problem is named):
   belongs to a part the model leaves out, under the same rule as the fault-state check
   with no listed pins: a connector bringing in a rail the scenario does not fix, an IC
   pin. Fix those nets in the scenario, or model what drives them with its reference;
-- a FET on those nets has a floating gate (its state is the solver's guess);
+- a FET on those nets has a floating gate (its state is the solver's guess), or a Zener
+  or TVS `extended` holds forward only, other than the part judged, has more than 1 V
+  across it in reverse there (as in the fault-state check: model its breakdown, or fix
+  the net it clamps). A part declared in `SEMI_NOT_JUDGED` is still looked at here;
+- the row's pins (or pin names) contradict the circuit's own model of the part: a diode
+  element whose anode and cathode nets the scenario's diode for the part joins the
+  other way round, or a FET element with no FET of the part in the circuit on that gate,
+  drain and source;
 
 or a scenario cannot be solved (named by its index), or none is solved at all (an empty
 `STRESS_SCENARIOS` judges nothing, so it fails while there is a part to judge), or a
@@ -1313,13 +1330,17 @@ and A2 is held as an open element, `<ref>.open`, so the checks see it modelled);
 generic `Device:Q_NMOS_*` and `Q_PMOS_*` FETs, their gate, drain and source read from
 the G, D and S pin names (never from the symbol name's suffix), with a body diode; and a
 body diode for the `2N7002` (`<ref>.body`, source to drain for an N-FET, drain to source
-for a P-FET). A part whose pin names do not read that way is left out, as before.
+for a P-FET). A part whose pin names do not read that way is left out, as before. The
+Zeners and TVSs it holds without breakdown are listed in `circuit.forward_only`; a
+scenario may add one `circuit.D(cathode net, anode net, vz, ref="<ref>.breakdown")` to
+each to model its breakdown, and the fault-state and semiconductor checks ask for it
+when one has more than 1 V across it in reverse on the nets they judge.
 
 Warning: a scenario written before `extended` may already model some of these parts by
 hand. In extended mode a part that `build` modelled cannot be added again, and no ref can
 be added twice: `circuit.R`, `circuit.D` and `circuit.fets.append` raise ValueError naming
-the part (`D2 is already modelled by dc.build(extended=True)`), so the part is never
-doubled silently; remove the hand model, or build without `extended`. Without `extended`
+the part (`D2 is already modelled by dc.build(extended=True)`, except one
+`<ref>.breakdown` for a part in `forward_only`), so the part is never doubled silently; remove the hand model, or build without `extended`. Without `extended`
 nothing changes: the built-in `circuit` and `esp32s3` checks, and every existing
 scenario, build exactly what they built before unless the project's own `scenario` asks
 for `extended=True`.

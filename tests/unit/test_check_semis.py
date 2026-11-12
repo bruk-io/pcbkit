@@ -759,7 +759,8 @@ def test_a_zener_clamp_the_model_shows_over_its_vz_fails_and_says_why() -> None:
         "D10 is a clamp (vz 5.1 V) but the model shows 12.00 V across it in "
         "STRESS_SCENARIOS[0]: the DC model has no breakdown, so this solve is not the "
         "board's; fix the clamped net at its clamped voltage in that scenario, or "
-        "model the breakdown as a diode from cathode to anode with vf 5.1 V"
+        "model the breakdown as a diode from cathode to anode with vf 5.1 V (ref "
+        "'D10.breakdown')"
     ]
     assert report.parts["D10"]["kind"] == "clamp"
 
@@ -771,7 +772,7 @@ def test_a_zener_clamp_whose_breakdown_is_modelled_passes_and_is_recorded() -> N
 
     def model(c: Circuit, _index: int) -> None:
         c.D("ZG", "+12V", 0.7, ref="D10")
-        c.D("+12V", "ZG", 5.1, ref="D10.z")
+        c.D("+12V", "ZG", 5.1, ref="D10.breakdown")
 
     report = judge(toy, read({**TABLE, "Z": {"vz": 5.1}}), model)
     assert report.problems == []
@@ -874,4 +875,82 @@ def test_a_part_found_only_through_a_later_scenarios_element_cannot_be_read() ->
     assert report.problems == [
         "X1 (MyLib:Thing) cannot be judged: its pin names (P, N) do not read as one "
         'FET (G, D, S) or one diode (A, K); give its SEMI_VRATED row "pins"'
+    ]
+
+
+def test_row_pins_that_disagree_with_the_circuits_diode_fail() -> None:
+    """Unnamed pins, anode and cathode swapped in the row: the circuit disagrees."""
+    toy = board()
+    toy.add(
+        "D3", "X", "MyLib:Diode2", {"1": ("+5V", "~"), "2": ("GND", "~")}, MPN="D-X"
+    )
+
+    def model(c: Circuit, _index: int) -> None:
+        c.D("GND", "+5V", 0.7, ref="D3")
+
+    row = {"vrrm": 4.0, "pins": {"a": "1", "k": "2"}}
+    report = judge(toy, {**TABLE, "D-X": row}, model)
+    assert report.problems == [
+        "D3 cannot be judged in STRESS_SCENARIOS[0]: its row's element 1 (anode pad 1 "
+        "on +5V, cathode pad 2 on GND) is not how the circuit models it: its diode "
+        "conducts from GND to +5V; correct the row's pins"
+    ]
+
+
+def test_a_declared_forward_only_zener_on_a_judged_parts_nets_is_named() -> None:
+    """SEMI_NOT_JUDGED hides a Zener from judging, not from the nets it can clamp."""
+    toy = board()
+    check_toy.resistor(toy, "R9", "10k", "+12V", "NODE")
+    check_toy.resistor(toy, "R10", "10k", "NODE", "GND")
+    toy.add("D10", "BZT", "Device:D_Zener", {"1": ("NODE", "K"), "2": ("GND", "A")})
+    toy.add(
+        "D2",
+        "SS14",
+        "Device:D_Schottky",
+        {"1": ("NODE", "K"), "2": ("GND", "A")},
+        MPN="SCH-1",
+    )
+    nl = netlist(toy)
+    tries = []
+    for index, level in enumerate((3.3, 0.0)):
+        c = build(nl, extended=True)
+        c.fix("GND", 0.0).fix("+12V", 12.0).fix("+5V", 5.0).fix("GPIO", level)
+        tries.append((index, c.solve(), None))
+    report = semis.judge(
+        nl, {**TABLE, "SCH-1": {"vrrm": 40.0}}, tries, {"D10": "a clamp"}
+    )
+    assert (
+        "D2 cannot be judged in STRESS_SCENARIOS[0]: D10 is modelled forward only (no "
+        "breakdown) and has 6.00 V across it in reverse, so whether it conducts is not "
+        "known; model its breakdown (circuit.D(cathode net, anode net, vz, "
+        "ref='D10.breakdown')), or fix the net it clamps"
+    ) in report.problems
+
+
+def test_row_pins_that_disagree_with_the_circuits_fet_fail() -> None:
+    """Unnamed pins; the row's gate is the pad the scenario models as the drain."""
+    toy = board()
+    toy.add(
+        "Q8",
+        "X",
+        "MyLib:FETX",
+        {"1": ("G8", "~"), "2": ("GND", "~"), "3": ("D8", "~")},
+        MPN="F-X",
+    )
+    check_toy.resistor(toy, "R8", "1k", "+5V", "D8")
+    check_toy.resistor(toy, "R18", "1k", "GPIO", "G8")
+
+    def model(c: Circuit, _index: int) -> None:
+        c.fets.append(
+            {"kind": "n", "g": "G8", "d": "D8", "s": "GND", "vth": 2, "ron": 1,
+             "ref": "Q8"}
+        )  # fmt: skip
+
+    good = {"vds": 30.0, "vgs": 20.0, "pins": {"g": "1", "d": "3", "s": "2"}}
+    assert judge(toy, read({**TABLE, "F-X": good}), model).problems == []
+    bad = {**good, "pins": {"g": "3", "d": "1", "s": "2"}}
+    assert judge(toy, read({**TABLE, "F-X": bad}), model).problems == [
+        "Q8 cannot be judged in STRESS_SCENARIOS[0]: its row's element 1 (gate pad 3 "
+        "on D8) is not how the circuit models it: no FET of it there has that gate, "
+        "drain and source; correct the row's pins"
     ]

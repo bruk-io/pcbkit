@@ -47,6 +47,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from pcbkit.check.dc import BREAKDOWN_SUFFIX, NOT_FITTED
 from pcbkit.check.netlist import Netlist, natkey
 from pcbkit.check.ports import letters
 from pcbkit.check.tables import (
@@ -90,6 +91,10 @@ SMALL_LEAK = 1e-12
 # A pin whose level moves more than this when the leak is made 1000 times smaller is
 # held through about a gigaohm or more: its reading is the leak's, not the design's.
 LEAK_MOVE_V = 0.05
+
+# Below this reverse voltage no Zener or TVS breaks down (the lowest Zener sold is
+# 1.8 V), so a part held forward only needs no breakdown model there.
+BREAKDOWN_FLOOR_V = 1.0
 
 # The start of the net KiCad gives a pin that nothing is wired to.
 UNCONNECTED = "unconnected-("
@@ -198,6 +203,28 @@ def is_open_at_dc(nl: Netlist, ref: str) -> bool:
     return letters(ref) == CAPACITOR_LETTERS and len(nl.functions(ref)) == 2
 
 
+FITTED = "fitted"
+NOT_FITTED_ALONE = "not fitted"
+FITTING_UNKNOWN = "unknown"
+
+
+def fitting(nl: Netlist, ref: str) -> str:
+    """Return whether a part's value says it is fitted.
+
+    A value that is a not-fitted mark alone (``DNP``) is ``not fitted``: ``dc.build``
+    leaves such a resistor out, and the part is not on the board. A value with a real
+    first word and a mark after it (``100k DNP``) is ``unknown``: ``dc.build`` models
+    it as fitted, but the netlist does not say which build carries it.
+    """
+    part = nl.parts.get(ref)
+    words = str(part["value"]).upper().split() if part is not None else []
+    if len(words) == 1 and words[0] in NOT_FITTED:
+        return NOT_FITTED_ALONE
+    if len(words) > 1 and any(w in NOT_FITTED for w in words[1:]):
+        return FITTING_UNKNOWN
+    return FITTED
+
+
 def is_shorted(nl: Netlist, ref: str) -> bool:
     """Return True for a two-pad part with both pads on one net: it carries nothing."""
     pads = nl.functions(ref)
@@ -228,6 +255,16 @@ def left_out(
     for net in nets:
         for ref, pad, _func in nl.nets.get(net, []):
             if (ref, pad) in listed or is_open_at_dc(nl, ref) or is_shorted(nl, ref):
+                continue
+            fitted = fitting(nl, ref)
+            if fitted == NOT_FITTED_ALONE:
+                continue
+            if fitted == FITTING_UNKNOWN:
+                value = nl.parts[ref]["value"]
+                found.append(
+                    f"{name(ref, pad, net)}: its value {value!r} also marks it not "
+                    "fitted; write the value alone or the mark alone"
+                )
                 continue
             if ref not in held:
                 found.append(name(ref, pad, net))
@@ -271,6 +308,39 @@ def undecided_fets(
                 f"the solver's leak (it is {recheck[g]:.3f} V with a smaller leak), "
                 f"so whether {ref} conducts is the solver's guess; give the gate a "
                 "real pull"
+            )
+    return found
+
+
+def unclamped(
+    circuit: Any, solved: Any, nets: Iterable[str], skip: Iterable[str] = ()
+) -> list[str]:
+    """Return a sentence for each forward-only part on ``nets`` that may break down.
+
+    ``circuit.forward_only`` lists the parts ``dc.build(extended=True)`` holds with no
+    breakdown (Zeners and TVSs). One with an element on ``nets``, no ``<ref>.breakdown``
+    element, and more than ``BREAKDOWN_FLOOR_V`` across it in reverse may conduct on the
+    board where the model says it does not. ``skip`` names parts judged elsewhere.
+    """
+    on = set(nets)
+    refs = {r for *_x, r in circuit.res} | {r for *_x, r in circuit.diodes}
+    found = []
+    for part in sorted(getattr(circuit, "forward_only", ()), key=natkey):
+        if part in skip or part + BREAKDOWN_SUFFIX in refs:
+            continue
+        reverse = None
+        for a, c, *_rest, ref in circuit.diodes:
+            if ref == part and {a, c} & on:
+                reverse = solved[c] - solved[a]
+        for a, b, _r, ref in circuit.res:
+            if ref == part + ".open" and {a, b} & on:
+                reverse = abs(solved[a] - solved[b])
+        if reverse is not None and reverse > BREAKDOWN_FLOOR_V:
+            found.append(
+                f"{part} is modelled forward only (no breakdown) and has "
+                f"{reverse:.2f} V across it in reverse, so whether it conducts is not "
+                "known; model its breakdown (circuit.D(cathode net, anode net, vz, "
+                f"ref='{part}{BREAKDOWN_SUFFIX}')), or fix the net it clamps"
             )
     return found
 
@@ -386,6 +456,7 @@ def judge(
             )
             continue
         guessed = undecided_fets(circuit, solved, recheck, lnets)
+        guessed += unclamped(circuit, solved, lnets)
         if guessed:
             report.problems.extend(f"{where}: {text}" for text in guessed)
             continue
