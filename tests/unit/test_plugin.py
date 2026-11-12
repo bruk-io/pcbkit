@@ -103,6 +103,7 @@ SKILL_NAMES = [
     "order-pcbway",
     "review-board",
     "walk-fault-states",
+    "review-derating",
 ]
 AGENT_NAMES = ["parts-researcher", "check-writer"]
 
