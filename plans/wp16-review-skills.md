@@ -48,12 +48,14 @@ into `specs.py`, so the next run of the same question is a check, not a review.
   | Schematic | `pcbkit sch` is ERC-clean | `walk-fault-states`, `review-derating`, `review-datasheets` (later) |
   | Placement | `pcbkit build`, before routing is final | `review-current-paths`, `review-misplug` |
   | Route | `pcbkit route`, before `promote` | `review-board` (as before) |
-  | Order | `finalize` | `board-workflow` runs, in turn: `review-derating` if parts changed, `plan-bringup`, `review-sourcing`, `review-spec-drift`, a full `pcbkit check`; then the user's `/pcbkit:order-pcbway` |
+  | Order | `finalize` | `board-workflow` runs, every time and in turn: the reviews that may edit sources (`review-derating`, `plan-bringup`, `review-spec-drift` with a written spec), `pcbkit finalize` again, `review-sourcing` on the files it wrote, a full `pcbkit check`; then the user's `/pcbkit:order-pcbway` |
   | Each gate with a written spec | | `review-spec-drift` |
 
   `board-workflow` alone owns the order intent; each review triggers on its own
-  question. `review-sourcing` writes `sourcing.md` with the timestamps of the exports it
-  read, and `order-pcbway` reads it.
+  question. `review-sourcing` ends by running `scripts/stamp.py`, which writes
+  `sourcing.json` with the sha256 of the BOM and centroid it judged; the order's
+  `preflight.py` refuses files with no stamp or another hash. No review is asked to
+  remember what has run: the order gate runs them all, every time.
 
 - **Existing skills.** All five are kept; none is superseded.
 
@@ -83,7 +85,7 @@ check decide it. **Missing**: no check can; the letter is its entry in "Checks t
 | 1 | fault states | Floating nets and unconnected pins | Built | `kicad`: `test_erc_clean` (an intended open pin has a no-connect flag in design.py) |
 | 2 | fault states | ESP32-S3 strapping and input-only pins at reset | Built | `esp32s3`: `test_strapping_pins_at_reset` (`STRAP_SCENARIO`), `test_esp32_input_only_pins_have_a_defined_level` |
 | 3 | fault states | Each enable, output-enable and stop input holds its safe level in each abnormal condition | Missing | A |
-| 4 | fault states | Current injected into an unpowered board's pins by a separately powered device | Expressible (ESP32-S3) | `esp32s3`: `test_no_esp32_gpio_above_abs_max`, a `GPIO_SCENARIOS` row with the board's rail at 0 V |
+| 4 | fault states | Current injected into an unpowered board's pins by a separately powered device | Missing | No letter: needs a model of ESD injection (B's note). `test_no_esp32_gpio_above_abs_max` does not decide it: its limit is fixed at `ESP32_VDD + 0.3` (`packs/esp32s3.py`), so a board at 0 V driven to 3.3 V passes. `walk-fault-states` judges it |
 | 5 | fault states | A source reaching a rail it must not (USB onto a load rail, back-feed through a diode or a signal pin) | Missing | B |
 | 6 | fault states | Supply pins inside their datasheet range | Built | `circuit`: `test_supply_pins_in_range` (`SUPPLY_SCENARIO`, `SUPPLY_PINS`) |
 | 7 | current paths | Track width against current, voltage drop | Built | `copper`: `test_copper_segment` (`COPPER_SEGMENTS`, `COPPER_BUDGETS`) |
@@ -94,7 +96,7 @@ check decide it. **Missing**: no check can; the letter is its entry in "Checks t
 | 12 | current paths | Kelvin sense pair encloses little area | Built | `copper`: `test_sense_pair_loop_area` (`SENSE_LOOPS`) |
 | 13 | current paths | Decoupling and bulk capacitors at the pin they serve | Built | `fab`: `test_decoupling_caps_are_close` (`DECOUPLING`) |
 | 14 | current paths | Region kept clear of copper (antenna, under an inductor) | Built | `copper`: `test_reserved_copper_stays_clear` (`RESERVED_COPPER`, plus the keep-out in routing.py) |
-| 15 | current paths | Load return current lifting a sensor's ground | Expressible | `COPPER_SEGMENTS` row on `GND`, `heating` False, terminals at the load return and the sensor's ground pad; `SUPPLY_REGULATION` |
+| 15 | current paths | Load return current lifting a sensor's ground | Missing | The `COPPER_SEGMENTS` row exists, but `test_copper_segment` records only the largest drop, not the lift at a zero-share pad: a project check until the ground-lift record (Left for WP17) |
 | 16 | current paths | Regulator hot-loop area | Missing | H (four-layer) |
 | 17 | current paths | Fast net crossing a gap in its reference plane | Missing | I; `review-board` judges it by eye until then |
 | 18 | current paths | Heat source beside a temperature-sensitive part | Missing | J |
@@ -116,7 +118,7 @@ check decide it. **Missing**: no check can; the letter is its entry in "Checks t
 | 34 | mis-plug | Adjacent pins at different voltages on a user-reachable connector | Missing | D |
 | 35 | mis-plug | Polarity marks at wire pads | Built | `fab`: `test_wire_pads_have_polarity_marks` (`WIRE_PADS`) |
 | 36 | mis-plug | Every connector labelled on the silkscreen | Missing | L |
-| 37 | mis-plug | Current through a signal pin that becomes a plug's ground return | Expressible (ESP32-S3) | `esp32s3`: `test_esp32_gpio_source_current`, `test_no_esp32_gpio_above_abs_max`, a `GPIO_SCENARIOS` row for the reversed plug |
+| 37 | mis-plug | Current through a signal pin that becomes a plug's ground return | Missing | No letter: D records what a signal wire meets but does not judge it. `test_esp32_gpio_source_current` runs at `GPIO_SOURCE_SCENARIO` only, with the pin driven high, and never reads `GPIO_SCENARIOS`. `review-misplug` judges it |
 | 38 | mis-plug | An unplugged input reads its safe state | Missing | A |
 | 39 | bring-up | Every rail has a labelled test point, a ground pad near it, reachable when assembled | Missing | G |
 | 40 | bring-up | Each regulator on a shared enable can be isolated | Missing | S |
@@ -145,8 +147,8 @@ check decide it. **Missing**: no check can; the letter is its entry in "Checks t
 | 63 | spec drift | Population variants | Missing | U |
 | 64 | spec drift | "Source X powers Y only" | Missing | B |
 
-Totals: 64 candidates; **24 built, 12 expressible today, 28 missing** (21 checks to build,
-some missing candidates sharing one).
+Totals: 64 candidates; **24 built, 9 expressible today, 31 missing** (22 checks to build,
+some missing candidates sharing one; 4 and 37 have no check planned).
 
 ## Checks to build
 
@@ -156,12 +158,12 @@ that reads them. Ordered by what a miss costs.
 
 | | Check | Table it reads (proposed) | Candidates | Notes |
 |---|---|---|---|---|
-| A | Each listed pin holds its window in each named condition | `FAULT_STATES = {condition: {"scenario": {kwargs for circuits.scenario}, "pins": [(ref, pin, (min V, max V))]}}` | 3, 38, 44 | A DC solve per condition, like `SUPPLY_PINS` but one scenario per condition. Covers missing pulls, pulls to an absent rail and unplugged inputs. |
-| B | No DC path from one supply net to another except through the parts named as the way | `POWER_PATHS = [(from net, to net, (allowed refs))]` | 5, 64 | A graph walk over the netlist; diodes and FETs pass in their forward direction. Back-feed through an unpowered IC's ESD diodes needs a model of the part: later. |
-| C | The net on each listed pad, and every connector listed | `PIN_NETS = {ref: {pad: net}}` | 56, 57 | The port map as the spec states it, compared with the netlist. |
-| D | Reversed, offset and wrong-port mating lands nothing harmful | `MATING = {plug: {"pins": [net or None], "fits": [refs], "keyed": bool}}`; socket pad nets from the netlist | 32, 33, 34 | Pin by pin: supply onto ground or a signal, a higher rail onto a lower-rated pin, a safety loop closed. Pad adjacency from the footprint for tool shorts. |
-| E | Current per contact against the derated contact rating | `CONTACT_RATINGS = {ref: {"amps": A per contact, "derate": fraction, "nets": {net: A}}}` | 19, 23 | Counts the contacts on each net from the netlist; return contacts judged like supply ones. |
-| F | FET and diode voltage under 80 % of rating | `SEMI_VRATED = {mpn: {"vds" or "vrrm": V, "vgs": V}}` | 21 | The capacitor check's twin, on the same `STRESS_SCENARIOS`. |
+| A | Each listed pad is driven and holds its window in each named condition | `FAULT_STATES` (pads, not pin names) | 3, 38, 44 | A DC solve per condition. A floating pad fails whatever its window (`Solution.floating`): the solver's leak reads a floating net as 0 V. Covers missing pulls, pulls to an absent rail and unplugged inputs. |
+| B | No DC path from one supply net to another except through the parts named as the way | `POWER_PATHS` (nets, paths, parts, max_ohm) | 5, 64 | A graph walk over the netlist; diodes and FETs pass in their forward direction. Back-feed through an unpowered IC's ESD diodes needs a model of the part: later. |
+| C | The net on each listed pad, and every connector listed | `PIN_NETS = {ref: {pad: net or None}}` | 56, 57 | The port map as the spec states it, compared with the netlist. |
+| D | Reversed, offset and wrong-port mating lands nothing harmful | `MATING`, `PIN_NETS`, `NET_LIMITS` (shapes in `docs/project-interface.md`, WP17 D4) | 32, 33, 34 | Fails a source fight or an over-voltage on a declared limit; adjacent pads at different voltages are recorded, not failed. |
+| E | Current per contact against the derated contact rating | `CONTACT_RATINGS = {ref: {"amps": A per contact, "derate": fraction}}` | 19, 23 | Counts the contacts on each net from the netlist; return contacts judged like supply ones. |
+| F | FET and diode voltage under 80 % of rating | `SEMI_VRATED` (with optional `derate` and `pins`) | 21 | The capacitor check's twin, on the same `STRESS_SCENARIOS`. |
 | G | Each listed net has a test point, a ground pad within reach, outside the keep-away boxes | `TEST_POINTS = [(net, max ground mm)]`, `PROBE_KEEPAWAY = [(name, x0, y0, x1, y1)]` | 39 | Boxes are mated plug bodies and modules, in layout mm. |
 | H | Regulator hot-loop area under a limit | `HOT_LOOPS = [{"name", "refs", "pads", "max_mm2"}]` | 16 | Waits on four-layer support (the loop closes through an inner plane). |
 | I | A fast net never crosses a gap in its reference plane | `REFERENCE_PLANES = {net: layer}` | 17 | Buildable now: on two layers it is a top-layer track over the filled bottom `GND` zone, the gap a bottom track or slot. `review-board` judges it by eye until then. |
@@ -173,10 +175,11 @@ that reads them. Ordered by what a miss costs.
 | O | Absent refs and nets | `EXCLUSIONS = [(id, text, ref patterns, nets)]` | 62 | |
 | P | Each port within reach of its edge | `PORT_EDGES = {ref: ("top" or "bottom" or "left" or "right", max mm)}` | 60 | |
 | Q | Part height under a limit | `HEIGHT_MAX_MM` | 61 | Needs heights: WP14 part files. |
-| R | A bus answers exactly the intended addresses | `I2C_EXPECTED = {bus: [addresses]}` | 42 | All-call and general-call addresses included. |
-| S | Each regulator on a shared enable has its own link | `ENABLE_LINKS = {enable net: [regulator refs]}` | 40 | |
+| R | A bus answers exactly the intended addresses | `I2C_EXPECTED = {bus: [addresses]}` | 42 | All-call and general-call addresses included. The intent comes from the user or the spec, never the `i2c` record. |
+| S | Each regulator on a shared enable has its own link | `ENABLE_LINKS = {enable net: [(regulator ref, enable pad)]}` | 40 | |
 | T | Near-duplicate values | none: a report in `pcbkit quote` or the BOM | 53 | Lists candidates; never fails. |
 | U | Population variants | none yet | 63 | pcbkit has one population; design first. |
+| V | Bring-up readings: each stage's input current under its limit, each test point's resistance to ground recorded | `BRINGUP_STAGES`, `TEST_POINTS` | plan-bringup's expected readings | A DC solve per stage; with every supply unfixed, a test current into each net. |
 
 ## Later: `review-datasheets`
 
@@ -203,6 +206,15 @@ maximum output capacitance is a `SUPPLY_LIMITS` row. It writes `PINOUT`, `SUPPLY
 5a. Audit fixes. Done: examples rebuilt around other products, gate-scoped `-k`
    selections in each review, decidable work before judgement, the proposed tables in
    `docs/project-interface.md`, one owner per trigger, `sourcing.md` for the order.
+5b. Second audit fixes. Done: method files rewritten so none gathers the choices of one
+   real board; the proposed tables follow WP17's D4 sheet (pads, the floating rule,
+   `MATING` with `rows` and its fail rule, `NET_LIMITS`, `BRINGUP_STAGES`); validation
+   moved out of prose into scripts with tests (`groups.py`, `stress.py`, `listing.py`,
+   `leadless.py`, `stamp.py`, and `preflight.py` verifying the stamp); the ESP32-S3
+   claims corrected (candidates 4 and 37 Missing, 15 too); each review names its check
+   groups; the order gate runs every review, source-editing ones before `finalize` and
+   `review-sourcing` after; the "(WP17, --gate ...)" notes removed; `test_plugin.py`
+   holds the cited check names, the selections and the must-never sentences.
 6. Eval cases for the reviews (`evals/`): at least that `walk-fault-states` loads for "is
    this fail-safe" and that a review reads results.json instead of re-measuring. Not
    started; the plugin test pins four cases today.
@@ -210,18 +222,20 @@ maximum output capacitance is a `SUPPLY_LIMITS` row. It writes `PINOUT`, `SUPPLY
 
 ## Left for WP17
 
-What the skills work around today and WP17's pcbkit code replaces; each skill marks the
-place with "WP17".
+What the skills work around today and WP17's pcbkit code replaces.
 
 - `pcbkit check --gate sch|place|route|order`: replaces the `-k` selections in every
-  review. Today: schematic `test_circuit or test_esp32s3 or test_erc_clean`; placement
-  adds `test_decoupling_caps_are_close`, `test_power_footprints_match_datasheet` and
-  `test_filter_caps_sit_by_the_adc_pin`; route `not test_outputs`; order, no `-k`.
-- Built-in checks for the proposed tables, starting with A to G.
+  review. Today they are, exactly: schematic
+  `test_circuit or test_esp32s3 or test_erc_clean`; placement
+  `test_circuit or test_esp32s3 or test_erc_clean or test_decoupling_caps_are_close or test_power_footprints_match_datasheet or test_filter_caps_sit_by_the_adc_pin`;
+  route `not test_outputs`; order, no `-k`. `tests/unit/test_plugin.py` holds the skills
+  to these.
+- Built-in checks for the proposed tables, starting with A to G, and V (the bring-up
+  readings check, `BRINGUP_STAGES`).
 - Every part's stress at every `STRESS_SCENARIOS` row in results.json (today the
   capacitor and resistor checks record the top four, `test_supply_pins_in_range`
-  nothing), and supply-pin windows at the envelope corners. `review-derating` solves
-  the rest in a script meanwhile.
+  nothing), and supply-pin windows at the envelope corners. `review-derating` runs its
+  `stress.py` meanwhile.
 - A per-part derating factor, so a tantalum's 50 % target is a check, not a finding.
 - A parts-stock command over `pcbkit/parts.py`, replacing `parts-researcher` for
   Mouser stock in `review-sourcing`.

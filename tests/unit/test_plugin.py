@@ -18,6 +18,7 @@ outside the subset fails with the line, rather than being misread.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -30,7 +31,7 @@ import pytest
 from pcbkit.cli import cli
 from pcbkit.fab.pcbway import NOTES_LIMIT, OZ_MM
 from pcbkit.kicad.board import OX, OY
-from pcbkit.project import SCHEMA
+from pcbkit.project import CHECK_GROUPS, SCHEMA
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -521,6 +522,15 @@ WORKFLOW = SKILLS / "board-workflow" / "SKILL.md"
 NEW_BOARD = SKILLS / "new-board" / "SKILL.md"
 ADD_CHECK = SKILLS / "add-check" / "SKILL.md"
 REVIEW = SKILLS / "review-board" / "SKILL.md"
+FAULTS = SKILLS / "walk-fault-states" / "SKILL.md"
+DERATING = SKILLS / "review-derating" / "SKILL.md"
+PATHS = SKILLS / "review-current-paths" / "SKILL.md"
+MISPLUG = SKILLS / "review-misplug" / "SKILL.md"
+BRINGUP = SKILLS / "plan-bringup" / "SKILL.md"
+SOURCING = SKILLS / "review-sourcing" / "SKILL.md"
+DRIFT = SKILLS / "review-spec-drift" / "SKILL.md"
+# The design reviews that run checks, each with the check groups it needs.
+REVIEWS = [FAULTS, DERATING, PATHS, MISPLUG, BRINGUP, SOURCING, DRIFT]
 RESEARCHER = AGENTS / "parts-researcher.md"
 WRITER = AGENTS / "check-writer.md"
 
@@ -1133,6 +1143,130 @@ PROSE_RULES = [
         None,
         "Do not paste image data or report listings into the reply.",
     ),
+    # The design reviews: what each must never do, and the steps whose omission
+    # leaves a result unverifiable or an order made from files nobody judged.
+    (
+        "order-refuses-files-the-sourcing-review-did-not-judge",
+        ORDER,
+        None,
+        "Whether the parts can be bought is `review-sourcing`'s question, not this "
+        "skill's: the preflight below refuses a BOM or centroid that review has not "
+        "judged.",
+    ),
+    (
+        "workflow-runs-every-order-gate-review-in-order",
+        WORKFLOW,
+        "Boundaries",
+        "Before the user starts it, run the order-gate reviews, every one, every time, "
+        "in this order: first the reviews that edit sources, `review-derating`, "
+        "`plan-bringup`, and `review-spec-drift` if there is a written spec; then "
+        "`pcbkit finalize` (after build, route and promote if the board changed); then "
+        "`review-sourcing` on the files finalize wrote, which stamps them for the "
+        "order; then a full `pcbkit check`.",
+    ),
+    (
+        "bringup-first-power-is-a-bench-supply",
+        BRINGUP,
+        "Safety rules (never relax)",
+        "First power is always a current-limited bench supply, never a battery.",
+    ),
+    (
+        "bringup-tests-protection-on-the-bench-supply",
+        BRINGUP,
+        "Safety rules (never relax)",
+        "Protection is tested on the bench supply, never by misconnecting a battery.",
+    ),
+    (
+        "bringup-takes-the-expected-scan-from-the-user-or-the-spec",
+        BRINGUP,
+        "3. Write the rows, then let the checks decide",
+        "`I2C_EXPECTED`: the exact scan per bus, from the user or the spec, never from "
+        "the recorded `i2c` table (that would compare the design with itself).",
+    ),
+    (
+        "sourcing-never-states-stock-from-memory",
+        SOURCING,
+        "Hard rules",
+        "**Never state stock, price, lifecycle, lead time or minimum order from "
+        "memory.**",
+    ),
+    (
+        "sourcing-stops-on-a-failing-preflight",
+        SOURCING,
+        "1. Start from what the checks and the quote decide",
+        "show what it printed and stop, as a review of stale files is worse than none.",
+    ),
+    (
+        "sourcing-never-starts-the-order",
+        SOURCING,
+        "4. Write it down, then stamp",
+        "Never start the order: the user does.",
+    ),
+    (
+        "sourcing-stamps-the-files-it-judged",
+        SOURCING,
+        "4. Write it down, then stamp",
+        'then stamp the BOM and centroid it judged with `python3 "${CLAUDE_SKILL_DIR}/'
+        'scripts/stamp.py"`: the order refuses any other files.',
+    ),
+    (
+        "derating-never-invents-a-figure",
+        DERATING,
+        "Standing rules",
+        "**Never invent a derated figure.**",
+    ),
+    (
+        "derating-never-computes-in-the-conversation",
+        DERATING,
+        "Standing rules",
+        "**Never compute a stress or a margin in the conversation**: both come from a "
+        "check's record or from `stress.py` (step 1).",
+    ),
+    (
+        "faults-fails-a-floating-pad",
+        FAULTS,
+        "3. Write the rows, then let the checks decide",
+        "A floating pad fails whatever its window.",
+    ),
+    (
+        "misplug-never-guesses-a-pinout",
+        MISPLUG,
+        "2. Gather the inputs and the fit",
+        "Ask for what is missing; never guess a pinout.",
+    ),
+    (
+        "paths-never-infers-peak-currents",
+        PATHS,
+        "2. Settle intent and gather the inputs",
+        "Never infer peak currents from part numbers.",
+    ),
+    (
+        "paths-never-judges-by-eye-what-a-check-measures",
+        PATHS,
+        "1. Start from the checks that apply at this gate",
+        "never judge by eye what they measure:",
+    ),
+    (
+        "drift-writes-claims-before-reading-the-design",
+        DRIFT,
+        "1. Read the spec and write its claims down first",
+        "**Write each mechanical claim down as the spec states it, before reading the "
+        "design.**",
+    ),
+    (
+        "drift-never-decides-or-edits",
+        DRIFT,
+        "3. Judge what code cannot",
+        "Never decide which side is right, and never edit the spec or the design "
+        "during the review.",
+    ),
+    (
+        "add-check-fails-a-floating-fault-state-pad",
+        ADD_CHECK,
+        "1. Is it already covered?",
+        "A `FAULT_STATES` check calls `Solution.floating` on each pad's net and fails "
+        "a floating one whatever its window: the solver reads a floating net as 0 V.",
+    ),
 ]
 
 
@@ -1430,3 +1564,109 @@ def test_an_eval_cases_scaffold_script_exists(case: Path) -> None:
         return
     for script in re.findall(r"^\s*scaffold_script:\s*(\S+)\s*$", read(config), re.M):
         assert (case / script).is_file(), f"{case.name}: {script} is missing"
+
+
+# --- the reviews' checks and selections ---------------------------------------------
+
+BUILTIN = ROOT / "pcbkit" / "check" / "builtin"
+# Project checks the worked examples name: written by add-check, never built in.
+PROJECT_CHECKS = {"test_fault_states", "test_power_paths", "test_mating"}
+# The -k selection of each gate, exactly as the plan's "Left for WP17" states it.
+SELECTIONS = {
+    "sch": "test_circuit or test_esp32s3 or test_erc_clean",
+    "place": "test_circuit or test_esp32s3 or test_erc_clean or "
+    "test_decoupling_caps_are_close or test_power_footprints_match_datasheet or "
+    "test_filter_caps_sit_by_the_adc_pin",
+    "route": "not test_outputs",
+}
+# Which gates' selections each review runs.
+REVIEW_SELECTIONS = {
+    "walk-fault-states": {"sch"},
+    "review-derating": {"sch"},
+    "review-misplug": {"sch"},
+    "review-current-paths": {"place", "route"},
+    "review-spec-drift": {"sch", "place", "route"},
+    "plan-bringup": set(),
+    "review-sourcing": set(),
+}
+
+
+def builtin_names() -> set[str]:
+    """Return every built-in check module's name and every check function in it."""
+    names = set()
+    for module in BUILTIN.glob("test_*.py"):
+        names.add(module.stem)
+        for node in ast.walk(ast.parse(read(module))):
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                names.add(node.name)
+    return names
+
+
+def cited_checks(text: str) -> set[str]:
+    """Return every check name a text cites: ``test_`` and a name, not a placeholder."""
+    return set(re.findall(r"\btest_[a-z0-9_]+\b", text))
+
+
+def unknown_checks(texts: dict[Path, str], known: set[str]) -> list[str]:
+    """Return a line per cited check that is not built in or a named project check."""
+    return [
+        f"{path.relative_to(ROOT)}: {name}"
+        for path, text in texts.items()
+        for name in sorted(cited_checks(text) - known - PROJECT_CHECKS)
+    ]
+
+
+def selections(text: str) -> list[str]:
+    """Return every ``pcbkit check -k "..."`` expression in a text."""
+    return re.findall(r'pcbkit check -k "([^"]+)"', text)
+
+
+def k_terms(expression: str) -> set[str]:
+    """Return the names a ``-k`` expression matches on, without its operators."""
+    words = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", expression)
+    return {w for w in words if w not in ("and", "or", "not")}
+
+
+def test_every_check_a_skill_cites_exists() -> None:
+    """A renamed check leaves a review citing a result that is never written."""
+    texts = {p: t for p, t in plugin_texts().items() if SKILLS in p.parents}
+    assert not unknown_checks(texts, builtin_names())
+
+
+def test_the_cited_check_scan_catches_a_renamed_check() -> None:
+    texts = {SKILLS / "x.md": "Run `test_erc_clean` and `test_supply_pins_in_rage`."}
+    assert unknown_checks(texts, builtin_names()) == [
+        "skills/x.md: test_supply_pins_in_rage"
+    ]
+
+
+def test_every_k_term_a_skill_runs_names_a_built_in_check() -> None:
+    known = builtin_names()
+    for path, text in plugin_texts().items():
+        for expression in selections(text):
+            assert k_terms(expression) <= known, (path.name, expression)
+
+
+def test_the_selections_are_the_plans_and_each_review_runs_its_own() -> None:
+    """One selection per gate, the same in every review and in the plan."""
+    plan = folded(read(ROOT / "plans" / "wp16-review-skills.md"))
+    for expression in SELECTIONS.values():
+        assert f"`{expression}`" in plan, expression
+    by_expression = {v: k for k, v in SELECTIONS.items()}
+    for name, gates in REVIEW_SELECTIONS.items():
+        found = selections(read(SKILLS / name / "SKILL.md"))
+        unknown = [e for e in found if e not in by_expression]
+        assert not unknown, (name, unknown)
+        assert {by_expression[e] for e in found} == gates, name
+
+
+def test_each_review_says_which_check_groups_are_off_before_its_first_run() -> None:
+    """A selection over a group pcbkit.toml leaves off runs nothing, silently."""
+    script = '"${CLAUDE_PLUGIN_ROOT}/skills/board-workflow/scripts/groups.py"'
+    for path in REVIEWS:
+        body = body_of(path)
+        lines = [line for line in body.splitlines() if script in line]
+        assert len(lines) == 1, path.parent.name
+        groups = lines[0].split(script, 1)[1].split()
+        assert groups and set(groups) <= set(CHECK_GROUPS), (path.parent.name, groups)
+        assert body.index(script) < body.index("pcbkit check"), path.parent.name
