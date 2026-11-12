@@ -1256,9 +1256,12 @@ def test_the_skills_state_the_numbers_the_code_defines() -> None:
     stall = SCHEMA["route"]["stall_timeout_s"].default
     assert f"`stall_timeout_s` ({stall} s by default)" in quirks
     assert f"{OZ_MM:.3f} is 1 oz, {2 * OZ_MM:.3f} is 2 oz" in new_board
-    # pcbkit builds two layers, and new-board says so.
-    assert SCHEMA["stackup"]["layers"].choices == (2,)
-    assert "pcbkit builds two-layer boards only." in new_board
+    # The schema accepts four layers, but new-board says the build is not finished.
+    assert SCHEMA["stackup"]["layers"].choices == (2, 4)
+    interim = (
+        "Four-layer boards are in progress (WP15); build two-layer boards for now."
+    )
+    assert interim in new_board
 
 
 # --- the skills match the command line ------------------------------------------------

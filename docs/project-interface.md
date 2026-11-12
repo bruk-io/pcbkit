@@ -80,6 +80,22 @@ profile = "pcbway"
 groups = ["kicad", "outputs", "fab"]
 ```
 
+A four-layer board sets the extra `[stackup]` keys below. `pcbkit build` and `pcbkit route`
+stop a four-layer project for now (WP15), so this is the shape the file will take:
+
+```toml
+[stackup]
+layers = 4                   # 2 or 4; the three keys below are for four layers only
+thickness_mm = 1.6
+copper_mm = 0.035            # outer copper; 1 oz; 2 oz is 0.070
+inner_copper_mm = 0.035      # inner copper
+prepreg_mm = 0.2             # outer copper to the next inner layer
+inner = [
+  { role = "plane", net = "GND" },   # In1.Cu
+  { role = "split" },                # In2.Cu: routing.py's planes hook draws it
+]
+```
+
 Only `[board]` is required, and every key in it is. Leave out any other table or key and
 it takes the default below.
 
@@ -89,9 +105,12 @@ it takes the default below.
 | `board.title` | string | required | Title block text. |
 | `board.rev` | string | required | Revision, such as `"A"`. Quote it: `rev = 2` is an integer and is rejected. |
 | `board.fab_name` | string | required | Base name of the files written for the fab house, such as `My_Board_revA_gerbers.zip`. Same character rules as `stem`. |
-| `stackup.layers` | integer | `2` | Copper layers. Only `2` is accepted: pcbkit builds two-layer boards. |
+| `stackup.layers` | integer | `2` | Copper layers: `2` or `4`. Four-layer boards are in progress (WP15): `pcbkit build` and `pcbkit route` stop a four-layer project for now. |
 | `stackup.thickness_mm` | number | `1.6` | Finished board thickness. |
 | `stackup.copper_mm` | number | `0.035` | Outer copper thickness, written into the saved board's stackup. 1 oz is `0.035`, 2 oz is `0.070`. |
+| `stackup.inner_copper_mm` | number | `0.035` | Inner copper thickness. Four-layer boards only: setting it with `layers = 2` is an error. |
+| `stackup.prepreg_mm` | number | `0.2` | Dielectric between each outer copper layer and the inner layer next to it. Four-layer boards only. The core is what is left of `thickness_mm` and must be at least 0.1 mm. |
+| `stackup.inner` | list of tables | `[]` | One `{ role, net }` table per inner layer, top to bottom (`In1.Cu` first), so `layers - 2` of them. Four-layer boards only. `role` is `"plane"` (a zone of `net` over the whole board; `net` is required), `"split"` (a power layer whose zones `routing.py` draws) or `"signal"` (an ordinary routing layer). `split` and `signal` take no `net`. |
 | `route.freerouting_passes` | integer | `40` | Maximum passes in one Freerouting run (its `-mp` option). |
 | `route.tries` | integer | `3` | Freerouting runs `pcbkit route` makes before giving up when the result is not DRC-clean. |
 | `route.stall_timeout_s` | integer | `90` | Seconds to wait for Freerouting to start routing before it is killed. It can hang while loading a board. |

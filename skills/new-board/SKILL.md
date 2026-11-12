@@ -25,7 +25,7 @@ message already answers.
 - Hand-soldered, or assembled by the fab. Assembled parts must be ones the fab stocks.
 - Any part the user has already chosen, or a module the board hosts.
 
-pcbkit builds two-layer boards only. Say so if the user expects four.
+Four-layer boards are in progress (WP15); build two-layer boards for now.
 
 ## 2. Scaffold and set up
 
