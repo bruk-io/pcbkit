@@ -3,11 +3,17 @@
 The pages are short stand-ins for what pdftotext gives for a datasheet: an absolute
 maximum table, a pin description that pdftotext joined across a line break, and the
 same table with each cell on its own line, as table text often comes out.
+
+The module refuses by default: a number backs a value only when it and everything
+touching it are inside a small grammar. Most tests here pin one rule of that grammar;
+the generated tests at the end check the default itself.
 """
 
 from __future__ import annotations
 
 import hashlib
+import re
+import unicodedata
 
 import pytest
 
@@ -32,6 +38,12 @@ LAYOUT = (
 )
 CELLS = "Input voltage VIN\n–0.3\n19\nV\n"
 PAGES = [RATINGS, PROSE, LAYOUT, CELLS, "   \n"]
+# Where every sign is certain: after ":" and "=", which no range or subtraction ends.
+CONDITIONS = (
+    "Recommended Operating Conditions\n"
+    "Input voltage range: –0.3 19 V\n"
+    "Ambient temperature, TA = −40 to 125 ºC\n"
+)
 
 
 def rule(problem: Problem | None) -> Rule | None:
@@ -51,9 +63,17 @@ def missing(value: str, quote: str, page: str | None = None) -> list[str]:
 
 def test_a_quote_with_other_dashes_and_spacing_is_on_its_page() -> None:
     """Accept an ASCII hyphen for an en dash and spacing the PDF does not have."""
-    assert (
-        check_citation("-0.3 to 19 V", "Input voltage VIN -0.3  19V", 1, PAGES) is None
-    )
+    assert check_citation("19 V", "Input voltage VIN -0.3  19V", 1, PAGES) is None
+    quote = "Input voltage range: -0.3  19V"
+    assert check_citation("-0.3 to 19 V", quote, 1, [CONDITIONS]) is None
+
+
+def test_a_negative_number_after_a_symbol_is_refused() -> None:
+    """Refuse "-0.3" after "VIN": "VIN –0.3" may be VIN minus 0.3, or a range."""
+    problem = check_citation("-0.3 to 19 V", "Input voltage VIN -0.3 19 V", 1, PAGES)
+    assert rule(problem) is Rule.NUMBER
+    assert "has -0.3," in problem.message  # type: ignore[union-attr]
+    assert check_citation("-0.3 V", "Input voltage VIN -0.3 19 V", 4, PAGES)
 
 
 @pytest.mark.parametrize(
@@ -109,17 +129,18 @@ def test_ligatures_and_full_width_forms_are_the_plain_characters(
     assert missing("19 V", "Input voltage １９ Ｖ maximum") == []
 
 
-def test_a_superscript_is_not_a_digit_of_the_number_before_it() -> None:
-    """Refuse "106" for "10⁶ cycles", and "mm2" for "mm²", on the quote and the page.
+def test_a_superscript_backs_nothing() -> None:
+    """Refuse every reading of "10⁶": a power, or 10 with footnote 6, is not certain.
 
-    "10⁶" is one power token, so neither "10" nor "6" alone is a number of it.
+    "mm2" is not "mm²" either, on the quote and the page.
     """
     assert missing("106 cycles", "Endurance 10⁶ cycles") == ["106"]
     assert missing("10 cycles", "Endurance 10⁶ cycles") == ["10"]
-    assert missing("10^6 cycles", "Endurance 10⁶ cycles") == []
-    assert missing("10^-6 A", "Leakage 10⁻⁶ A max") == []
+    assert missing("10^6 cycles", "Endurance 10⁶ cycles") == ["10^6"]
+    assert missing("10^-6 A", "Leakage 10⁻⁶ A max") == ["10^-6"]
     assert missing("6 A", "Leakage 10⁻⁶ A max") == ["6"]
     assert missing("2", "Pad area 4 mm² each") == ["2"]
+    assert missing("4", "Pad area 4 mm² each") == []
     assert citations.quote_on_page("Endurance 10⁶ cycles", "Endurance 10⁶ cycles")
     assert not citations.quote_on_page("Endurance 106 cycles", "Endurance 10⁶ cycles")
     assert not citations.quote_on_page("Pad area 4 mm2 each", "Pad area 4 mm² each")
@@ -190,27 +211,34 @@ def test_a_quote_may_start_after_a_range_dash() -> None:
 
 
 @pytest.mark.parametrize(
-    "quote, page",
+    "value, quote, page",
     [
-        ("Output current 1", "Output current 1 000 mA max"),  # a thin-space 1000
-        ("000 mA max load", "Output current 1 000 mA max load"),
-        ("Enable EN -0.3", RATINGS),  # one cell of a row
-        ("19 V Enable EN -0.3 6 V", RATINGS),
+        ("1 mA", "Output current 1", "Output current 1 000 mA max"),
+        ("000 mA", "000 mA max load", "Output current 1 000 mA max load"),
+        ("1000 mA", "Output current 1 000 mA", "Output current 1 000 mA max"),
     ],
 )
-def test_a_quote_cannot_end_next_to_a_space_between_digits(
-    quote: str, page: str
+def test_a_quote_may_stop_at_a_space_between_digits_but_a_group_is_unknown(
+    value: str, quote: str, page: str
 ) -> None:
-    """Refuse a quote that stops at a space between digits: "1 000" may be 1000."""
-    assert not citations.quote_on_page(quote, page)
-    assert citations.quote_on_page("Enable EN -0.3 6 V", RATINGS)
+    """Let a quote stop at a digit space; "1 000" is still read as neither number."""
+    assert citations.quote_on_page(quote, page)
+    assert rule(check_citation(value, quote, 1, [page])) is Rule.NUMBER
+
+
+def test_one_cell_of_a_row_may_be_quoted() -> None:
+    """Accept a quote of one cell of a row: the dropped space rule refused it."""
+    page = "Input voltage range: –0.3 19 V"
+    assert check_citation("-0.3 V", "Input voltage range: -0.3", 1, [page]) is None
+    assert check_citation("6 V", "19 V Enable EN -0.3 6 V", 1, PAGES) is None
 
 
 def test_table_cells_on_their_own_lines_match_a_row() -> None:
     """Match a table row whose cells pdftotext put on separate lines."""
-    assert (
-        check_citation("-0.3 to 19 V", "Input voltage VIN -0.3 19 V", 4, PAGES) is None
-    )
+    assert check_citation("19 V", "Input voltage VIN -0.3 19 V", 4, PAGES) is None
+    cells = "Input voltage range:\n–0.3\n19\nV\n"
+    quote = "Input voltage range: -0.3 19 V"
+    assert check_citation("-0.3 to 19 V", quote, 1, [cells]) is None
 
 
 @pytest.mark.parametrize("page", [0, -1, 6])
@@ -261,9 +289,9 @@ def test_a_quote_cited_to_a_page_without_text_says_so() -> None:
     "value, quote, absent",
     [
         # A right quote with a wrong number: the failure the rule exists for.
-        ("-0.3 to 17 V", "Input voltage VIN -0.3 19 V", ["17"]),
+        ("-0.3 to 17 V", "Input voltage range: -0.3 19 V", ["17"]),
         # "9" is in "19" as text, but is not a number of the quote.
-        ("-0.3 to 9 V", "Input voltage VIN -0.3 19 V", ["9"]),
+        ("-0.3 to 9 V", "Input voltage range: -0.3 19 V", ["9"]),
         # The minus sign is part of the number.
         ("40 to 125 °C", "temperature −40 to 125 ºC", ["40"]),
         # A number made from two numbers of the quote is neither.
@@ -282,12 +310,12 @@ def test_a_number_of_the_value_must_be_a_number_of_the_quote(
 @pytest.mark.parametrize(
     "value, quote",
     [
-        ("-0.3 to 19 V", "Input voltage VIN –0.3 19 V"),
-        ("−0.3 V to +19 V", "Input voltage VIN -0.3 19 V"),
+        ("-0.3 to 19 V", "Input voltage range: –0.3 19 V"),
+        ("−0.3 V to +19 V", "Input voltage range: -0.3 19 V"),
         ("3.0 to 5.5 V", "Supply voltage 3.0-5.5 V"),  # a range, not -5.5
         ("4.5 V to 17 V", "4.5-V to 17-V Input"),
         ("0x70", "Default address 0x70."),
-        ("0x70", "Default address 70h."),
+        ("0x7a", "Default address 7Ah."),  # a letter digit makes "h" hex
         ("0x7f", "Mask 0x7F"),  # hex digits are not case-sensitive
         ("10 MHz", "fSW TPS54331 10 MHz"),  # digits inside a name are not numbers
     ],
@@ -307,6 +335,8 @@ def test_numbers_match_whatever_dash_sign_or_prefix_they_are_written_with(
         ("0x70", "Supply current 70 mA", ["0x70"]),  # hex is not decimal
         ("70", "Default address 0x70.", ["70"]),
         ("0x70", "Default address 71h.", ["0x70"]),
+        # Digits and "h" may be hours: a code, equal only to itself.
+        ("0x70", "Default address 70h.", ["0x70"]),
     ],
 )
 def test_hexadecimal_numbers_are_whole_tokens_apart_from_decimals(
@@ -373,9 +403,11 @@ def test_units_are_not_checked_a_known_blind_spot() -> None:
 
 def test_check_citation_refuses_a_wrong_number() -> None:
     """Refuse a cited value whose number its quote does not have, naming it."""
-    problem = check_citation("-0.3 to 17 V", "Input voltage VIN -0.3 19 V", 1, PAGES)
+    quote = "Input voltage range: -0.3 19 V"
+    problem = check_citation("-0.3 to 17 V", quote, 1, [CONDITIONS])
     assert rule(problem) is Rule.NUMBER
     assert "has 17," in problem.message  # type: ignore[union-attr]
+    assert check_citation("-0.3 to 19 V", quote, 1, [CONDITIONS]) is None
 
 
 def test_a_derived_value_skips_the_numbers_but_not_the_quote() -> None:
@@ -470,8 +502,9 @@ def test_a_dash_after_a_letter_backs_neither_reading(value: str) -> None:
     "value, quote",
     [
         ("2.7 to 3.6 V", "Supply 2.7V-3.6V range"),  # a range written with units
-        ("3.0 to 5.5 V", "Supply voltage 3.0 – 5.5 V"),  # a spaced en dash
-        ("-40 to 125 °C", "Operating temperature −40 to 125 ºC"),
+        ("-40 to 125 °C", "Operating temperature, TA = −40 to 125 ºC"),
+        ("-40 to 85 °C", "Operating range: −40°C-85°C ambient"),
+        ("5 to 10 %", "Duty cycle 5%-10% nominal"),
     ],
 )
 def test_ranges_keep_their_numbers_unsigned(value: str, quote: str) -> None:
@@ -479,11 +512,14 @@ def test_ranges_keep_their_numbers_unsigned(value: str, quote: str) -> None:
     assert missing(value, quote) == []
 
 
-def test_hours_read_as_hexadecimal_a_known_blind_spot() -> None:
-    """Pin that "12h" is hex, so hours are refused: a retry, never a wrong value."""
-    assert missing("12 h", "Data retention 12h minimum") == ["12"]
+def test_digits_and_h_are_a_code_neither_hours_nor_hex() -> None:
+    """Pin that "12h" backs only "12h": not 12, not 12 hours, not 0x12."""
+    page = "Data retention 12h minimum"
+    assert missing("12 h", page) == ["12"]
     assert missing("24h", "Data retention 24 h minimum") == ["24h"]
-    assert missing("12h", "Data retention 12h minimum") == []
+    assert missing("12h", page) == []
+    assert missing("0x12", page) == ["0x12"]
+    assert rule(check_citation("0x12", page, 1, [page])) is Rule.NUMBER
 
 
 @pytest.mark.parametrize(
@@ -494,17 +530,19 @@ def test_hours_read_as_hexadecimal_a_known_blind_spot() -> None:
         ("1.2 V", "Reference voltage 1.25 V", ["1.2"]),
         ("0x1A", "Register at 0x1F", ["0x1A"]),
         ("0x70", "Supply current 70 mA", ["0x70"]),
-        ("0x70", "Default address 70h", []),
-        ("10^6", "Endurance 10⁶ cycles", []),
+        # Changed on purpose: "70h" may be hours, and a superscript may be a footnote.
+        ("0x70", "Default address 70h", ["0x70"]),
+        ("10^6", "Endurance 10⁶ cycles", ["10^6"]),
         ("10^6", "Endurance 10^9 cycles", ["10^6"]),
         ("10^6", "Endurance 106 cycles", ["10^6"]),
-        ("1×10⁶", "Endurance 1×10⁹ cycles", ["10^6"]),
         ("10^-6", "Leakage 10⁻⁹ A max", ["10^-6"]),
         ("2", "Q1 2N7002 VGS 20 V", ["2"]),
         ("40", "Operating −40 to 125 ºC", ["40"]),
         ("1e-6", "Leakage 1e-9 A max", ["1e-6"]),
         ("1e-6", "Leakage 1e-6 A max", []),
-        ("-40 to 125", "Operating −40 to 125 ºC", []),
+        # Changed on purpose: "Operating" may start a range, so the sign is unknown.
+        ("-40 to 125", "Operating −40 to 125 ºC", ["-40"]),
+        ("-40 to 125", "Operating at −40 to 125 ºC", []),
         ("5 V", "pin-5 and a 5V rail", []),
     ],
 )
@@ -515,10 +553,13 @@ def test_the_behaviour_review_confirmed_still_holds(
     assert missing(value, quote) == absent
 
 
-def test_non_breaking_spaces_are_spaces() -> None:
-    """Accept a quote with plain spaces for a page with non-breaking ones."""
-    page = "Input voltage VIN –0.3 19 V"
-    quote = "Input voltage VIN -0.3 19 V"
+def test_non_breaking_spaces_are_spaces_except_between_digits() -> None:
+    """Match plain spaces to no-break ones, but read "0.3 19" as grouped: unknown."""
+    page = "Input voltage range:\u00a0–0.3\u00a019\u00a0V"
+    quote = "Input voltage range: -0.3 19 V"
+    assert citations.quote_on_page(quote, page)
+    assert missing("-0.3 to 19 V", quote, page) == ["-0.3", "19"]
+    page = "Input voltage range:\u00a0–0.3 19\u00a0V"
     assert check_citation("-0.3 to 19 V", quote, 1, [page]) is None
 
 
@@ -538,9 +579,6 @@ FRAGMENTS = {
     "exponent-negative": [("token", "-1e-6")],
     "hex-prefixed": [("token", "0x1F")],
     "hex-suffixed": [("token", "1Fh")],
-    "superscript": [("token", "10⁶")],
-    "superscript-signed": [("token", "10⁻⁶")],
-    "superscript-times": [("token", "1"), ("free", "×"), ("token", "10⁹")],
     "caret": [("token", "10^6")],
     "code-value": [("token", "4k7")],
     "code-rail": [("token", "3V3")],
@@ -557,9 +595,17 @@ FRAGMENTS = {
         ("free", "V"),
     ],
     "range-integers": [("token", "5"), ("dash", "-"), ("token", "40")],
-    "space-grouped": [("token", "1 000"), ("free", " mA")],
-    "table-cells": [("token", "-0.3 19"), ("free", " V")],
+    "table-cells": [("token", "-0.3"), ("free", " "), ("token", "19"), ("free", " V")],
 }
+# Unknown tokens: a quote may not cut them either, but they back no value at all.
+UNKNOWN_FRAGMENTS = {
+    "superscript": [("token", "10⁶")],
+    "superscript-signed": [("token", "10⁻⁶")],
+    "superscript-times": [("token", "1"), ("free", "×"), ("token", "10⁹")],
+    "space-grouped": [("token", "1"), ("free", " "), ("token", "000"), ("free", " mA")],
+    "footnote": [("token", "3.6¹"), ("free", " V")],
+}
+ALL_FRAGMENTS = {**FRAGMENTS, **UNKNOWN_FRAGMENTS}
 LEAD = "The rated level is "
 TAIL = " for this part."
 
@@ -567,7 +613,7 @@ TAIL = " for this part."
 def _cuts() -> list[tuple[str, str, str, bool]]:
     """Return (fragment, side, quote, allowed) for every cut of every fragment."""
     cases = []
-    for name, parts in FRAGMENTS.items():
+    for name, parts in ALL_FRAGMENTS.items():
         page = LEAD + "".join(text for _, text in parts) + TAIL
         at = len(LEAD)
         no_end: set[int] = set()
@@ -600,7 +646,7 @@ def test_every_cut_inside_a_token_is_refused(
     name: str, side: str, quote: str, allowed: bool
 ) -> None:
     """Refuse every quote cut inside a token; accept every cut between tokens."""
-    page = LEAD + "".join(text for _, text in FRAGMENTS[name]) + TAIL
+    page = LEAD + "".join(text for _, text in ALL_FRAGMENTS[name]) + TAIL
     assert citations.quote_on_page(page, page)
     assert citations.quote_on_page(quote, page) is allowed
 
@@ -628,8 +674,7 @@ NEAR = [
     (name, text, variant)
     for name, parts in FRAGMENTS.items()
     for role, text in parts
-    if role == "token"
-    and name not in ("decimal-comma", "thousands", "space-grouped", "table-cells")
+    if role == "token" and name not in ("decimal-comma", "thousands")
     for variant in _one_off(text)
     if any(character.isdigit() for character in variant.translate(SUPERSCRIPT_DIGITS))
 ]
@@ -657,3 +702,463 @@ def test_a_grouped_number_backs_no_value(name: str) -> None:
     assert missing(token, page) == [token]
     assert missing(token.replace(",", "."), page) != []
     assert missing(token.split(",")[0], page) != []
+
+
+# The third review's cases, end to end through check_citation. Each was accepted
+# before the grammar refused by default; each must now be refused, by the rule named.
+
+NBSP, THIN, NARROW = " ", " ", " "
+REVIEW_THREE = [
+    # H1: a digit-led word with letters outside the unit list is a code, whole.
+    ("1E", "Register address 1F (hex)", "Register address 1F (hex) default 00", "N"),
+    ("0B", "Reset value 0A for this reg", None, "N"),
+    ("7E", "Device ID register 7F", None, "N"),
+    ("2A", "Pin 7 2Y Output of gate 2", None, "N"),
+    ("1Y", "Pin 1 1A Input of gate 1", None, "N"),
+    ("1CLR", "Pin 2 1CLK clock input", None, "N"),
+    ("1010", "Address bits 1010b fixed", None, "N"),
+    # H2: digits grouped by a space are unknown on both sides.
+    ("100 cycles", "Write endurance 100 000 cycles", None, "N"),
+    ("1 mA", "Output current 1 000 mA max", None, "N"),
+    ("1 mA", f"Output current 1{THIN}000 mA max", None, "N"),
+    ("1 mA", f"Output current 1{NARROW}000 mA max", None, "N"),
+    ("1 mA", f"Output current 1{NBSP}000 mA max", None, "N"),
+    ("000 mA", f"Output current 1{THIN}000 mA max", None, "N"),
+    # M1: a sign before a code or hex number is outside the grammar.
+    ("-3V3", "Analog rail 3V3 supply", None, "V"),
+    ("-0x1F", "Register mask 0x1F", None, "V"),
+    ("-70h", "Default address 70h", None, "V"),
+    ("-2N7002", "Transistor 2N7002 here", None, "V"),
+    # M2: a dash after a number and a space has no certain role.
+    ("-3.6 V", "Supply voltage 2.7 –3.6 V", None, "N"),
+    ("3.6 V", "Supply voltage 2.7 –3.6 V", None, "N"),
+    ("-70 C", "Operating temp 0 –70 °C", None, "N"),
+    ("-3.6 V", "Supply voltage 2.7\n–3.6 V", None, "N"),
+    # M3: a soft hyphen or a dash look-alike next to a digit.
+    ("40 C", "Temperature ­40 to 85 C", None, "N"),
+    ("40 C", "Temperature ˗40 to 85 C", None, "N"),
+    ("40 C", "Temperature ➖40 to 85 C", None, "N"),
+    ("40 C", "Temperature ⸺40 to 85 C", None, "N"),
+    ("40 C", "Temperature ⁃40 to 85 C", None, "N"),
+    # M4: a flattened power of ten.
+    ("1 A", "Leakage 1 x 10-6 A max", None, "N"),
+    ("6", "Leakage 1 x 10-6 A max", None, "N"),
+    ("10 A", "Leakage 1 x 10-6 A max", None, "N"),
+    # Low.
+    ("10 cycles", "Endurance 10 ⁶ cycles", None, "N"),
+    ("2 VDD", "Threshold ½ VDD typical", None, "N"),
+    ("4", "Duty cycle ¾ of period", None, "N"),
+    ("102", "Value 10₂ binary here", None, "N"),
+    ("12", "Supply rail VEE- 12V here", None, "N"),
+    ("1.5", "Value 1.5 E-3 ohm here", None, "N"),
+    ("active low", "The RESET pin is active high", None, "V"),
+    ("five", "The RESET pin is active high", None, "V"),
+    ("", "The RESET pin is active high", None, "V"),
+    ("2 V", "Supply VDD(2) 3.6 V max", None, "N"),
+    ("1 V", "Supply VDD 3.6(1) V max", None, "N"),
+    # Hours read as hex: refused, not pinned as accepted.
+    ("0x12", "Data retention 12h minimum", None, "N"),
+]
+RULES = {"N": Rule.NUMBER, "V": Rule.VALUE}
+
+
+@pytest.mark.parametrize(
+    "value, quote, page, expected",
+    REVIEW_THREE,
+    ids=[f"{value!r}-{quote[:24]!r}" for value, quote, _, _ in REVIEW_THREE],
+)
+def test_the_third_review_cases_are_refused(
+    value: str, quote: str, page: str | None, expected: str
+) -> None:
+    """Refuse each value the third review showed accepted, by the rule that owns it."""
+    problem = check_citation(value, quote, 1, [quote if page is None else page])
+    assert rule(problem) is RULES[expected]
+
+
+def test_a_superscript_after_a_space_is_on_the_page_only_with_its_space() -> None:
+    """Refuse a quote that drops the space before "⁶": spacing between digits counts."""
+    page = "Endurance 10 ⁶ cycles"
+    assert rule(check_citation("10", "Endurance 10⁶ cycles", 1, [page])) is Rule.QUOTE
+
+
+def test_every_occurrence_of_the_quote_must_back_the_value() -> None:
+    """Refuse "-3.6" when one place says "2.7-3.6" and another "2.7 -3.6".
+
+    The first place backs neither "-3.6" nor (as a range) a sign; the second backs
+    nothing. One good place may not launder a bad one.
+    """
+    quote = "Supply voltage 2.7–3.6 V A"
+    page = "Supply voltage 2.7–3.6 V A. Supply voltage 2.7 –3.6 V A"
+    assert rule(check_citation("-3.6", quote, 1, [page])) is Rule.NUMBER
+    assert rule(check_citation("3.6 V", quote, 1, [page])) is Rule.NUMBER
+    assert check_citation("3.6 V", quote, 1, [quote]) is None
+    twice = "Default address 0x70. Reset value 0x00. Default address 0x70. Reset"
+    assert check_citation("0x70", "Default address 0x70.", 1, [twice]) is None
+    other = "Default address 0x70. Reset value 0x00. Default address 0x70h. Reset"
+    assert check_citation("0x70", "Default address 0x70", 1, [other]) is None
+    message = check_citation("0x71", "Default address 0x70.", 1, [twice])
+    assert "every one of the 2 places" in message.message  # type: ignore[union-attr]
+
+
+def test_the_quote_may_differ_from_the_page_and_the_page_decides() -> None:
+    """Judge the page's own numbers inside the quote, not the quote's spelling."""
+    page = "Output current 1 000 mA max"
+    quote = "Output current 1 000 mA max"
+    assert citations.quote_on_page(quote, page)
+    assert rule(check_citation("1 mA", quote, 1, [page])) is Rule.NUMBER
+    page = "Supply voltage 2.7 –3.6 V"
+    assert rule(check_citation("-3.6 V", "Supply voltage 2.7-3.6 V", 1, [page])) is (
+        Rule.NUMBER
+    )
+
+
+@pytest.mark.parametrize(
+    "value, quote, accepted",
+    [
+        ("active low", "The RESET pin is active low", True),
+        ("active low", "The RESET pin is active high", False),
+        ("low", "Inputs allow a low voltage", True),
+        ("low", "Inputs allow a high voltage", False),  # "low" inside "allow"
+        ("pull-up", "with an internal pullup resistor", True),
+        ("RESET", "The reset pin is active low", False),  # case is kept
+        ("", "The RESET pin is active low", False),
+        ("active †", "The RESET pin is active † low", False),
+    ],
+)
+def test_a_text_value_is_whole_words_of_the_quote(
+    value: str, quote: str, accepted: bool
+) -> None:
+    """Accept a text-only value only as whole words of the quote, in order."""
+    problem = check_citation(value, quote, 1, [quote], text_only=True)
+    assert (problem is None) is accepted
+    if not accepted:
+        assert rule(problem) is Rule.VALUE
+
+
+def test_a_text_value_must_be_in_every_occurrence() -> None:
+    """Refuse a text value that one occurrence of the quote has and another lacks."""
+    page = "RESET is active low, the pin. RESET is active, the pin low"
+    assert citations.quote_on_page("RESET is active", page)
+    problem = check_citation("active low", "RESET is active", 1, [page], text_only=True)
+    assert rule(problem) is Rule.VALUE
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["3.3 V †", "1×10⁶", "½", "19 000", "-4k7", "+0x10"],
+)
+def test_a_value_outside_the_grammar_is_refused_as_unreadable(value: str) -> None:
+    """Refuse a value with any part the grammar cannot read, before comparing it."""
+    quote = "Anything at all on this page"
+    problem = check_citation(value, quote, 1, [quote])
+    assert rule(problem) is Rule.VALUE
+    assert "cannot read" in problem.message  # type: ignore[union-attr]
+
+
+def test_a_derived_value_is_not_read() -> None:
+    """Let a derived value through on its quote alone: a person checks it."""
+    quote = "Leakage 1 x 10-6 A max"
+    assert check_citation("1e-6 A", quote, 1, [quote], derived=True) is None
+    assert check_citation("½ VDD", quote, 1, [quote], derived=True) is None
+
+
+def test_the_short_message_says_digit_spaces_count() -> None:
+    """Say that a space kept between digits counts towards the quote's length."""
+    problem = check_citation("6 V", "-0.3 6 V", 1, PAGES)
+    assert rule(problem) is Rule.SHORT
+    assert "a space between two digits stays and counts" in problem.message  # type: ignore[union-attr]
+
+
+def test_rule_names_say_what_failed() -> None:
+    """Name the pin rule "pin", like the others name their check."""
+    assert [r.value for r in Rule] == [
+        "page",
+        "quote-short",
+        "quote",
+        "value",
+        "number",
+        "pin",
+    ]
+
+
+# Widenings: each lets a right value through, and its test shows the wrong reading
+# next to it is still refused.
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        # After a function word a dash is a sign: "to" ends no range, is not subtracted.
+        ("-40 to -5 °C", "Range from −40 to −5 °C"),
+        # "+/-" is plus-minus: the number is a magnitude.
+        ("0.5 %", "Gain error +/-0.5 % max"),
+        # A times sign without 10 after it is no power of ten.
+        ("5 x 6 mm", "Package body 5 x 6 mm"),
+        # No grouped number has a group after a fraction of one or two digits.
+        ("1.5 to 250 mA", "Output current 1.5 250 mA"),
+        # A hyphen before a letter is no sign of anything.
+        ("4.5 V to 17 V", "4.5-V to 17-V Input"),
+    ],
+)
+def test_widenings_accept_these_right_values(value: str, quote: str) -> None:
+    """Accept the right values the widenings were made for."""
+    assert check_citation(value, quote, 1, [quote]) is None
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("-0.5 %", "Gain error +/-0.5 % max"),
+        ("-40", "Range VDD −40 to −5 °C"),
+        ("2 mm", "Package body 2 x 10 mm"),  # "x 10" refuses both
+        ("1.502 mA", "Output current 1.502 50 mA"),  # a fraction of three: maybe one
+        ("50 mA", "Output current 1.502 50 mA"),
+    ],
+)
+def test_widenings_still_refuse_the_wrong_readings(value: str, quote: str) -> None:
+    """Refuse the readings next to each widening that may be wrong."""
+    assert check_citation(value, quote, 1, [quote]) is not None
+
+
+# Right values that the grammar still refuses, on purpose. Each is pinned so that a
+# change to it is a decision, not an accident. The value must be written as the page
+# writes it, or marked derived.
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("0x1F", "Register address 1F default"),  # bare hex: also 1 farad
+        ("0x70", "Default address 70h here"),  # may be hours
+        ("1000 mA", "Output current 1 000 mA"),
+        ("1000 mA", "Output current 1,000 mA"),
+        ("1.5 V", "Threshold 1,5 V typical"),  # decimal comma
+        ("5 V", "Supply voltage 5.0 V typ"),
+        ("3.6 V", "Supply VDD 3.6¹ V max"),  # footnote superscript
+        ("3 A", "Output current 3A continuous"),  # "3A" is a code
+        ("-0.3 V", "Input voltage VIN -0.3 19 V"),  # after a symbol
+        ("-40 to 125 °C", "Operating temperature −40 to 125 °C"),  # after a noun
+        ("-5.0 V", "Negative rail VEE: −5.5 −5.0 −4.5 V"),  # second of a row
+        ("3.0 to 5.5 V", "Supply voltage 3.0 – 5.5 V"),  # spaced dash
+        ("2.7 to 3.6 V", "Supply voltage 2.7 V-3.6 V"),  # units and spaces
+        ("0x08 to 0x77", "Address range 0x08-0x77 valid"),  # hex range
+        ("10 to 20 dB", "Gain range: 10-20 dB here"),  # a range from 10
+        ("100 to 200 kHz", "Frequency 100 200 kHz"),  # may be 100200
+    ],
+)
+def test_right_values_the_grammar_still_refuses(value: str, quote: str) -> None:
+    """Refuse these right values: each has a reading in which it is wrong."""
+    assert check_citation(value, quote, 1, [quote]) is not None
+    assert check_citation(value, quote, 1, [quote], derived=True) is None
+
+
+# Generated: refuse by default. Put a character or construct the grammar has no rule
+# for next to a known token, and read every number a careless reader might see in the
+# page. None may be accepted, except the exact page word when the insert makes a code.
+
+BASE_TOKENS = ["19", "3.6", "-40", "0x1F", "2.5e6", "10^6", "4k7", ".25", "1.25"]
+OUTSIDE = {
+    "soft hyphen": "­",
+    "modifier minus": "˗",
+    "heavy minus": "➖",
+    "two-em dash": "⸺",
+    "hyphen bullet": "⁃",
+    "horizontal bar": "―",
+    "small em dash": "﹘",
+    "double oblique hyphen": "⸗",
+    "zero width space": "​",
+    "zero width non-joiner": "‌",
+    "zero width joiner": "‍",
+    "word joiner": "⁠",
+    "byte order mark": "﻿",
+    "superscript two": "²",
+    "superscript six": "⁶",
+    "superscript minus": "⁻",
+    "superscript plus": "⁺",
+    "superscript one": "¹",
+    "subscript two": "₂",
+    "subscript minus": "₋",
+    "one half": "½",
+    "three quarters": "¾",
+    "one third": "⅓",
+    "fraction slash": "⁄",
+    "arabic-indic three": "٣",
+    "devanagari three": "३",
+    "bengali three": "৩",
+    "thai three": "๓",
+    "mathematical bold three": "\U0001d7d1",
+    "asterisk": "*",
+    "dagger": "†",
+    "double dagger": "‡",
+    "caret": "^",
+    "middle dot": "·",
+    "dot operator": "⋅",
+    "bullet operator": "∙",
+    "square root": "√",
+    "per mille": "‰",
+    "combining acute": "́",
+    "ellipsis": "…",
+}
+GROUPING_SPACES = {
+    "no-break space": " ",
+    "figure space": " ",
+    "thin space": " ",
+    "narrow no-break space": " ",
+    "en space": " ",
+    "hair space": " ",
+    "medium mathematical space": " ",
+    "ideographic space": "　",
+}
+LETTER_SUFFIXES = ["Q", "Y", "b", "h", "E", "CLK", "x", "Z", "B", "D", "Fh", "sec"]
+SUPERSCRIPT_DIGITS_ALL = str.maketrans(
+    "⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺₀₁₂₃₄₅₆₇₈₉₋", "0123456789-+0123456789-"
+)
+NUMBER_LIKE = re.compile(
+    r"[-+]?(?:0[xX][0-9A-Fa-f]+|\d+(?:\.\d+)?(?:[eE^][-+]?\d+)?|\.\d+)"
+)
+
+
+def _candidates(page: str, token: str, insert: str) -> set[str]:
+    """Return every number a careless reader might take from ``page``."""
+    seen = set()
+    readings = [
+        page,
+        unicodedata.normalize("NFKC", page),
+        page.translate(SUPERSCRIPT_DIGITS_ALL),
+        "".join(c for c in page if c.isprintable() and not unicodedata.combining(c)),
+    ]
+    for text in readings:
+        seen.update(NUMBER_LIKE.findall(text))
+    unsigned = token.lstrip("-")
+    plain = unicodedata.normalize("NFKC", insert).translate(SUPERSCRIPT_DIGITS_ALL)
+    seen.update(
+        {token, unsigned, "-" + unsigned, "+" + unsigned, unsigned + plain}
+        | {plain + unsigned, token + insert, insert + token, "0x" + unsigned}
+    )
+    seen.update(c.strip() for c in list(seen))
+    return {c for c in seen if any(ch.isdigit() for ch in c)}
+
+
+def _outside_cases() -> list[tuple[str, str, str, frozenset[str]]]:
+    """Return (name, page, token, allowed) for every insert next to every token."""
+    cases = []
+    for token in BASE_TOKENS:
+        for name, insert in OUTSIDE.items():
+            for where, middle in [
+                ("after", token + insert),
+                ("before", insert + token),
+                ("spaced-after", token + " " + insert),
+                ("spaced-before", insert + " " + token),
+                ("between", token + insert + "5"),
+            ]:
+                page = LEAD + middle + TAIL
+                # "19^5" is a power written with a caret: the one insert that makes
+                # a word of the grammar, which backs only itself.
+                power = insert == "^" and where == "between" and "^" not in token
+                allowed = frozenset({middle}) if power else frozenset()
+                cases.append((f"{token}-{name}-{where}", page, token + insert, allowed))
+        if token[-1].isdigit():
+            for name, space in GROUPING_SPACES.items():
+                for right in ("5", "000", "25"):
+                    page = LEAD + token + space + right + TAIL
+                    cases.append((f"{token}-{name}-{right}", page, token, frozenset()))
+        for suffix in LETTER_SUFFIXES:
+            word = token + suffix
+            page = LEAD + word + TAIL
+            cases.append((f"{token}-{suffix}", page, token + suffix, frozenset({word})))
+    return cases
+
+
+OUTSIDE_CASES = _outside_cases()
+
+
+@pytest.mark.parametrize(
+    "page, token, allowed",
+    [case[1:] for case in OUTSIDE_CASES],
+    ids=[case[0] for case in OUTSIDE_CASES],
+)
+def test_nothing_outside_the_grammar_backs_a_value(
+    page: str, token: str, allowed: frozenset[str]
+) -> None:
+    """Accept no number read next to an unknown construct, but the exact page word."""
+    accepted = {
+        value
+        for value in _candidates(page, token, token)
+        if check_citation(value, page, 1, [page]) is None
+    }
+    assert accepted <= allowed
+
+
+DASHES = ["-", "−", "‐", "‑", "‒", "–", "—", "﹣", "－"]
+# Constructs where a dash's role is not certain, and the numbers that stay certain.
+UNCERTAIN_DASHES = [
+    ("Input high VDD{d}0.3 V max", set()),
+    ("Supply rail 2.7 {d}3.6 V", {"2.7"}),
+    ("Supply rail 2.7\n{d}3.6 V", {"2.7"}),
+    ("Supply rail 3.0 {d} 5.5 V", {"3.0"}),
+    ("Supply rail 2.7{d} 3.6 V", {"2.7"}),
+    ("Leakage level 10{d}6 A", set()),
+    ("Leakage level 10{d}12 A", set()),
+    ("Leakage level 10 {d}6 A", set()),
+    ("Leakage level 1 x 10{d}6 A", set()),
+    ("Leakage level 1 × 10 {d}6 A", set()),
+    ("Leakage level 1x10 {d}6 A", set()),
+    ("Input voltage VIN {d}0.3 19 V", {"19"}),
+    ("Supply rail VEE{d} 12V here", set()),
+    ("Value level 1.5 E{d}3 ohm", set()),
+    ("Analog rail 3V3{d}5 V here", {"5"}),
+    ("Transistor 2N7002{d}7 here", set()),
+    ("Sweep from 5{d}3 V here", set()),
+    ("Address range 0x08{d}0x77 here", set()),
+    ("Supply rail ½{d}40 V here", set()),
+    ("Supply rail 5 {d}{d}3 V here", {"5"}),
+]
+
+
+@pytest.mark.parametrize("dash", DASHES)
+@pytest.mark.parametrize("template, certain", UNCERTAIN_DASHES)
+def test_a_dash_with_no_certain_role_backs_no_sign(
+    template: str, certain: set[str], dash: str
+) -> None:
+    """Refuse every number a dash of uncertain role touches, signed or not."""
+    page = template.format(d=dash)
+    candidates = set(
+        NUMBER_LIKE.findall(page.translate(str.maketrans(dict.fromkeys(DASHES, "-"))))
+    )
+    candidates |= {c.lstrip("-+") for c in candidates} | {
+        "-" + c.lstrip("-+") for c in candidates
+    }
+    accepted = {
+        value for value in candidates if check_citation(value, page, 1, [page]) is None
+    }
+    assert accepted <= certain
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("2 VDD", "Threshold 1/2 VDD typical"),  # a fraction, not 1 and 2
+        ("30 min", "Reset at 12:30 each day"),  # a time
+        ("6 mm", "Package body 5×6 mm"),  # glued: one character between digits
+        ("3", "Ratio of 1:3 here and"),
+    ],
+)
+def test_one_character_between_two_digits_makes_both_unknown(
+    value: str, quote: str
+) -> None:
+    """Refuse a number that a "/", ":" or "×" glues to another number."""
+    assert rule(check_citation(value, quote, 1, [quote])) is Rule.NUMBER
+
+
+@pytest.mark.parametrize(
+    "value, quote",
+    [
+        ("3.6 V", "Supply ½ 2.7-3.6 V here"),  # the first end is unknown
+        ("2.7 V", "Supply 2.7-3.6 * V here"),  # the second end is unknown
+    ],
+)
+def test_a_range_is_as_known_as_its_less_known_end(value: str, quote: str) -> None:
+    """Refuse one end of a range when the other end is unknown: the dash then is too."""
+    assert rule(check_citation(value, quote, 1, [quote])) is Rule.NUMBER
+    clean = quote.replace("½ ", "").replace(" *", "")
+    assert check_citation(value, clean, 1, [clean]) is None
