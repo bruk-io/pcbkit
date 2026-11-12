@@ -161,8 +161,8 @@ A range whose one end is unknown makes the other unknown too.
 
 Units. A number's stated unit is the unit glued to it ("19V", "4.7k", "85%",
 "25°C"); the unit joined to it by a hyphen, as TI writes component values ("6.8-pF",
-"10-kΩ", "60-V": a hyphen and then a word that is a unit, never a number, so the
-range "2.7-3.6 V" states nothing for 2.7); or the word right after it across white
+"10-kΩ", "60-V", "5-%": a hyphen and then a unit, never a number, so the range
+"2.7-3.6 V" states nothing for 2.7); or the word right after it across white
 space ("19 V", "45  µA", and a unit column that ``-layout`` put on the next line).
 The unit is a word of ``_UNITS``, a prefix, or a prefix and a unit, or is "%" or "°"
 with "C", "F" or "K". Reading a unit across a line break only refuses more: measured
@@ -374,7 +374,9 @@ _HEX = re.compile(r"0[xX]([0-9A-Fa-f]+)|([0-9][0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)[
 # Digits and "Ah": hex ("2Ah" is 0x2A) or ampere-hours ("2 Ah"). Neither: a code.
 _AMPERE_HOURS = re.compile(r"\d+Ah")
 # One upper-case letter after an integer is a pin name as often as a unit or prefix:
-# "1G" (output enable), "2S", "1K", "3M", "4H", "1W". Such a word is a code.
+# "1G" (output enable), "2S", "1K", "3M", "4H", "1W". Such a word is a code. "H" is
+# also a code by the hex and hours rule (``_HEX_LETTERS`` takes a lone "h" or "H"),
+# so it is listed for the reader: removing it alone changes nothing.
 _PIN_LETTERS = frozenset("GSKMHW")
 _EXPONENT = re.compile(_MANTISSA + r"[eE][-+]?\d+")
 _POWER = re.compile(r"\d+(?:\.\d+)?\^[-+]?\d+")
@@ -720,14 +722,8 @@ def _stated_unit(lexemes: Sequence[_Lexeme], token: _Token) -> str:
     if not unit:
         at = token.word + 1
         between = _get(lexemes, at)
-        joined = _get(lexemes, at + 1)
-        if (
-            _is_char(between, "-")
-            and joined is not None
-            and joined.lex is _Lex.WORD
-            and _is_unit(joined.text)
-        ):
-            at += 1  # "6.8-pF", "60-V": a unit joined by a hyphen
+        if _is_char(between, "-"):
+            at += 1  # "6.8-pF", "60-V", "5-%": joined by a hyphen, if a unit below
         elif between is not None and between.lex is _Lex.SPACE:
             at += 1
         following = _get(lexemes, at)

@@ -629,6 +629,8 @@ CAPACITANCE = "6.8-pF capacitance is recommended for R2 of 100-kΩ resistance"
         ("±20 mV", "60-V VDS(MAX) and ±20-V VGS(MAX)"),
         ("60 A", "Rated 60-V VDS(MAX) here"),
         ("10 µs", "PH (10-ns transient from ground)"),
+        ("5 V", "Use a 5-% tolerance part"),
+        ("25 °F", "Rated at 25-°C ambient"),
     ],
 )
 def test_a_unit_joined_by_a_hyphen_is_compared(value: str, quote: str) -> None:
@@ -649,6 +651,7 @@ def test_a_unit_joined_by_a_hyphen_is_compared(value: str, quote: str) -> None:
         ("4.5 V to 17 V", "4.5-V to 17-V Input"),
         ("2.7 V", "Supply voltage 2.7-3.6 V range"),  # a range dash, not a unit
         ("10 ns", "PH (10-ns transient from ground)"),
+        ("4 V", "Route on a 4-layer board stack"),  # "layer" is no unit
     ],
 )
 def test_a_unit_joined_by_a_hyphen_backs_the_same_unit(value: str, quote: str) -> None:
@@ -1155,6 +1158,7 @@ def test_the_short_message_says_how_spaces_count() -> None:
         ("VIN\u200b 4.5 28", True),  # nor an invisible character
         ("-0.3 6 V", True),
         ("SW –2 32 V", True),  # 10
+        ("VIN        4.5", True),  # 7: a long run of spaces is still one
     ],
 )
 def test_w3_each_white_space_run_counts_one_toward_the_minimum(
@@ -1162,6 +1166,7 @@ def test_w3_each_white_space_run_counts_one_toward_the_minimum(
 ) -> None:
     """Count a quote's length with each white-space run as one character."""
     page = "Supply VIN 4.5 28 V max\nVIN    4.5    28    V\nIQ 45 µA max\nSW –2 32 V"
+    page += "\nVIN        4.5 max"
     page += "\nVIN\u200b 4.5 28"
     problem = check_citation("4.5", quote, 1, [page + "\n" + quote])
     assert (rule(problem) is Rule.SHORT) is short
@@ -1232,6 +1237,12 @@ def test_w3_counts_the_page_spacing_not_the_quotes(
 ) -> None:
     """Refuse a quote whose length comes from spaces the page does not have."""
     assert rule(check_citation(value, quote, 1, [page])) is Rule.SHORT
+
+
+def test_w3_counts_a_quote_on_no_page_without_its_end_spaces() -> None:
+    """Call a quote short, not missing, when only spaces at its ends make it long."""
+    problem = check_citation("4.5", "   VIN 4.5 28   ", 1, ["Other text only"])
+    assert rule(problem) is Rule.SHORT
 
 
 def test_w3_counts_the_shortest_place_the_quote_is() -> None:
