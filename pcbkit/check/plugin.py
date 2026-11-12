@@ -525,6 +525,24 @@ def pytest_deselected(items: list[pytest.Item]) -> None:
         state.deselected += len(items)
 
 
+def _held_everything_back(config: pytest.Config, state: State, exitstatus: int) -> bool:
+    """Say whether a gated run found nothing to run only because of the gate.
+
+    True for pytest's "no tests collected" when the gate held back at least one check
+    and nothing else narrowed the run: no ``-k``, no ``-m`` and nothing deselected.
+    With a ``-k`` the held-back checks leave nothing to test the expression against,
+    so a mistyped one could not be told from a good one, and it keeps pytest's 5.
+    """
+    return (
+        exitstatus == pytest.ExitCode.NO_TESTS_COLLECTED
+        and state.gate is not None
+        and bool(state.waiting)
+        and not config.option.keyword
+        and not config.option.markexpr
+        and state.deselected == 0
+    )
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Write out/checks/results.json, unless the run only collected."""
     config = session.config
@@ -534,6 +552,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     # A run that selected nothing still writes (an empty list), so the results of an
     # earlier run are never mistaken for this one's.
     checks = {k: v for k, v in state.results.items() if v["outcome"]}
+    if _held_everything_back(config, state, exitstatus):
+        # Nothing failed and nothing was mistyped: the gate held every selected check
+        # back, so pytest's "no tests collected" (5) is not an error. Set here, before
+        # the file is written, so the exit status in results.json is the one returned.
+        exitstatus = session.exitstatus = pytest.ExitCode.OK
     for key, entry in checks.items():
         entry["gate"] = state.gates.get(key)
     counts: dict[str, int] = {}

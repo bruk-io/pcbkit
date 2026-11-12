@@ -134,7 +134,9 @@ pcbkit report                                       # write out/checks/VALIDATIO
 ```
 
 `-k` is pytest's own expression (`-k led`, `-k "led or resistor"`, `-k "not drc"`). The
-exit code is pytest's: 0 all passed, 1 a check failed, 5 nothing matched.
+exit code is pytest's: 0 all passed, 1 a check failed, 5 nothing matched. The one
+change is a `--gate` that held back every check, with no `-k` or `-m` given: that exits
+0, because nothing failed and nothing was mistyped.
 
 Every run writes `out/checks/results.json`: one entry per check with its outcome, the
 message of a failure or the reason for a skip, and the numbers it recorded. `pcbkit report`

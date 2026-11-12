@@ -322,6 +322,57 @@ def test_gated_out_checks_are_counted_apart_from_k_deselections(
     assert selection["keyword"] == "test_nets or test_tracks"
 
 
+@pytest.fixture
+def later_gates_only(project: Path) -> Path:
+    """Return a project whose every check is for a later gate than ``sch``."""
+    checks_file(
+        project,
+        "test_board_side.py",
+        "def test_tracks(board):\n    assert board is not None\n",
+    )
+    return project
+
+
+def test_a_gate_that_holds_back_every_check_exits_zero_and_still_writes_results(
+    later_gates_only: Path,
+) -> None:
+    """Exit 0, not pytest's 5, when the gate alone left nothing to run."""
+    done = run(later_gates_only, gate="sch")
+    assert done.done.returncode == 0, done.done.stdout
+    results = done.results
+    assert results["exit_status"] == 0
+    assert results["gate"] == "sch"
+    assert results["waiting"] == {"checks/test_board_side.py::test_tracks": "route"}
+    assert results["selection"]["gated_out"] == 1
+    assert results["selection"]["complete"] is False
+    assert done.checks == {}
+
+
+def test_a_run_that_selects_nothing_still_exits_five_without_a_gate_or_with_k(
+    later_gates_only: Path,
+) -> None:
+    """Keep 5 for no gate and nothing to run, and for -k with every check held back."""
+    ungated = run(later_gates_only, "test_nothing_has_this_name")
+    assert ungated.done.returncode == 5, ungated.done.stdout
+    assert ungated.results["gate"] is None
+    with_k = run(later_gates_only, "test_nothing_has_this_name", gate="sch")
+    assert with_k.done.returncode == 5, with_k.done.stdout
+    assert with_k.results["exit_status"] == 5
+    assert with_k.results["waiting"] == {
+        "checks/test_board_side.py::test_tracks": "route"
+    }
+
+
+def test_a_k_that_matches_nothing_exits_five_at_a_gate_that_held_checks_back(
+    gated_project: Path,
+) -> None:
+    """Keep 5 when -k left out every check the gate let through."""
+    done = run(gated_project, "test_nothing_has_this_name", gate="sch")
+    assert done.done.returncode == 5, done.done.stdout
+    assert done.results["selection"]["gated_out"] == 2
+    assert done.results["selection"]["deselected"] == 8
+
+
 def test_an_item_that_is_not_a_function_is_not_gated_and_does_not_crash(
     gated_project: Path,
 ) -> None:

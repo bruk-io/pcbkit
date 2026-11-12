@@ -728,8 +728,9 @@ describe an earlier export.
 the built-in checks of the groups listed in `[checks] groups`, and your own, the
 `test_*.py` files in `checks/`. It needs pcbnew (`pcbkit setup` makes the project's
 `.venv` that has it; `--gate sch` is the exception, see "Gates") and exits with pytest's
-code: 0 all passed, 1 a check failed, 5 nothing matched. `-k` is pytest's own
-expression. `pcbkit mutants` shows that the checks bite (below), and
+code: 0 all passed, 1 a check failed, 5 nothing matched (0 when a `--gate` alone held
+every check back, see "Gates"). `-k` is pytest's own expression. `pcbkit mutants` shows
+that the checks bite (below), and
 `pcbkit report` turns the last run into a report.
 
 A built-in check reads its numbers from your `specs.py`, and the operating points of the
@@ -808,7 +809,11 @@ A check's gate is the earliest gate at which its inputs exist, worked out in thi
 With a gate, `results.json` has `"gate"` (the gate asked for; null for a run with no
 gate), `"waiting"` (the id of each check held back, with its gate) and
 `selection.gated_out` (how many that is, apart from `deselected`, which counts what `-k`
-and `-m` left out). Each check's entry has its own `gate`. `selection.complete` is false
+and `-m` left out). Each check's entry has its own `gate`. If the gate held back every
+selected check (`--gate sch` on a project whose groups are all later ones), `pcbkit check`
+exits 0 and not 5: nothing failed and nothing was mistyped. It still writes
+`results.json`, with `gate`, `waiting` and `gated_out`. A run with no gate, and any run
+with `-k` or `-m`, still exits 5 when no check ran. `selection.complete` is false
 for any gate before `order`, so `pcbkit report` marks the run partial and the order
 preflight refuses it, naming the gate. `--gate order` runs everything, so it is a full run.
 
