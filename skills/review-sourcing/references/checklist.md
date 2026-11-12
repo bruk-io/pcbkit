@@ -10,7 +10,6 @@ Read on demand from SKILL.md. Where a line below is already a check or a `pcbkit
 | Market stock and price | At least one authorised distributor (for example Digi-Key, Mouser, LCSC, Arrow) | Stock, price break at needed quantity, lead time if out of stock, date |
 | Lifecycle | Manufacturer product page first; distributor lifecycle field second | Active / NRND / last-time-buy / obsolete, and any PCN date |
 | Assembler limits | The assembler's current assembly capabilities page and an actual quote for this BOM | Page URL and date; quote number |
-| Fab standard service | The fab's current capabilities page and instant quote with this board's parameters | Which parameters move the quote off the standard price |
 
 Aggregators (Octopart, FindChips) are fine for finding sources, but record the distributor figure, not the aggregator summary.
 
@@ -63,11 +62,11 @@ Read the assembler's current pricing and capability pages for each of these, and
 
 ## Assembly correctness
 
-- **Polarity and pin-1 visible after placement.** The mark must be outside the part body or it disappears under the part. For connectors, mark pin 1 on silkscreen and confirm it matches the mating cable convention.
+- **Polarity and pin-1 visible after placement.** Whether a mark sits outside the body is the `POLARITY_MARKS` check's; judge whether it matches the mating cable's convention for connectors.
 - **Footprint matches the exact ordered part number.** Open the datasheet for the ordered MPN, not the family page. Check the package variant suffix: pad count, exposed pad size and paste pattern, pitch, body size, height, and for connectors entry direction (top vs side), mount (SMD vs THT), locating pegs or bosses, and retention tabs.
 - **Placement orientation against the assembler's convention.** KiCad rotation follows the footprint's own zero orientation; assemblers use their own convention (often based on the tape orientation or an industry zero-orientation standard). Check whether the assembler expects you to correct rotations or corrects them itself, and whether they send a placement preview for approval. Ask for the preview on every first order of a footprint and record which parts needed correction.
 - **Placement origin and units.** Placement file origin matches what the assembler expects (board origin, auxiliary origin), units are stated, bottom-side X is or is not mirrored per their convention.
-- **Fiducials.** Present, on each assembled side, with the clearance the assembler asks for; local fiducials near fine-pitch parts if they require them.
+- **Fiducials.** Count and clearance are the `FIDUCIALS` check's; read whether the assembler wants local fiducials near fine-pitch parts too.
 - **Exposed pads.** Thermal pad paste reduced (windowpane) where the datasheet recommends it.
 - **Height and keep-outs.** Tall parts near board edges or under mating parts.
 
@@ -97,19 +96,3 @@ Connector families have many near-identical part numbers. Confirm, for each conn
 - Joints on large copper pours or planes have thermal relief, or the designer accepts needing a hotter iron and preheat.
 - THT holes sized for the actual lead (from the ordered part's datasheet) and annular ring adequate.
 - The parts and any mating housings are on the designer's own order.
-
-## Fab service tier
-
-Extract from the fab outputs or board definition and compare with the fab's current standard-service limits:
-
-- Layer count.
-- Finished copper weight, outer and inner.
-- Minimum trace and space.
-- Minimum drill and annular ring; via-in-pad, plugged or filled vias.
-- Board thickness.
-- Impedance control requested or not.
-- Surface finish (and whether fine-pitch parts need a flatter finish than HASL).
-- Solder mask and silkscreen colour (non-standard colours often change price or lead time).
-- Board outline features: castellations, slots, edge plating.
-
-Each parameter outside standard service is a COST finding with the quote delta, or a question if it may not be needed.
