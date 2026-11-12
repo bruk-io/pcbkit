@@ -161,7 +161,16 @@ def test_a_listed_pad_the_part_does_not_have_fails_as_not_a_pad(
     nl = netlist(board())
     report = ports.compare(nl, "J1", {"1": "VIN", "2": "GND", "9": net})
     assert report.wrong == ["pad 9: not a pad of J1"]
-    assert report.found["9"] is None
+    assert report.not_pads == ["9"]
+    assert "9" not in report.found  # None in found means unwired, never "no such pad"
+
+
+def test_an_unwired_pad_is_found_as_none_and_is_not_a_missing_pad() -> None:
+    """Keep None in found for a pad the part has and leaves unwired."""
+    nl = netlist(board())
+    report = ports.compare(nl, "J1", {"3": None})
+    assert report.found == {"3": None}
+    assert report.not_pads == []
 
 
 def test_a_net_written_with_a_leading_slash_says_names_carry_none() -> None:
@@ -194,7 +203,10 @@ def test_a_part_that_is_not_a_connector_needs_only_its_listed_pads() -> None:
 def test_a_part_missing_from_the_design_has_no_pad_of_the_row() -> None:
     """Compare against nothing: each pad of the row is not a pad."""
     nl = netlist(board())
-    assert ports.compare(nl, "J9", {"1": "VIN"}).wrong == ["pad 1: not a pad of J9"]
+    report = ports.compare(nl, "J9", {"1": "VIN"})
+    assert report.wrong == ["pad 1: not a pad of J9"]
+    assert report.found == {}
+    assert report.not_pads == ["1"]
 
 
 def test_unlisted_connectors_are_the_ones_that_are_not_keys() -> None:

@@ -82,12 +82,14 @@ def found_nets(nl: Netlist, ref: str) -> dict[str, str | None]:
 class PortReport:
     """What comparing one part with its row of the map found.
 
-    ``found`` is the net of every pad listed in the row; ``wrong`` has one line for
+    ``found`` is the net of every listed pad the part has (None: unwired);
+    ``not_pads`` the listed pads the part does not have; ``wrong`` has one line for
     each listed pad whose net is not the one the row says; ``unlisted`` is the wired
     pads the row does not list (``{pad: net}``), only for a connector.
     """
 
     found: dict[str, str | None] = field(default_factory=dict)
+    not_pads: list[str] = field(default_factory=list)
     wrong: list[str] = field(default_factory=list)
     unlisted: dict[str, str] = field(default_factory=dict)
 
@@ -106,10 +108,12 @@ def compare(nl: Netlist, ref: str, row: dict[str, str | None]) -> PortReport:
     report = PortReport()
     for pad in sorted(row, key=natkey):
         got = actual.get(pad)
-        report.found[pad] = got
         if pad not in actual:
+            report.not_pads.append(pad)
             report.wrong.append(f"pad {pad}: not a pad of {ref}")
-        elif got != row[pad]:
+            continue
+        report.found[pad] = got
+        if got != row[pad]:
             slash = (
                 " (net names carry no leading slash)"
                 if got is not None and row[pad] is not None and row[pad] == "/" + got

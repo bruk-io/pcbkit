@@ -150,7 +150,7 @@ def test_a_row_for_a_part_that_is_not_in_the_design_fails_by_name(
     assert entry["message"].strip() == (
         "AssertionError: J9 is in specs.PIN_NETS but not in the design"
     )
-    assert entry["numbers"] == {"pins": {"1": None}}
+    assert entry["numbers"] == {"pins": None}
     assert outcomes(result)[f"{PER_PART}[J1]"] == "passed"
 
 
@@ -192,7 +192,8 @@ def test_a_pad_the_connector_does_not_have_fails_as_not_a_pad(
     entry = go(tmp_path, "no-pad", board(), specs).entry(f"{PER_PART}[J1]")
     assert entry["outcome"] == "failed"
     assert "pad 9: not a pad of J1" in entry["message"]
-    assert entry["numbers"]["pins"]["9"] is None
+    assert "9" not in entry["numbers"]["pins"]
+    assert entry["numbers"]["not pads"] == ["9"]
 
 
 def test_a_controller_pad_on_the_wrong_net_fails_its_own_row(tmp_path: Path) -> None:

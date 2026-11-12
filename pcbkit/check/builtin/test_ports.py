@@ -36,13 +36,19 @@ def test_port_pins_carry_their_nets(
 ) -> None:
     """Give each pad of a listed part the net its row says, and list a connector's all.
 
-    Records ``pins``: ``{pad: net or None}`` as the netlist has each listed pad.
+    Records ``pins``: ``{pad: net or None}`` as the netlist has each listed pad the
+    part has (None: unwired), and ``not pads``, the listed pads the part does not
+    have, when there are any. A part that is not in the design records ``pins`` as
+    None.
     """
     row = tables.read(specs, "PIN_NETS")[ref]
     report = ports.compare(nl, ref, row)
-    record("pins", report.found)
     if ref not in nl.parts:
+        record("pins", None)
         raise AssertionError(f"{ref} is in specs.PIN_NETS but not in the design")
+    record("pins", report.found)
+    if report.not_pads:
+        record("not pads", report.not_pads)
     problems = list(report.wrong)
     problems += [
         f"pad {pad}: wired to {net} but not listed"
