@@ -476,6 +476,7 @@ All are verifiable with no KiCad. Sizes: A medium, B large, C small, D large, F 
 | M7 | The validator against real boards | `pcbkit specs` on the owner's own boards. Report only the error count and the table names, never the contents. | 0 errors |
 | M8 | 2xN pad numbering | Read the pad positions of `PinHeader_2x05_P2.54mm_Vertical` and a 1x04 JST footprint | Odd pads in one row, even in the other; a 180° turn maps k to N+1−k |
 | M9 | Pin function names in stock symbols | Export a netlist of a schematic with `Device:D`, `D_Schottky`, `D_Zener`, `LED`, `Q_NMOS_GSD`, `Q_PMOS_GSD`, `AO3401A`, `2N7002` | Diodes A/K, FETs G/D/S |
+| M10 | Real boards with `dc.build(nl, extended=True)` | On the owner's own boards: switch each `circuits.scenario` to `extended=True`, run `pcbkit check --gate sch` with `power` on, and record per board the count of checks that change outcome, every "already modelled" error (a hand model `extended` now duplicates), and the lines of scenario and table each needed to pass. Report counts and part kinds only, never a board's contents | Two generic boards here went green with 5 and 4 scenario lines; real boards unknown |
 
 ## Collisions with the branches in flight
 
@@ -812,3 +813,76 @@ What `dc.py` changes would remove false failures (not made: out of scope):
   a pin held only by one fails A as floating (the plan's risk, unchanged).
 - Neither check needed `dc.py` changed to be fail-safe: "not modelled" is worked out
   from the circuit's own elements (`faults.element_nets`).
+
+## Review of A and F, and the decisions after it (2026-11-12)
+
+The independent review (`/tmp/wp17/af-review.md`) confirmed every plan acceptance point
+for both checks and killed all plants but one, and rejected both: one reproducible false
+pass each (A-B1: a FET with a floating gate decided a pin; F-B1: a rail brought in on a
+connector and not fixed read as 0 V through a divider), two majors (A-M1: a scenario
+keyword that lands in `**kwargs`; F-M1: row pins that swap readable names), minors
+(A-m1 to A-m4, F-m1, F-m2), a docs nit and a test gap (capacitor rule). It also found F
+too noisy to stay on: TVS diodes at their standoff, gate Zeners and dual parts failed
+with no honest way out, and `R_Small`, `R_US`, `Device:D` and generic FET symbols had
+to be modelled by hand on almost every board.
+
+All findings are fixed, each with a test shown failing first and a plant. Decisions:
+
+- **F-m2:** a diode is judged on its reverse voltage only.
+- **Capacitors:** a two-pad part whose reference letters are `C`, from any library, is
+  open at DC; nothing else is exempt.
+- **`SEMI_VRATED` rows** may give `"elements": [{"pins": ...}]`, each element judged on
+  its own against the row's rating (the pads-left-out rule uses their union); a `vrwm`
+  row is a TVS judged at its standoff with a default derate of 1.0; a `vz` row is a
+  Zener clamp, recorded as a clamp and not held to a rating, failing when the model
+  shows more than `vz` plus 5 % across it (the model has no breakdown). Both still need
+  the part modelled. A row is the designer's statement: a rectifier written as a TVS or a
+  clamp is judged as one, and `numbers` records the kind.
+- **`SEMI_NOT_JUDGED = {ref: reason}`** (optional) declares parts out of F's reach,
+  recorded with the reason; a ref not in the design fails; a declared part with a
+  rating row is judged anyway.
+- **`dc.py`:** a 0 ohm `Device:R` is 1 milliohm; a not-fitted mark alone leaves a
+  resistor out; a current source counts as a drive in `Solution.floating`. These change
+  nothing that solved before (a 0 ohm resistor divided by zero in the solve, a `DNP`
+  value raised in `parse_value`, and only A and F call `floating`); the generic toy's
+  `circuit` and `esp32s3` results are byte-identical through the old and new `dc.py`.
+- **`dc.build(nl, extended=True)` is opt-in** (default False): `R_Small`, `R_US`,
+  `R_Small_US`; two-pad `Device` diodes by their A/K pins; Zeners and TVSs forward only
+  (listed in `circuit.forward_only`, with one `<ref>.breakdown` element allowed each);
+  generic `Q_NMOS_*`/`Q_PMOS_*` by their G/D/S pin names; body diodes on every FET; and
+  a part modelled twice raises, naming it. It is opt-in because real boards rely on
+  today's `build` and none can be run here: switching it on changes what every
+  scenario solves (body diodes conduct, parts the scenario modelled by hand are now
+  refused). Running real boards with it is M10, an experiment for the owner's machine.
+
+Found after the review, while measuring (each fixed, tested and planted):
+
+- an extended circuit could not be deep-copied, and A copies every circuit for its
+  smaller-leak solve: every extended board would have crashed A;
+- `extended` Zeners and TVSs are forward only, so one that would break down into a
+  pin's nets read as "modelled" and A passed a pin it lifts. A and F now fail a part in
+  `forward_only` with more than 1 V reverse on the nets they judge, unless the scenario
+  models its breakdown or fixes the clamped net;
+- a resistor valued `100k DNP` is modelled as fitted by `dc.build` (unchanged, to keep
+  `circuit` byte-identical), so A and F now name it on the nets they judge; one valued
+  `DNP` alone is absent and no longer named;
+- row pins for unnamed pins that contradict the scenario's own diode or FET for the
+  part fail, so a swapped anode and cathode is not read as a forward drop;
+- a part found only through a later scenario's element can never be read (any part
+  whose pins read as one is already found by its names), so that branch was removed.
+
+Measured on the reviewer's two generic boards (`extended=True`, the new rows):
+
+- Board 1: A needs 1 line (the controller's pin listed), as before. F needed about 4
+  scenario lines and still failed three parts with no way out; it now passes with 5
+  scenario lines (the `Diode`-library TVS modelled forward, the dual Schottky's two
+  diodes, the load on the output connector, VIN fixed as the reverse-protection FET's
+  output, the gate fixed at its clamped level) and 3 rows changed (`vrwm`, `vz`,
+  `elements`). Its `R_Small` variant passes with no more lines.
+- Board 2: A needed 2 lines (modelling `R_US`) and now needs none. F needed about 7
+  lines and still failed the USB TVS; it now passes with 4 scenario lines (the buzzer
+  coil, the buck's input current and enable input by U1's reference, +3V3 fixed as the
+  buck's output) and 1 row changed (the TVS as `vrwm` with two elements).
+- Nothing on either board is left with no honest way out. The new F-B1 rule is what
+  costs lines: an IC on a rail a judged part reaches must be fixed or modelled, and an
+  IC modelled by its reference must account for its other free pads too.
