@@ -309,11 +309,16 @@ def test_gated_out_checks_are_counted_apart_from_k_deselections(
     gated_project: Path,
 ) -> None:
     """Count what -k left out as ``deselected``, what the gate held as ``gated_out``."""
+    everything = run(gated_project, gate="sch")
     done = run(gated_project, "test_nets or test_tracks", gate="sch")
     selection = done.results["selection"]
     assert set(done.checks) == {"checks/test_schematic.py::test_nets"}
     assert selection["gated_out"] == 2
-    assert selection["deselected"] > 0
+    # Eight checks reach the sch gate: test_nets and the seven of the circuit group.
+    # -k keeps test_nets and leaves the seven out. test_tracks was held back by the
+    # gate first, so it is not counted a second time.
+    assert len(everything.checks) == 8
+    assert selection["deselected"] == 7
     assert selection["keyword"] == "test_nets or test_tracks"
 
 
