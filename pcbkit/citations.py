@@ -189,11 +189,20 @@ unit where both state one), the words of a ``text_only`` value, and the PDF's SH
 
 Refused as unknown (right values among them; write the value as the page writes it,
 or mark it derived): everything listed under Context and Signs; superscript powers
-("10⁶"); numbers glued to a unit outside ``_UNITS``; "0x1F" against a bare "1F" or
-"70h"; "1000" against "1 000" or "1,000"; a decimal comma; "5" against "5.0";
-"3 A" against "3A" (a code); a negative number after a symbol ("VIN -0.3 19 V"); the
-second and later numbers of a row of negative numbers ("-5.5 -5.0"); a range written
-with a spaced dash ("3.0 - 5.5") or with units and spaces ("2.7 V-3.6 V"); hex ranges.
+("10⁶"); numbers glued to a unit outside ``_UNITS``; "0x1F" against a bare "1F",
+"70h" or "FFh"; "2 Ah" against "2Ah"; "10 kΩ" against "10K" and "52.3 kΩ" against
+"52.3K"; "1000" against "1 000" or "1,000"; a decimal comma; "5" against "5.0";
+"3 A" against "3A" (a code); a range written with a spaced dash ("3.0 - 5.5") or
+with units and spaces ("2.7 V-3.6 V"); hex ranges; a pin number after a pin name
+that ends in a dash ("IN– 9" reads like "VEE- 12V").
+
+The commonest real cost, measured on three public datasheets' ``-layout`` text after
+W1-W3: a negative number whose dash has no certain role. That is a negative after a
+symbol with a single space ("VIN -0.3 19 V", where W1 needs a cell gap), after a
+footnote mark or other ")" ("range(2)    –40 150 °C"), after a unit
+("> 0 V    –0.3 65 V"), on the line after a wrapped line ("the range\\n    –0.3 V"),
+and the second and later numbers of a row of negatives ("V(AK REV)  –17  –11  –2").
+Write such a value derived, for a person to check.
 
 Blind, not detectable from the text at all:
 
@@ -201,20 +210,31 @@ Blind, not detectable from the text at all:
   against a bare "1.25" whose "V" is in another cell, on the next line or before the
   number, and "10" passes against "10k".
 - A footnote digit glued to a number ("3.61" for 3.6 and footnote 1), and a power of
-  ten that pdftotext flattened with no mark left ("106" for 10⁶, or "10 6" with plain
-  space): the text is a plain number.
+  ten that pdftotext flattened with no mark left ("106" for 10⁶, or "10 6" and
+  "10\\n6" with plain white space): the text is a plain number.
 - Roles: a value made of numbers that are all in the quote, but in the wrong roles
   (the typical as the maximum, a number of another row of the quote, an offset from a
-  rail read as an absolute: "-0.3" from "VSS = -0.3"), passes; so does a magnitude
-  from "±" or "+".
+  rail read as an absolute: "-0.3" from "VSS = -0.3", or "VCC    –0.4" read as a sign
+  by W1), passes; so does a magnitude from "±" or "+". A cross-reference reads as a
+  range: "see Figure 8-10" backs "8" and "10".
 - A text value's meaning: "active low" passes against "not active low".
 - Figures and scans (no text: the value is "read from figure N" for a person to
   check), a quote across a page break, and a number whose digits the PDF splits across
   table cells (refused, which shows).
 
-Everything here is pure: it takes page texts and bytes, never a file. pcbkit reads a
-PDF's pages with pdftotext (``pcbkit.datasheet_find.page_texts``), and the extraction
-must be given the same text the checks read.
+Text mode
+---------
+
+The text is pdftotext's ``-layout`` mode, for the extractor and this gate alike: the
+default (raw) mode scrambles table cells, putting a row's cells on separate lines or
+out of order, so a quote of a row cannot be copied from it. This module is pure and
+does not know the mode, but the cell-gap rules (W1, W2) assume ``-layout``: there two
+or more spaces or a tab separate text blocks. In raw text only a blank line counts as
+a gap. The caller (``pcbkit.datasheet_find.page_texts``, which runs pdftotext without
+``-layout`` today) changes when the extractor is built, so that the extraction and
+the checks read the same text.
+
+Everything here is pure: it takes page texts and bytes, never a file.
 """
 
 from __future__ import annotations

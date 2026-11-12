@@ -370,7 +370,7 @@ public surface is `quote_on_page`, `check_citation` (page, length, quote, value)
 `check_pin` (SHA-256), `Rule`, `Problem` and `MIN_QUOTE_CHARS`. It reads no PDF and adds
 no dependency: text comes from pdftotext, as for `judge`.
 
-Porting it to pdftotext's text found faults, each now a test, and three reviews found
+Porting it to pdftotext's text found faults, each now a test, and four reviews found
 more. The design that came out of them:
 
 - **Refuse by default.** One reader, with a small written grammar, reads the page and
@@ -379,16 +379,22 @@ more. The design that came out of them:
   number backs a value only when it and everything touching it are inside the
   grammar; anything else is unknown and backs nothing, and a value with any part the
   grammar cannot read is refused. Refusing a right value costs a retry; accepting a
-  wrong one costs a board.
+  wrong one costs a board. An integer with one upper-case G, S, K, M, H or W ("1G",
+  "10K") is a code, because those letters name pins as often as units.
+- **Signs and units compared.** A sign in the value is never dropped: "±5" needs
+  "±5" on the page, "+5" needs "+5" or "5". Where the value and the page both state a
+  unit or prefix, glued or after spaces on the same line, they must be the same ("10
+  Ω" is refused against "10 kΩ"); where either states none they are not compared.
 - **Signs only where certain.** A minus is a sign at the start, after an opener ("=",
-  ":", "(") or after a function word ("to", "from"); a range dash only glued between
-  ascending decimals not starting at 10. After a symbol ("VIN –0.3"), after a number
-  and a space ("2.7 –3.6") or standing alone, its role is unknown, and so is the
-  number. This refuses negative minimums in symbol-column tables: they are marked
-  derived for a person until a better rule is proved.
+  ":", "(", a bullet that starts its line) or after a function word ("to", "from"); a
+  range dash only glued between ascending decimals not starting at 10. After a symbol
+  and a table-cell gap ("VIN    –0.3" in `-layout` text) it is a sign too (W1). After
+  a symbol and one space ("VIN –0.3"), after a number ("2.7 –3.6", with any spacing),
+  after a unit or ")" or standing alone, its role is unknown, and so is the number.
 - **Spacing as evidence.** White-space kinds stay distinct until read: a no-break or
-  thin space between digits, or a plain space before a three-digit group, may group
-  one number, so both halves are unknown. Spacing between two digits is kept as one
+  thin space between digits, or a plain space or single line break before a
+  three-digit group, may group one number, so both halves are unknown; a cell gap
+  never groups (W2). Spacing between two digits is kept as one
   space in the quote, so "-0.36 V" never matches "-0.3 6 V" (the `AO3401 Alpha`
   hazard of `judge`); other spacing is ignored, and a hyphen between two letters goes
   on both sides, so "pull-up", "pullup" and `-layout`'s "pull-\nup" are one.
@@ -398,6 +404,23 @@ more. The design that came out of them:
   Where the quote occurs more than once, every occurrence must back the value.
 - **Text values.** A value with no number is refused unless marked text only; its
   words must then be whole words of every occurrence, in order.
+
+- **Quote length.** `MIN_QUOTE_CHARS` (12) counts each run of white space between
+  words as one character (W3), so one table row is long enough to quote.
+
+**Text mode (decided).** pdftotext's `-layout` mode is the text for both the extractor
+and the gate: raw mode scrambles table cells, so a row cannot be quoted from it.
+`citations.py` does not know the mode, but its cell-gap rules (W1, W2) assume
+`-layout`, where two or more spaces or a tab separate text blocks; in raw text only a
+blank line is a gap. `pcbkit.datasheet_find.page_texts` still runs pdftotext without
+`-layout`: it changes when the extractor is built, so that both read the same text.
+
+Measured on 151 facts from three public TI datasheets in `-layout` text, a value is
+accepted on the first quote about 87% of the time, after rewording the quote 7%, and
+never 6%; most of what is never accepted is a negative number whose dash has no
+certain role. Swapping each accepted value for a corrupted one (a digit, a sign, a
+decimal point, the neighbouring row) is refused except where the corruption is
+another number of the same quote: the roles blind spot, which the eval measures.
 
 What it checks, what it refuses as unknown (right values included) and what no text
 check can detect are listed in the module docstring ("What is checked, refused and
