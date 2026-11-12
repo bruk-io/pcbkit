@@ -985,7 +985,13 @@ It also fails when a part ties the enable to a supply, so the link controls noth
 The nets checked are those between the enable and its link, and any net tied to one of
 them. Everything walked with two pads ties a net to a net in `SUPPLY_NETS`, unless it
 is: a resistor (reference letters `R`) with a real value above 0 ohm, so a pull-up or
-pull-down is fine; a diode, so a clamp is fine; or a part that is not fitted, which is a
+pull-down is fine (an `R` whose value cannot be read and is not a not-fitted mark is not
+one, and ties); a thermistor or other resistive sensor (reference letters `TH`, `RT`,
+`NTC`, `PTC`, `RV` or `VR`, or a `Device` symbol whose name starts with `Thermistor`,
+`Varistor` or `R_Photo`), whatever its value; a diode, so a clamp is fine; a switch
+(reference letters `SW`, `S` or `BTN`, or a library whose name starts with `Switch`),
+because a person operates it and the link still controls the regulator whenever the
+switch is open; or a part that is not fitted, which is a
 value that is a not-fitted mark alone (`DNP`, `NC`...) or a jumper whose symbol name has
 `_Open` or `_NO` (`SolderJumper_2_Open`, `Jumper_NO_Small`). So a 0 ohm resistor, a
 ferrite bead, an inductor, a fuse, a net tie, a bridged jumper or an unknown part from
@@ -994,7 +1000,10 @@ a connector, a test point, an IC) ties nothing. With three or more pads only a f
 jumper ties (a `_Bridged` one on the pads its name gives, `SolderJumper_3_Bridged12`:
 pads 1 and 2; one that is neither open nor bridged on all its pads), and a 0 ohm element
 of a known resistor pack. A pull-up through a real resistor is not a tie even with a 0
-ohm option beyond it, because the net past the resistor is not tied to the enable.
+ohm option beyond it, because the net past the resistor is not tied to the enable. The
+two exceptions for switches and sensors are for the tie rule only: a switch or sensor
+is still walked as a path, so a switch between two enables fails, and a DIP switch is
+walked by its pinout.
 
 How the walk goes: through every part with two or more pads, from any library, joining
 all its pads, except for a short closed list. Walked by their real pinout: a `Device`

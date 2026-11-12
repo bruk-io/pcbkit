@@ -706,3 +706,18 @@ or more pads was walked by its pin names, and a series pair names its common pad
   supply hint; a net named like a ground (`0V`, `AGND`...) points at `GROUND_NET` (words
   only: no net is a supply by name); a custom-library header such as `CN1` says why it is
   walked.
+
+## Tie rule exceptions for switches and sensors (2026-11-12)
+
+The inverted tie rule failed ordinary designs: a push-button or slide switch from an
+enable to a rail, and a thermistor referenced `TH`. Two exceptions, for the tie rule
+only (the walk is unchanged, so a switch between two enables still fails):
+
+- **A switch is not a tie:** reference letters `SW`, `S` or `BTN`, or a library whose
+  name starts with `Switch`. A person operates it, so the link still controls the
+  regulator whenever the switch is open.
+- **A thermistor or other resistive sensor is a resistor with a real value:** reference
+  letters `TH`, `RT`, `NTC`, `PTC`, `RV` or `VR`, or a `Device` symbol whose name starts
+  with `Thermistor`, `Varistor` or `R_Photo`, whatever its value.
+- An `R` whose value cannot be read and is not a not-fitted mark keeps today's rule: it
+  is no real resistance, so it ties.

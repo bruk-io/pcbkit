@@ -43,8 +43,10 @@ enable or the enable driving the target).
 
 Ties: between the enable and that link, and on any net tied to those, nothing may tie
 a net to a supply, or the link controls nothing. Everything walked with two pads ties
-unless it is a resistor with a real value above 0 ohm, a diode, or not fitted (a
-not-fitted value alone, or a jumper whose symbol name has ``_Open`` or ``_NO``). With
+unless it is a resistor with a real value above 0 ohm, a thermistor or other
+resistive sensor, a diode, a switch (a person operates it, so the link still controls
+the regulator while it is open), or not fitted (a not-fitted value alone, or a jumper
+whose symbol name has ``_Open`` or ``_NO``). With
 three or more pads only a fitted jumper (``_Bridged12``: on the pads its name gives)
 and a 0 ohm element of a known pack tie.
 
@@ -86,6 +88,10 @@ DIP_SWITCH = re.compile(r"SW_DIP_x(\d+)")
 NETWORK_STAR = re.compile(r"R_Network(\d+)(_US)?")
 # Reference letters of the parts the walk does not go through.
 NOT_WALKED = ("U", "IC", "Q", "A")
+# Switches (a person operates them) and resistive sensors, which never tie an enable.
+SWITCH_LETTERS = ("SW", "S", "BTN")
+SENSOR_LETTERS = ("TH", "RT", "NTC", "PTC", "RV", "VR")
+SENSOR_SYMBOL = re.compile(r"Thermistor|Varistor|R_Photo")
 # The pad count a jumper's symbol name gives (SolderJumper_3_Bridged12), and the pads
 # a bridged jumper joins.
 JUMPER_PADS = re.compile(r"(?:^|_)(\d+)(?:_|$)")
@@ -310,6 +316,20 @@ def _is_diode(nl: Netlist, ref: str) -> bool:
     return letters(ref).startswith(("D", "LED")) or names == ["A", "K"]
 
 
+def _is_switch(nl: Netlist, ref: str) -> bool:
+    """Return True for a switch: letters ``SW``, ``S``, ``BTN``, or a Switch library."""
+    lib = str(nl.parts[ref]["lib"])
+    return letters(ref) in SWITCH_LETTERS or lib.startswith("Switch")
+
+
+def _is_resistive_sensor(nl: Netlist, ref: str) -> bool:
+    """Return True for a thermistor, varistor or photoresistor, by letters or symbol."""
+    part = nl.parts[ref]
+    if letters(ref) in SENSOR_LETTERS:
+        return True
+    return part["lib"] == "Device" and bool(SENSOR_SYMBOL.match(str(part["part"])))
+
+
 def _real_resistance(value: str) -> bool:
     """Return True for a value that reads as a resistance above 0 ohm."""
     words = value.split()
@@ -326,8 +346,12 @@ def tie_pairs(nl: Netlist, ref: str) -> list[tuple[str, str]]:
     """Return the pairs of pads ``ref`` ties together for the tie rule, both ways.
 
     Everything walked with two pads ties, unless it is a resistor (letters ``R``) with
-    a real value above 0 ohm, a diode, or not fitted: a value that is a not-fitted mark
-    alone, or a jumper whose symbol name has ``_Open`` or ``_NO``. A part with three or
+    a real value above 0 ohm (an unreadable value is not one), a thermistor or other
+    resistive sensor (letters ``TH``, ``RT``, ``NTC``, ``PTC``, ``RV``, ``VR``, or a
+    ``Device`` ``Thermistor*``, ``Varistor*`` or ``R_Photo*``), a diode, a switch
+    (letters ``SW``, ``S``, ``BTN``, or a ``Switch*`` library), or not fitted: a value
+    that is a not-fitted mark alone, or a jumper whose symbol name has ``_Open`` or
+    ``_NO``. A part with three or
     more pads ties only as a fitted jumper (a ``_Bridged`` one on the pads its name
     gives, ``Bridged12``; one that is neither open nor bridged on all its pads) or as
     a known pack whose value reads as 0, by its elements.
@@ -341,6 +365,9 @@ def tie_pairs(nl: Netlist, ref: str) -> list[tuple[str, str]]:
         return []
     if len(pads) == 2:
         if not arcs(nl, ref) or _is_diode(nl, ref):
+            return []
+        # a person opens a switch, and a sensor is a real resistance: neither ties
+        if _is_switch(nl, ref) or _is_resistive_sensor(nl, ref):
             return []
         if letters(ref).startswith("R") and _real_resistance(value):
             return []

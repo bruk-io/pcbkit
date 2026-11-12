@@ -1573,3 +1573,64 @@ def test_a_custom_library_header_on_the_path_says_it_is_not_a_connector_here() -
         "or with reference letters J is a connector)" in p
         for p in check(toy).problems
     ), check(toy).problems
+
+
+# ------------------------------------------- switches and resistive sensors do not tie
+@pytest.mark.parametrize(
+    ("ref", "kind", "supply"),
+    [
+        ("SW9", "Switch:SW_Push", "GND"),
+        ("SW9", "Switch:SW_SPST", "VIN"),
+        ("S9", "MyLib:Toggle", "VIN"),
+        ("BTN9", "MyLib:Button", "GND"),
+        ("X9", "Switch_Custom:Tact", "GND"),
+    ],
+)
+def test_a_switch_from_an_enable_to_a_supply_is_no_tie(
+    ref: str, kind: str, supply: str
+) -> None:
+    """Pass a push-button or switch: the link still controls U2 while it is open."""
+    toy = board()
+    toy.add(ref, "SW", kind, {"1": ("EN_U2", "1"), "2": (supply, "2")})
+    assert check(toy).problems == []
+
+
+@pytest.mark.parametrize(
+    ("ref", "kind", "value"),
+    [
+        ("TH1", "Device:Thermistor_NTC", "10k"),
+        ("NTC1", "MyLib:NTC", "10k"),
+        ("PTC1", "MyLib:PTC", "x"),
+        ("RV1", "Device:Varistor", "V14"),
+        ("VR1", "MyLib:Varistor", "?"),
+        ("X1", "Device:R_Photo", "LDR"),
+        ("X2", "Device:Thermistor_PTC", "PTC"),
+    ],
+)
+def test_a_thermistor_or_resistive_sensor_to_a_supply_is_no_tie(
+    ref: str, kind: str, value: str
+) -> None:
+    """Pass a thermistor, varistor or photoresistor from EN_U2 to GND."""
+    toy = board()
+    toy.add(ref, value, kind, {"1": ("EN_U2", "~"), "2": ("GND", "~")})
+    assert check(toy).problems == []
+
+
+def test_a_resistor_with_an_unreadable_value_to_a_supply_is_still_a_tie() -> None:
+    """Fail R9 ("x") from EN_U2 to GND: an unreadable value is no real resistance."""
+    toy = board()
+    check_toy.resistor(toy, "R9", "x", "EN_U2", "GND")
+    assert check(toy).problems == [
+        "U2 pad 3: R9 (x) ties EN_U2 to GND, a net in specs.SUPPLY_NETS, so the link "
+        "R7 controls nothing"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ref", "kind"), [("SW9", "Switch:SW_Push"), ("S9", "MyLib:Toggle")]
+)
+def test_a_switch_between_two_enables_is_still_a_path(ref: str, kind: str) -> None:
+    """Fail a switch joining EN_U2 and EN_U3: it is walked like any part."""
+    toy = board()
+    toy.add(ref, "SW", kind, {"1": ("EN_U2", "1"), "2": ("EN_U3", "2")})
+    assert any(f"(EN_U2 - {ref} - EN_U3)" in p for p in check(toy).problems)

@@ -535,3 +535,14 @@ def test_a_dip_switch_per_enable_and_a_header_link_pass(tmp_path: Path) -> None:
     assert result.entry(CHECK)["numbers"]["enable links"] == {
         "EN_ALL": {"U2": "JP7", "U3": "R8"}
     }
+
+
+def test_a_push_button_and_a_thermistor_on_an_enable_pass(tmp_path: Path) -> None:
+    """Pass SW1 from EN_U2 to GND and TH1 (NTC) from EN_U3 to GND: neither ties."""
+    toy = board()
+    toy.add("SW1", "SW", "Switch:SW_Push", {"1": ("EN_U2", "1"), "2": ("GND", "2")})
+    toy.add(
+        "TH1", "10k", "Device:Thermistor_NTC", {"1": ("EN_U3", "~"), "2": ("GND", "~")}
+    )
+    result = go(tmp_path, "switch-ntc", toy)
+    assert result.outcome(CHECK) == "passed", result.entry(CHECK)
