@@ -289,6 +289,11 @@ inner = [
 
 - **The rule:** with `layers = 2`, every file pcbkit writes is byte-identical to main,
   and every check result is the same apart from timing fields.
+- **Config parity:** for `StackupConfig`, "parity with main" means the original fields
+  (`layers`, `thickness_mm`, `copper_mm`), in their original order, with the same values
+  and types; new fields are appended after them and keep their defaults. A two-layer
+  config therefore carries the new fields at their defaults (`inner_copper_mm = 0.035`,
+  `prepreg_mm = 0.2`, `inner = ()`), and a test pins the original three.
 - How it is kept:
   1. Two-layer code paths are the existing constants and functions, not a general builder
      that happens to produce the same text. `stackup_text` for two layers is not routed

@@ -422,9 +422,17 @@ def test_a_four_layer_table_keeps_every_value() -> None:
     assert stackup.inner == (InnerLayer("signal"), InnerLayer("plane", "VCC"))
 
 
-def test_a_two_layer_file_gives_the_config_main_gave() -> None:
-    """Make a two-layer config equal to one built from the original three keys."""
-    assert parse_config(good()).stackup == StackupConfig(2, 1.6, 0.035)
+def test_the_original_stackup_fields_keep_their_order_and_values() -> None:
+    """Pin the three fields main had, in order, and what a two-layer file gives them."""
+    names = [field.name for field in dataclasses.fields(StackupConfig)]
+    assert names[:3] == ["layers", "thickness_mm", "copper_mm"]
+    stackup = parse_config(good()).stackup
+    assert (stackup.layers, stackup.thickness_mm, stackup.copper_mm) == (2, 1.6, 0.035)
+    assert [type(value) for value in dataclasses.astuple(stackup)[:3]] == [
+        int,
+        float,
+        float,
+    ]
     data = good()
     data["stackup"] = {"layers": 2, "thickness_mm": 1.6, "copper_mm": 0.035}
     assert parse_config(data) == parse_config(good())
