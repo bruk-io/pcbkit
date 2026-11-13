@@ -123,12 +123,17 @@ UNCONNECTED = "unconnected-("
 
 @dataclass(frozen=True)
 class Arc:
-    """One way current can pass through part ``ref``: from net ``src`` to ``dst``."""
+    """One way current can pass through part ``ref``: from net ``src`` to ``dst``.
+
+    ``pads`` are the two pads of the element it runs through; an element that
+    conducts both ways has an arc each way, and counts once as a resistor.
+    """
 
     ref: str
     src: str
     dst: str
     ohms: float
+    pads: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -304,7 +309,7 @@ def build_model(
             here, there = nl.net(ref, a), nl.net(ref, b)
             if here is None or there is None or here == there:
                 continue
-            arc = Arc(ref, here, there, float(ohms))
+            arc = Arc(ref, here, there, float(ohms), frozenset((a, b)))
             out.arcs.append(arc)
             out.forward.setdefault(here, []).append(arc)
             out.backward.setdefault(there, []).append(arc)
@@ -382,15 +387,22 @@ def _path_to(parents: Mapping[str, tuple[str, Arc] | None], net: str) -> list[st
     return path[::-1]
 
 
-def _resistance(arcs: Iterable[Arc], a: str, b: str) -> float | None:
-    """Return the effective resistance between nets ``a`` and ``b`` of these arcs.
+def _ohms_to(
+    arcs: Iterable[Arc], target: str, wanted: Iterable[str]
+) -> dict[str, float]:
+    """Return the effective resistance from each net in ``wanted`` to ``target``.
 
     Each arc is a resistor of its ohms, whatever its direction; arcs under ``SHORT``
-    merge their nets. None when the arcs do not join the two.
+    merge their nets. A wanted net the arcs do not join to ``target`` is left out.
     """
-    import numpy as np  # numpy only where a solve is needed: tables need no numpy
+    # numpy and scipy only where a solve is needed: reading the tables needs neither
+    import numpy as np
+    import scipy.sparse as sp
+    from scipy.sparse.linalg import splu
 
-    arcs = list(arcs)
+    # an element is one resistor, however many ways it conducts
+    arcs = list({(arc.ref, arc.pads): arc for arc in arcs}.values())
+    wanted = list(dict.fromkeys(wanted))
     group: dict[str, str] = {}
 
     def find(net: str) -> str:
@@ -400,45 +412,57 @@ def _resistance(arcs: Iterable[Arc], a: str, b: str) -> float | None:
             net = group[net]
         return net
 
-    for net in (a, b):
+    for net in [target, *wanted]:
         find(net)
     for arc in arcs:
-        find(arc.src)
-        find(arc.dst)
         if arc.ohms <= SHORT:
             group[find(arc.src)] = find(arc.dst)
-    if find(a) == find(b):
-        return 0.0
-    nodes = sorted({find(n) for n in group}, key=natkey)
-    index = {n: i for i, n in enumerate(nodes)}
-    size = len(nodes)
-    lap = np.zeros((size, size))
+    root = find(target)
+    links_of: dict[str, list[str]] = {}
     for arc in arcs:
-        i, j = index[find(arc.src)], index[find(arc.dst)]
-        if i == j or arc.ohms <= SHORT:
+        i, j = find(arc.src), find(arc.dst)
+        if i != j:
+            links_of.setdefault(i, []).append(j)
+            links_of.setdefault(j, []).append(i)
+    seen = {root}
+    todo = [root]
+    while todo:
+        for other in links_of.get(todo.pop(), []):
+            if other not in seen:
+                seen.add(other)
+                todo.append(other)
+    out = {net: 0.0 for net in wanted if find(net) == root}
+    nodes = sorted(seen - {root}, key=natkey)
+    asked = [net for net in wanted if find(net) in seen and find(net) != root]
+    if not asked:
+        return out
+    index = {n: i for i, n in enumerate(nodes)}
+    diag = np.zeros(len(nodes))
+    rows: list[int] = []
+    cols: list[int] = []
+    vals: list[float] = []
+    for arc in arcs:
+        i, j = find(arc.src), find(arc.dst)
+        if i == j or i not in seen:
             continue
         g = 1.0 / arc.ohms
-        lap[i, i] += g
-        lap[j, j] += g
-        lap[i, j] -= g
-        lap[j, i] -= g
-    # keep the part of the network joined to a; it must hold b
-    seen = {index[find(a)]}
-    todo = [index[find(a)]]
-    while todo:
-        i = todo.pop()
-        for j in range(size):
-            if j not in seen and lap[i, j] != 0:
-                seen.add(j)
-                todo.append(j)
-    if index[find(b)] not in seen:
-        return None
-    keep = sorted(seen - {index[find(b)]})
-    sub = lap[np.ix_(keep, keep)]
-    inject = np.zeros(len(keep))
-    inject[keep.index(index[find(a)])] = 1.0
-    volts = np.linalg.solve(sub, inject)
-    return float(volts[keep.index(index[find(a)])])
+        for here, there in ((i, j), (j, i)):
+            if here != root:
+                diag[index[here]] += g
+                if there != root:
+                    rows.append(index[here])
+                    cols.append(index[there])
+                    vals.append(-g)
+    size = len(nodes)
+    matrix = sp.csc_matrix((vals, (rows, cols)), shape=(size, size)) + sp.diags(diag)
+    classes = list(dict.fromkeys(find(net) for net in asked))
+    rhs = np.zeros((size, len(classes)))
+    for k, c in enumerate(classes):
+        rhs[index[c], k] = 1.0
+    volts = splu(sp.csc_matrix(matrix)).solve(rhs)
+    by_class = {c: float(volts[index[c], k]) for k, c in enumerate(classes)}
+    out.update({net: by_class[find(net)] for net in asked})
+    return out
 
 
 def route(model: Model, x: str, y: str, removed: Iterable[str] = ()) -> Route | None:
@@ -464,7 +488,7 @@ def route(model: Model, x: str, y: str, removed: Iterable[str] = ()) -> Route | 
         and (arc.src == x or (inner(arc.src) and arc.src in ahead))
         and (arc.dst == y or (inner(arc.dst) and arc.dst in behind))
     ]
-    ohms = _resistance(used, x, y)
+    ohms = _ohms_to(used, y, [x]).get(x)
     found = ahead[y] if ohms is None else min(ohms, ahead[y])
     return Route(path, ahead[y], found)
 
@@ -735,36 +759,30 @@ def check_unlisted(nl: Netlist, model: Model, table: Mapping[str, Any]) -> Repor
     return report
 
 
-def _rails(nl: Netlist, model: Model, net: str) -> dict[str, str]:
-    """Return ``{judged net: how}`` for each judged net ``net`` is on or joined to.
+def _rail_ohms(model: Model, nets: Iterable[str]) -> dict[str, dict[str, float]]:
+    """Return ``{judged net: {net: ohms}}``: how far each of ``nets`` is from each rail.
 
-    Joined is a route either way through walked parts, not crossing a stop net, of at
-    most ``max_ohm`` effective resistance.
+    The resistance is the effective one through walked parts either way, not crossing
+    another judged net or the ground net; a net no route joins to a rail is left out.
     """
-    if net in model.judged:
-        return {net: "on it"}
-    if net in model.stops or net.startswith(UNCONNECTED):
-        return {}
-    reach, parents = _search(model, net, both=True)
-    found: dict[str, str] = {}
-    inner = {n for n in reach if n not in model.stops}
-    for rail in sorted((n for n in reach if n in model.judged), key=natkey):
-        used = [
+    nets = [n for n in dict.fromkeys(nets) if n not in model.stops]
+    inner = {n for arc in model.arcs for n in (arc.src, arc.dst)} - model.stops
+    found: dict[str, dict[str, float]] = {}
+    for rail in model.judged:
+        arcs = [
             arc
             for arc in model.arcs
-            if {arc.src, arc.dst} <= inner | {rail}
-            and (arc.src in inner or arc.dst in inner)
+            if {arc.src, arc.dst} <= inner | {rail} and (arc.src != arc.dst)
         ]
-        ohms = _resistance(used, net, rail)
-        if ohms is None:
-            ohms = reach[rail]
-        ohms = min(ohms, reach[rail])
-        if ohms <= model.max_ohm:
-            path = _path_to(parents, rail)
-            found[rail] = f"joined to it ({show(path)}, {ohm_text(ohms)})" + _notes(
-                model, path
-            )
+        found[rail] = _ohms_to(arcs, rail, nets)
     return found
+
+
+def _how(model: Model, net: str, rail: str, ohms: float) -> str:
+    """Return how ``net`` is joined to ``rail``, with its cheapest path."""
+    _, parents = _search(model, net, both=True)
+    path = _path_to(parents, rail)
+    return f"joined to it ({show(path)}, {ohm_text(ohms)})" + _notes(model, path)
 
 
 def check_modelled(nl: Netlist, model: Model, table: Mapping[str, Any]) -> Report:
@@ -782,23 +800,39 @@ def check_modelled(nl: Netlist, model: Model, table: Mapping[str, Any]) -> Repor
         ]
     found: dict[str, dict[str, str]] = {}
     report = Report({"not modelled": found, "declared parts": declared})
-    cache: dict[str, dict[str, str]] = {}
-    for ref in sorted(nl.parts, key=natkey):
-        if model.kinds.get(ref) != NOT_WALKED:
-            continue
-        rails: dict[str, str] = {}
+    candidates = [
+        ref
+        for ref in sorted(nl.parts, key=natkey)
+        if model.kinds.get(ref) == NOT_WALKED
+    ]
+    pad_nets = [
+        net
+        for ref in candidates
+        for net in (nl.net(ref, pad) for pad in nl.functions(ref))
+        if net is not None and not net.startswith(UNCONNECTED)
+    ]
+    far = _rail_ohms(model, pad_nets)
+    for ref in candidates:
+        reached: dict[str, tuple[str, str, float | None]] = {}
         for pad in sorted(nl.functions(ref), key=natkey):
             net = nl.net(ref, pad)
-            if net is None:
+            if net is None or net.startswith(UNCONNECTED):
                 continue
-            if net not in cache:
-                cache[net] = _rails(nl, model, net)
-            for rail, how in cache[net].items():
-                rails.setdefault(
-                    rail, f"pad {pad} on {net}" + ("" if how == "on it" else f", {how}")
-                )
-        if len(rails) < 2:
+            if net in model.judged:
+                reached.setdefault(net, (pad, net, None))
+                continue
+            for rail in model.judged:
+                ohms = far.get(rail, {}).get(net)
+                if ohms is not None and ohms <= model.max_ohm:
+                    reached.setdefault(rail, (pad, net, ohms))
+        if len(reached) < 2:
             continue
+        # the paths are worked out only for a part that fails
+        rails = {
+            rail: f"pad {pad} on {net}"
+            + ("" if ohms is None else ", " + _how(model, net, rail, ohms))
+            for rail, (pad, net, ohms) in reached.items()
+        }
         found[ref] = rails
         part = nl.parts[ref]
         where = "; ".join(f"{rail}: {how}" for rail, how in rails.items())

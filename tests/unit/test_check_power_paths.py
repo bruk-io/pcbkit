@@ -284,6 +284,20 @@ def test_a_capacitor_between_two_rails_is_open_and_never_named() -> None:
     assert red(run(toy, table(["+5V", "+3V3"], []))) == {}
 
 
+def test_a_row_through_a_capacitor_says_it_is_open() -> None:
+    """A row naming a capacitor is not found, and the message says why."""
+    toy = Toy()
+    two_pad(toy, "C4", "Device:C", "100n", "+5V", "+3V3")
+    found = red(run(toy, table(["+5V", "+3V3"], [("+5V", "+3V3", ["C4"])])))
+    assert found == {
+        "+5V->+3V3": [
+            "declared path +5V->+3V3 through C4 not found: current cannot flow from "
+            "+5V to +3V3 (C4: pads 1 on +5V, 2 on +3V3; a two-pad capacitor is open "
+            "at DC)"
+        ]
+    }
+
+
 def test_an_ic_powered_from_two_rails_passes_once_declared_as_passing_nothing() -> None:
     """A level shifter on VCCA and VCCB is declared ``[]``."""
     toy = Toy()
@@ -545,6 +559,53 @@ def test_an_ic_whose_output_reaches_a_rail_through_a_ferrite_is_not_modelled() -
         "+3V3: pad 3 on VOUT, joined to it (VOUT - FB1 - +3V3, 0 ohm)"
         in (found["modelled"][0])
     )
+
+
+def test_an_ic_joined_to_a_rail_through_parallel_resistors_is_not_modelled() -> None:
+    """Two 15 ohm resistors from its pin to +5V are 7.5 ohm: it reaches +5V."""
+    toy = Toy()
+    ic(toy, "U6", {"1": "+3V3", "2": "PIN"})
+    check_toy.resistor(toy, "R1", "15", "PIN", "+5V")
+    check_toy.resistor(toy, "R2", "15", "PIN", "+5V")
+    found = red(run(toy, table(["+3V3", "+5V"], [])))
+    assert list(found) == ["modelled"]
+    assert (
+        "+5V: pad 2 on PIN, joined to it (PIN - R1 - +5V, 7.5 ohm)"
+        in (found["modelled"][0])
+    )
+
+
+def test_a_resistor_between_two_signal_nets_counts_once() -> None:
+    """Its arcs each way are one resistor: 20 ohm between the rails, not 10."""
+    toy = Toy()
+    check_toy.resistor(toy, "R1", "0", "+5V", "A")
+    check_toy.resistor(toy, "R2", "20", "A", "B")
+    check_toy.resistor(toy, "R3", "0", "B", "+3V3")
+    power = table(["+5V", "+3V3"], [], None, 15)
+    assert red(run(toy, power)) == {}
+    nl = netlist(toy)
+    pairs = pp.check_unlisted(nl, pp.build_model(nl, power, "GND"), power).numbers
+    assert pairs["power paths"]["+5V->+3V3"]["ohms"] == pytest.approx(20.0)
+
+
+def test_a_bridge_network_has_its_effective_resistance() -> None:
+    """Five 10 ohm resistors in a bridge are 10 ohm, recorded as a power path."""
+    toy = Toy()
+    for ref, a, b in [
+        ("R1", "+5V", "A"),
+        ("R2", "A", "+3V3"),
+        ("R3", "+5V", "B"),
+        ("R4", "B", "+3V3"),
+        ("R5", "A", "B"),
+    ]:
+        check_toy.resistor(toy, ref, "10", a, b)
+    power = table(["+5V", "+3V3"], [], None, 10.5)
+    nl = netlist(toy)
+    pairs = pp.check_unlisted(nl, pp.build_model(nl, power, "GND"), power).numbers
+    record = pairs["power paths"]["+5V->+3V3"]
+    assert record["ohms"] == pytest.approx(10.0)
+    assert record["path ohms"] == pytest.approx(20.0)
+    assert record["power path"] is True
 
 
 def test_a_connector_across_two_rails_must_be_declared() -> None:
