@@ -16,15 +16,19 @@ value is 0 is modelled as 1 milliohm, and one whose value is a not-fitted mark a
 ``R_Small_US``; the two-pad ``Device`` diodes ``D``, ``D_Small``, ``D_Schottky_Small``,
 ``D_Zener``, ``D_Zener_Small``, ``D_TVS`` and ``D_TVS_Small`` by their A and K pins,
 forward only (no breakdown; a TVS whose pins are A1 and A2 is held as an open element,
-``<ref>.open``); the generic ``Device:Q_NMOS_*`` and ``Q_PMOS_*`` FETs, their gate,
-drain and source read from the pin names; and a body diode for every FET
-(``<ref>.body``, source to drain for an N-FET, drain to source for a P-FET). In extended
-mode a part ``build`` models cannot be added to the circuit again (except one
-``<ref>.breakdown`` element for a Zener or TVS, which ``forward_only`` lists because it
-is held without breakdown), and no ref can be added twice: ``Circuit.R``, ``Circuit.D``
-and ``Circuit.fets`` raise ValueError naming the part, so a scenario that also models a
-part by hand is told instead of doubling it. Without ``extended`` nothing about this
-changes.
+``<ref>.open``); any two-pad part from the ``Diode`` or ``Power_Protection`` libraries
+whose pins are named A and K (forward) or A1 and A2 (open), its kind unknown; the
+generic ``Device:Q_NMOS_*`` and ``Q_PMOS_*`` FETs, their gate, drain and source read
+from the pin names, at the one threshold ``nfet_vth`` or ``pfet_vth`` gives every FET;
+and a body diode for every FET (``<ref>.body``, source to drain for an N-FET, drain to
+source for a P-FET). The Zeners and TVSs, and the library parts of unknown kind, are
+listed in ``circuit.forward_only``. In extended mode a part ``build`` models cannot be
+added to the circuit again through ``Circuit.R``, ``Circuit.D`` or ``Circuit.fets``
+(except one ``<ref>.breakdown`` element for a part in ``forward_only``), and no ref can
+be added twice: they raise ValueError naming the part, so a scenario that also models a
+part by hand is told instead of doubling it. Appending to ``circuit.res`` or
+``circuit.diodes`` directly, or replacing ``circuit.fets``, is not guarded. Without
+``extended`` nothing about this changes.
 """
 
 from __future__ import annotations
@@ -60,6 +64,10 @@ EXTENDED_DIODES = {
 }
 # The ref a scenario gives the breakdown it adds to a part extended holds forward only.
 BREAKDOWN_SUFFIX = ".breakdown"
+# Libraries whose two-pad parts extended models without knowing their kind.
+KIND_UNKNOWN_LIBRARIES = ("Diode:", "Power_Protection:")
+LIBRARY_DIODE_VF = 0.7
+LIBRARY_DIODE_RON = 0.05
 BODY_VF = 0.7
 BODY_RON = 0.05
 GENERIC_FET_RON = 0.05
@@ -444,6 +452,19 @@ def _build_extended(
             both = _pads_by_name(nl, ref, ("A1", "A2"))
             if both is not None:
                 c.R(both["A1"], both["A2"], OPEN_OHM, ref + ".open")
+        return
+    if kind.startswith(KIND_UNKNOWN_LIBRARIES) and len(nl.functions(ref)) == 2:
+        # a two-pad part from these libraries may be a rectifier, a Zener or a TVS:
+        # modelled forward (A/K) or open (A1/A2), and listed as forward only, so a
+        # check asks the designer which it is when it sees reverse voltage across it
+        ak = _pads_by_name(nl, ref, ("A", "K"))
+        both = _pads_by_name(nl, ref, ("A1", "A2"))
+        if ak is not None:
+            c.D(ak["A"], ak["K"], LIBRARY_DIODE_VF, LIBRARY_DIODE_RON, ref)
+            c.forward_only.add(ref)
+        elif both is not None:
+            c.R(both["A1"], both["A2"], OPEN_OHM, ref + ".open")
+            c.forward_only.add(ref)
         return
     for prefix, fet_kind, vth in (
         ("Device:Q_NMOS_", "n", nfet_vth),

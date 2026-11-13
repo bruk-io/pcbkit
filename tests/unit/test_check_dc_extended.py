@@ -329,3 +329,40 @@ def test_extended_takes_one_breakdown_element_for_a_forward_only_part() -> None:
         c.D("K3", "A3", 5.1, ref="D3.breakdown")
     with pytest.raises(ValueError, match="D1 is already modelled"):
         c.D("K1", "A1", 5.1, ref="D1.breakdown")
+
+
+def library_diodes() -> Toy:
+    """Return Diode and Power_Protection parts, two of them not two-pad A/K or A1/A2."""
+    toy = Toy()
+    toy.add("D11", "BZX84", "Diode:BZX84Cxx", {"1": ("K11", "K"), "2": ("A11", "A")})
+    toy.add(
+        "D12", "SMAJ", "Power_Protection:SMAJ", {"1": ("T1", "A1"), "2": ("T2", "A2")}
+    )
+    toy.add("D13", "X", "Diode:Unnamed", {"1": ("U1", "~"), "2": ("U2", "~")})
+    toy.add(
+        "D14",
+        "BAT54C",
+        "Diode:BAT54C",
+        {"1": ("P1", "A"), "2": ("P2", "A"), "3": ("P3", "K")},
+    )
+    toy.add(
+        "D15",
+        "SMA3",
+        "Diode:ThreePad",
+        {"1": ("Q1", "A"), "2": ("Q2", "K"), "3": ("Q2", "K")},
+    )
+    return toy
+
+
+def test_extended_models_two_pad_diode_and_protection_parts_as_kind_unknown() -> None:
+    """A/K forward, A1/A2 open, both in ``forward_only``; unnamed and 3-pad left out.
+
+    D15 is one diode on three pads (two cathode pads on one net), and it is still left
+    out: only two-pad parts are modelled from these libraries.
+    """
+    nl = netlist(library_diodes())
+    assert (build(nl).res, build(nl).diodes, build(nl).forward_only) == ([], [], set())
+    c = build(nl, extended=True)
+    assert [(a, k, ref) for a, k, _vf, _ron, ref in c.diodes] == [("A11", "K11", "D11")]
+    assert [(a, b, ref) for a, b, _r, ref in c.res] == [("T1", "T2", "D12.open")]
+    assert c.forward_only == {"D11", "D12"}
