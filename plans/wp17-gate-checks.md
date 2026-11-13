@@ -944,3 +944,45 @@ Measured on the reviewer's three boards (before this round, after):
 **Later slice (not built):** a per-row VGS(th) range in `SEMI_VRATED` (`"vgs_th": (min,
 max)`), so a FET whose gate sits inside the range is "undecided" like a floating gate,
 in A and F; the recorded `fet gates` are what it would read.
+
+## Narrow review of A, F and the solver: accepted with follow-ups (2026-11-12)
+
+The narrow review accepted all three: the solver (default path byte-identical again),
+check F (the bidirectional TVS blocker confirmed closed) and check A, each with
+follow-ups, and found no false pass an ordinary designer could reach while writing
+nothing false. The follow-ups are done, each with a test shown failing first and a plant:
+
+- **F, bidirectional polarity (major):** a circuit element never confirms polarity for
+  pins named A1/A2; a judged part's diode element that conducts with more than 1 V above
+  its forward drop (possible only between two fixed nets) fails by name as an
+  unphysical model, so a bidirectional part hand-modelled as `circuit.D` across a fixed
+  rail is refused whatever its pin names; the not-modelled message and the docs say a
+  bidirectional part is modelled as an open element (`ref="D1.open"`). A part stopped
+  before any reading records no polarity.
+- **Test gaps:** the `SEMI_VRATED` to `blocking` wiring in A (toy tests with a `Diode`
+  part on a judged pin: no table fails, a `vrrm` 100 row passes, a `vrrm` 3 row fails
+  naming the VRRM); the `.open` part's absolute voltage (the rail on either pad); the
+  per-pad high-impedance exemption (an unlisted pad of the same partly modelled part is
+  still named, in A and in F).
+- **Messages and docs:** a `vrrm` row under the reverse voltage is named; the breakdown
+  advice for a part held open says from the net at the higher voltage to the other; one
+  `.breakdown` per part ends the question in both polarities; a Zener or TVS modelled by
+  hand in any form without breakdown must be added to `forward_only` (the old "cannot
+  pass silently from any library" overstated it); `SEMI_HIGH_Z` is one claim for every
+  stress row; a `vrrm` row on a `Device:D_Zener` or `Device:D_TVS` fails by name asking for
+  `vz` or `vrwm`, and does not exempt it in A (the symbol is the one the solver models
+  the part by).
+
+Plants that survive the reviewer's set, and why they need no test:
+
+- *A reversed diode element confirms polarity too:* a row whose `a`/`k` run against the
+  scenario's diode for the part is failed first by the circuit cross-check, so the
+  polarity rule never sees that case (equivalent).
+- *F records FET states only on the level nets, not the judged pads' own nets:* the
+  judged pads' nets are in the level nets unless the scenario fixes them, and a FET all
+  of whose terminals are on fixed nets moves no voltage (near-equivalent: such a FET's
+  state is simply not recorded).
+- *The floating-gate guard and the FET-state record skip a FET whose only terminal on
+  the level nets is its gate:* with the one-way walk a gate is reached either from its
+  own drain or source (which are then on the level nets too) or because the pin is on the
+  gate net, where the FET's state cannot move the pin (equivalent).
