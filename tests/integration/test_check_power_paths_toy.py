@@ -210,7 +210,7 @@ def test_plan_3_an_undeclared_ic_across_two_rails_is_not_modelled(
         "U5 (Power_Supervisor:Monitor) reaches 2 judged nets (VIN: pad 1 on VIN; "
         "+3V3: pad 2 on +3V3) and an IC or module (reference letters U, IC or A) is "
         "not walked, so a power path through it is not seen: declare what it passes "
-        'in POWER_PATHS["parts"] (in pad to out pad, such as {"U5": [("1", "3")]}), '
+        'in POWER_PATHS["parts"] (in pad to out pad, such as {"U5": [("1", "2")]}), '
         'or {"U5": []} if it passes no power'
     ) in message
     assert result.entry(MODELLED)["numbers"]["not modelled"] == {

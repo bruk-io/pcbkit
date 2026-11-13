@@ -1407,7 +1407,12 @@ and not judged here (`GPIO_SCENARIOS` covers the ESP32 module's case); leakage i
 judged either. A route through the ground net is not followed. What is plugged into a
 connector is not on the board, and a connector across two rails is declared by the
 designer. Parallel routes are combined, so two 15 ohm resistors between two rails are a
-7.5 ohm path.
+7.5 ohm path. Not seen: a path through two or more parts that are not walked, joined
+by a net that is not judged (a regulator feeding a load switch through an unjudged
+`VOUT_RAW`, each of them on only one judged rail), so declare every regulator, load
+switch and power module in `parts`, or judge the net between them; reverse breakdown
+of a Zener or TVS; and a part with reference letters `C` and two pads, which is taken
+as a capacitor whatever its symbol.
 
 **`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
 name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the

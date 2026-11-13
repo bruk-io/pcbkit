@@ -836,8 +836,9 @@ def check_modelled(nl: Netlist, model: Model, table: Mapping[str, Any]) -> Repor
         found[ref] = rails
         part = nl.parts[ref]
         where = "; ".join(f"{rail}: {how}" for rail, how in rails.items())
-        first = sorted(nl.functions(ref), key=natkey)
-        example = f'{{"{ref}": [("{first[0]}", "{first[-1]}")]}}' if first else ""
+        # the example runs from the pad on the first rail to the pad on the second
+        one, two = (pad for pad, _, _ in list(reached.values())[:2])
+        example = f'{{"{ref}": [("{one}", "{two}")]}}'
         report.problems.append(
             f"{ref} ({part['lib']}:{part['part']}) reaches {len(rails)} judged nets "
             f"({where}) and {model.why[ref]}, so a power path through it is not seen: "

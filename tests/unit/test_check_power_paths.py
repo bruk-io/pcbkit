@@ -608,6 +608,29 @@ def test_a_bridge_network_has_its_effective_resistance() -> None:
     assert record["power path"] is True
 
 
+def test_two_undeclared_ics_in_a_chain_are_seen_only_through_a_row() -> None:
+    """The documented limit: each IC is on one judged rail, so neither is named.
+
+    A row for the path the chain makes is not found, and names both ICs as not
+    walked, which is how a designer who writes the rows meets it.
+    """
+    toy = Toy()
+    ic(toy, "U1", {"1": "VIN", "2": "GND", "3": "VOUT_RAW"})
+    ic(toy, "U2", {"1": "VOUT_RAW", "2": "GND", "3": "+3V3"})
+    assert red(run(toy, table(["VIN", "+3V3"], []))) == {}
+    found = red(run(toy, table(["VIN", "+3V3"], [("VIN", "+3V3", ["U1", "U2"])])))
+    assert found == {
+        "VIN->+3V3": [
+            "declared path VIN->+3V3 through U1, U2 not found: current cannot flow "
+            "from VIN to +3V3 (U1: pads 1 on VIN, 2 on GND, 3 on VOUT_RAW; an IC or "
+            "module (reference letters U, IC or A) is not walked, so declare what it "
+            'passes in POWER_PATHS["parts"]; U2: pads 1 on VOUT_RAW, 2 on GND, 3 on '
+            "+3V3; an IC or module (reference letters U, IC or A) is not walked, so "
+            'declare what it passes in POWER_PATHS["parts"])'
+        ]
+    }
+
+
 def test_a_connector_across_two_rails_must_be_declared() -> None:
     """A header that brings out two rails passes nothing on the board, if declared."""
     toy = Toy()
