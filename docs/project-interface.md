@@ -1104,7 +1104,9 @@ each listed pin that:
   for a pad that is high-impedance in the condition (an absent controller's pin), list it
   in the condition's pins with its own window. A part the scenario models on some of its
   pads but not all (one diode of a pair) has the pads it leaves out named, wherever they
-  are, since current can come in through them, unless the scenario fixes that pad's net;
+  are, since current can come in through them, unless the scenario fixes that pad's net
+  or the pad is listed (in the condition's pins here, in `SEMI_HIGH_Z` for the
+  semiconductor check);
 - has a resistor on those nets whose value is a real value with a not-fitted mark after
   it (`100k DNP`): `dc.build` models it as fitted, but the netlist does not say which
   build carries it, so the message asks for the value alone or the mark alone. A value

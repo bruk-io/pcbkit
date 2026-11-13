@@ -783,3 +783,23 @@ def test_the_fets_the_verdict_leaned_on_are_recorded() -> None:
         "U2 pad 3": {"Q1": {"vgs": 1.65, "vth": 2.0, "on": False}}
     }
     assert report.problems == []
+
+
+def test_a_listed_pad_of_a_partly_modelled_part_is_not_named() -> None:
+    """A relay's coil modelled, its contact pad listed as high-impedance."""
+    toy = board()
+    toy.add(
+        "K1",
+        "RELAY",
+        "Relay:X",
+        {"1": ("EN", "~"), "2": ("GND", "~"), "3": ("COM", "~")},
+    )
+
+    def coil(c: Circuit) -> None:
+        c.R("EN", "GND", 70.0, ref="K1")
+
+    assert judge(toy, extra=coil).not_modelled == {
+        "U2 pad 3": ["K1 pad 3 (Relay:X) on COM"]
+    }
+    listed = judge(toy, [("U2", "3", OFF), ("K1", "3", (-1.0, 1.0))], extra=coil)
+    assert listed.not_modelled == {}

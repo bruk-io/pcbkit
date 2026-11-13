@@ -255,7 +255,8 @@ def left_out(
     its pads: one that is modelled on the pad's net but not on another of its pads (a
     scenario that models one diode of a pair) has the pads it leaves out named instead,
     wherever they are, because current can come in through them, unless the scenario
-    fixes that pad's net (current into a fixed net moves no level).
+    fixes that pad's net (current into a fixed net moves no level) or the pad is in
+    ``listed``.
     """
     held = element_nets(circuit)
     found: list[str] = []
@@ -282,6 +283,8 @@ def left_out(
                 found.append(name(ref, pad, net))
                 continue
             for other in sorted(nl.functions(ref), key=natkey):
+                if (ref, other) in listed:
+                    continue
                 other_net = nl.net(ref, other)
                 if (
                     other_net is not None
