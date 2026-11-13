@@ -214,7 +214,7 @@ def _both_ways(pairs: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
     return [arc for a, b in pairs for arc in ((a, b), (b, a))]
 
 
-def _is_test_point(nl: Netlist, ref: str) -> bool:
+def is_test_point(nl: Netlist, ref: str) -> bool:
     """Return True for a test point: letters ``TP``, or ``TestPoint`` in its symbol."""
     part = nl.parts[ref]
     lib, name = str(part["lib"]).lower(), str(part["part"]).lower()
@@ -263,7 +263,7 @@ def _not_walked(nl: Netlist, ref: str) -> str | None:
         return f"parts with reference letters {', '.join(NOT_WALKED)} are not"
     if found == "C" and len(nl.functions(ref)) == 2:
         return "two-pad capacitors are not"
-    if _is_test_point(nl, ref):
+    if is_test_point(nl, ref):
         return "test points are not"
     if is_connector(nl, ref):
         return "connectors are not; a header used as a link takes the reference JP"

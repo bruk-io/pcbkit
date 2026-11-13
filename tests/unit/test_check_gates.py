@@ -73,6 +73,10 @@ FROZEN = {
     # test_ports
     "test_ports::test_port_pins_carry_their_nets": "sch",
     "test_ports::test_every_connector_is_in_the_port_map": "sch",
+    # test_power_paths
+    "test_power_paths::test_power_path": "sch",
+    "test_power_paths::test_no_unlisted_power_path": "sch",
+    "test_power_paths::test_power_path_parts_are_modelled": "sch",
     # test_semis
     "test_semis::test_semiconductor_voltage_derated": "sch",
     # test_outputs
@@ -155,7 +159,7 @@ def test_the_gate_the_rule_gives_is_the_frozen_one(key: str) -> None:
 def test_the_gates_have_the_counts_the_design_gives() -> None:
     """Count the checks at each gate, so a bulk change cannot pass quietly."""
     counts = {gate: list(FROZEN.values()).count(gate) for gate in GATES}
-    assert counts == {"sch": 23, "place": 2, "route": 15, "order": 6}
+    assert counts == {"sch": 26, "place": 2, "route": 15, "order": 6}
 
 
 def test_the_exceptions_are_real_checks_whose_gate_the_fixtures_get_wrong() -> None:

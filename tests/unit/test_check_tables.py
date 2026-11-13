@@ -224,7 +224,7 @@ def test_a_record_names_a_missing_and_an_unknown_key() -> None:
 
 def test_an_optional_key_with_a_default_is_filled_in() -> None:
     """Read ``max_ohm`` as 10 when the table leaves it out."""
-    shape = tables.PROPOSED["POWER_PATHS"]
+    shape = tables.registry()["POWER_PATHS"]
     bare = {"nets": ["A", "B"], "paths": [], "parts": {}}
     assert tables.convert("POWER_PATHS", bare, shape)[0]["max_ohm"] == 10
     kept = {**bare, "max_ohm": 2.5}
@@ -1328,7 +1328,7 @@ def test_power_paths_parts_are_optional_and_filled_in_when_left_out() -> None:
 
 def test_power_paths_max_ohm_is_above_zero() -> None:
     """Refuse 0 and negative: no path would ever count."""
-    shape = tables.PROPOSED["POWER_PATHS"]
+    shape = tables.registry()["POWER_PATHS"]
     base = {"nets": [], "paths": []}
     assert errors(shape, {**base, "max_ohm": 0}, "P") == [
         'specs.P["max_ohm"]: expected ohm (above 0), got 0'

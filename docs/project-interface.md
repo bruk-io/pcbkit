@@ -974,6 +974,7 @@ and on `circuits.scenario` for the fault states, at the `sch` gate:
 | `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional), "elements": [{"pins": {"g": pad, "d": pad, "s": pad}}] (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)} or {"vrwm": V, "derate": fraction in (0, 1] (optional), "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)} or {"vz": V, "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)}}` | The voltage ratings of the FETs, diodes and clamps, by MPN, in four kinds. A FET row gives VDS and VGS; a diode row VRRM; a TVS row `vrwm`, its standoff voltage, judged at a default `derate` of 1.0 because a TVS is specified there; a Zener used as a clamp a `vz` row, recorded as a clamp and not held to a rating (see the check). `derate` is the share of the rating allowed: 0.8 when left out for a FET or diode and never more, 1.0 for a TVS; a clamp row has none. `pins` gives the pads, as the netlist numbers them, when the symbol's pin names do not read as one FET (G, D, S) or one diode (A, K); `elements` lists the pads of each diode or FET in a part that holds several (a dual diode, a dual FET), each judged on its own against the row's rating; a row gives `pins` or `elements`, not both. A bipolar transistor is written as a FET row, `vds` its VCEO, `vgs` its VEBO, `pins` `{"g": base, "d": collector, "s": emitter}`. A row is the designer's statement: a rectifier written as a TVS or a clamp is judged as one, and `numbers` records the kind. `{}` says there is nothing to rate. It also reads `STRESS_SCENARIOS` (as in `circuit`). |
 | `SEMI_NOT_JUDGED` | `{ref: reason}` | Optional: parts declared out of the semiconductor check's reach (a bridge rectifier, a diode array, an RGB LED), each with the reason, which `numbers` records under `declared not judged`. A reference that is not in the design fails by name. A declared part whose MPN has a `SEMI_VRATED` row is judged anyway. Missing or `{}` means none. |
 | `SEMI_HIGH_Z` | `[(ref, pad)]` | Optional: pads the designer states draw and source nothing at DC (an idle controller pin, a connector pin with nothing plugged in), so the semiconductor check's left-out rule passes over them, as a pin listed in a `FAULT_STATES` condition is in the fault-state check. It is the designer's claim, and it holds in every `STRESS_SCENARIOS` row: a pad named here that really drives a net in any row hides that drive, so a connector pin is high-impedance only if nothing is ever plugged into it in the conditions the rows describe. It exempts the pads it names, not the rest of their part. Recorded under `high-z pads`. A reference not in the design, or a pad it has no net on, fails by name. Missing or `[]` means none. |
+| `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | The judged rails and how power may move between them. `nets` are the rails judged, and must be exactly the nets of `SUPPLY_NETS` other than the ground net (`GROUND_NET`, or `"GND"` when that is not defined and the design has it): the ground net is never judged, and a judged net missing from `SUPPLY_NETS`, or a supply missing from `nets`, fails all three power-path checks by name, so the two tables cannot disagree. Each row of `paths` is a path the design means, from one judged net to another in the direction current flows, and the parts it runs through (`("VIN", "+5V", ["U3"])`); a path the other way is a row of its own. `parts` states what a part conducts, as `(in pad, out pad)` pairs in pad numbers as the netlist writes them, at 0 ohm (`{"U3": [("1", "5")]}` for a regulator's input to its output; `{"U4": []}` for an IC powered from two rails that passes no power between them); it overrides every built-in rule for that part, and pcbkit takes it at its word. `max_ohm` (above 0, default 10) is the most a path between two judged nets may resist and still be a power path. Every name in a row must be in the design, and each row's nets in `nets`. |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
 looks at the whole table) fails naming each regulator whose enable pad is wired straight
@@ -1299,6 +1300,115 @@ judged at all. A part whose pins mix families (an optocoupler's A, K, C and E) o
 names, that is not from a `Diode` or `Transistor` library or one of the `Device` symbols
 above, and has neither a row nor an element in the circuit, is not found.
 
+The power-path checks answer the DC part of "can source X power rail Y, and can anything
+back-feed?" from the netlist. A *path* runs from one judged net to another through
+parts, in the direction current can flow, and never through a third judged net or the
+ground net: so `VBUS` to `+5V` to `+3V3` is two rows, and a rail fed through another
+needs no row of its own. Its resistance is the effective resistance between the two
+nets of every route the walk finds, as resistors in series and parallel (a diode's
+direction is used to find the routes, not inside them, which can only lower the
+figure). It is a *power path* when that is at most `max_ohm`.
+
+How each part conducts, from any library. Whatever is not on the short lists below
+conducts, so a part the check does not understand can only add a path, never hide one:
+
+- a part in `parts` conducts exactly as declared, from in pad to out pad, at 0 ohm, and
+  nothing else; this overrides every rule below;
+- not walked, so it must be declared when it reaches two judged nets (the third check):
+  reference letters `U`, `IC` or `A` (ICs and modules), a connector as the port map
+  defines it (it joins nothing on the board, but what is plugged in can), a test point;
+- open at DC, never a path and never named: a capacitor with two pads (reference letters
+  `C`); one with three or more pads, such as a feedthrough, is walked;
+- a FET (pins that read as one FET, G, D and S, as in the semiconductor check):
+  drain to source both ways at 0 ohm, whatever its gate does, which also covers its body
+  diode; the gate joins nothing. So swapping a FET's drain and source changes nothing
+  here: an ideal-diode or reverse-blocking FET whose controller keeps it off in reverse
+  is declared in `parts` one way;
+- any other part with reference letters `Q` (a bipolar transistor, a dual FET): every
+  pad to every other at 0 ohm;
+- every other part as the enable-link walk goes through it: the `Device` resistor packs
+  and a `Switch:SW_DIP_x<n>` by their pinout, a two-pad diode whose pins are named `A`
+  and `K` from anode to cathode only (an LED too), and anything else every pad to every
+  other, both ways (a ferrite, a fuse, an inductor, a jumper, a bidirectional TVS, a
+  diode with three or more pads, a relay).
+
+A resistor (reference letters `R` with two pads, from any library, or a `Device` `R`,
+`R_Small`, `R_US`, `R_Small_US`, `R_Pack*`, `R_Network*` or `R_Array*`; a pack per
+element) weighs its value, read as `2.2k`, `4k7`, `10K`, `4R7`, `R47`, `0R`, `10kohm` or
+`100K_0402`. Every other part weighs 0 ohm (a ferrite's, a fuse's and an inductor's DC
+resistance is taken as nothing; a potentiometer, whose wiper may sit at an end, too). A
+value that does not read as ohms counts as 0 ohm, and a not-fitted mark counts as fitted
+(`DNP` alone at 0 ohm, `10k DNP` at 10k), because the netlist does not say which builds
+fit a part; the message of a path through one says so. Reverse breakdown is not
+modelled: a Zener or TVS with pins `A` and `K` conducts anode to cathode only.
+
+`test_power_path[from->to]` (one per row) fails when the path is not found, when a
+part the row names is on no power path between the two nets, or when, with the named
+parts taken out, the nets are still joined at `max_ohm` or less (the message names the
+route left and the row that would name it). "Not found" says why: current cannot flow
+from one to the other (with each named part's pads and nets, how it is walked, and what
+a declared part passes, so a regulator whose output pad is on the wrong net is plain),
+or the least resistance is above `max_ohm` (with the path). A row whose net is not in
+`nets`, that runs from a net to itself, names no part, names a part not in the design, or
+is listed twice fails by name. It records `power path`, `{"from", "to", "refs", "ohms",
+"path", "without named"}` (`ohms` and `path` null when no route was found;
+`without named` the route left without the named parts, `{"ohms", "path"}`, or null).
+
+`test_no_unlisted_power_path` fails for every ordered pair of judged nets joined at
+`max_ohm` or less that no row declares, naming the path, its resistance and the row that
+would declare it. A pair is ordered: `+3V3A` back-feeding `+3V3` through a ferrite is a
+different pair from `+3V3` feeding `+3V3A`, so a part that conducts both ways between two
+judged rails (a ferrite, a fuse, a sense resistor, a FET) needs a row each way, or the
+check fails saying current can flow back. It records `max_ohm` and `power paths`,
+`{"X->Y": {"ohms", "path ohms", "path", "power path", "listed"}}`, for every ordered pair
+current can flow between at any resistance, so a review sees the near misses (a 20k
+route through two pull-ups, a 12 ohm route just above the threshold) without walking
+them.
+
+`test_power_path_parts_are_modelled` fails naming each part that is not walked (an IC,
+module, connector or test point), is not in `parts`, and reaches two judged nets or
+more: a pad on a judged net, or on a net joined to one at `max_ohm` or less either way
+(so a regulator whose output reaches `+3V3` through a ferrite, or a buck converter whose
+switch node reaches `+5V` through its inductor, counts). The way out is to declare what
+it passes, `{"U3": [("1", "5")]}`, or `{"U1": []}` if it passes no power. It records
+`not modelled`, `{ref: {judged net: how}}`, and `declared parts`, `{ref: ["1 -> 5 (VIN
+-> +5V)"]}`.
+
+A problem with the table itself fails all three checks, with the same words: a judged net
+not in the design, listed twice, not in `SUPPLY_NETS`, or the ground net; a net of
+`SUPPLY_NETS` other than the ground net that is not judged; a declared part not in the
+design, or a declared pad that is not a pad of the part on a net.
+
+Why `nets` must match `SUPPLY_NETS`: the enable-link walk stops at every net of
+`SUPPLY_NETS`, and this walk stops at every judged net. If a rail were in one and not the
+other, one check would walk across a rail the other stops at, and a back-feed into a
+rail left out of `nets` would never be judged. A second ground, such as `AGND`, is
+therefore judged like a rail unless it is `GROUND_NET`, and each IC between it and a
+rail is declared `{"U1": []}`.
+
+What an ordinary board writes: one row per path the design means and one per back-feed
+it accepts, one `parts` line per regulator, load switch or power module, one per IC,
+module or connector that sits across two rails (`[]`), and the judged rails. A board
+with a USB input, a battery input, a diode-OR into `VIN`, a regulator to `+3V3`, a
+ferrite to `+3V3A` and a level shifter powered from both `VIN` and `+3V3` writes five
+rows, two `parts` lines and one `nets` line.
+
+What it proves, and what it does not. It proves that, in the netlist, with every part
+conducting as described above at its static best (a FET on whatever its gate does, a
+switch closed, a not-fitted part fitted), the judged rails are joined at `max_ohm` or
+less exactly where the rows say, through the parts they name, and that no IC, module or
+connector the walk does not go through reaches two judged rails undeclared. It is
+static conduction only: no voltages, no currents, no timing, no sequencing. A declared
+part is trusted to conduct exactly as declared and no more: a regulator declared `IN ->
+OUT` is taken to pass nothing back, so an LDO's reverse current or a load switch without
+reverse blocking must be declared both ways to be judged. Back-feed through an unpowered
+IC's ESD diodes runs through kilohms of series resistance, so it is far above `max_ohm`
+and not judged here (`GPIO_SCENARIOS` covers the ESP32 module's case); leakage is not
+judged either. A route through the ground net is not followed. What is plugged into a
+connector is not on the board, and a connector across two rails is declared by the
+designer. Parallel routes are combined, so two 15 ohm resistors between two rails are a
+7.5 ohm path.
+
 **`bringup`** (opt-in, like `ports` and `power`; once it is on, a missing table fails by
 name and `{}` says "none here"). It runs on the netlist and `circuits.i2c_devices`, at the
 `sch` gate:
@@ -1353,7 +1463,6 @@ error. Each row's text is generated from the shape, and a test keeps it so.
 
 | Name | Shape | Read by |
 |---|---|---|
-| `POWER_PATHS` | `{"nets": [net], "paths": [(from net, to net, [ref])], "parts": {ref: [(in pad, out pad)]} (optional, default {}), "max_ohm": ohm (optional, default 10)}` | power paths (`power`); `max_ohm` is the most a path may resist and still count; the nets a path names should be members of `nets` (the check says so, this shape does not) |
 | `MATING` | `{plug: {"pins": [net or None], "fits": [ref], "keyed": True or False, "rows": 1 or 2 (optional, default 1)}}` | mis-plug (`ports`) |
 | `NET_LIMITS` | `{net: max V}` | mis-plug (`ports`), optional |
 | `TEST_POINTS` | `[(net, max ground mm)]` | test points (later) |

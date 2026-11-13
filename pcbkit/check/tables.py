@@ -1013,18 +1013,6 @@ EXISTING: dict[str, Shape] = {
 _SIDE = Choice("top", "bottom")
 
 PROPOSED: dict[str, Shape] = {
-    "POWER_PATHS": Record(
-        required={
-            "nets": ListOf(Net()),
-            "paths": ListOf(Tuple(Net("from net"), Net("to net"), ListOf(Ref()))),
-        },
-        optional={
-            "parts": Opt(
-                DictOf(Ref(), ListOf(Tuple(Pad("in pad"), Pad("out pad")))), default={}
-            ),
-            "max_ohm": Opt(Ohms(positive=True), default=10),
-        },
-    ),
     "MATING": DictOf(
         Text("plug"),
         Record(
