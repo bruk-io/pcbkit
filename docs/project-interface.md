@@ -973,7 +973,7 @@ and on `circuits.scenario` for the fault states, at the `sch` gate:
 | `FAULT_STATES` | `{condition: {"scenario": {keyword: value}, "pins": [(ref, pad, (min V, max V))]}}` | The level each listed pin must hold in a fault condition ("controller absent", "input supply off"). `scenario` is the keyword arguments of `circuits.scenario` that make the condition: what the scenario fixes is driven, what it leaves free is not, so "controller absent, so +5V is off" is written into the scenario by hand (`circuit.fix("+5V", 0)`). The window is the datasheet's (an enable's VIL for "off": `(0, 0.4)`). Pads are pad numbers as the netlist writes them, never pin names. `{}` says there is no fault state to check. |
 | `SEMI_VRATED` | `{mpn: {"vds": V, "vgs": V, "derate": fraction in (0, 0.8] (optional), "pins": {"g": pad, "d": pad, "s": pad} (optional), "elements": [{"pins": {"g": pad, "d": pad, "s": pad}}] (optional)} or {"vrrm": V, "derate": fraction in (0, 0.8] (optional), "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)} or {"vrwm": V, "derate": fraction in (0, 1] (optional), "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)} or {"vz": V, "pins": {"a": pad, "k": pad} (optional), "elements": [{"pins": {"a": pad, "k": pad}}] (optional)}}` | The voltage ratings of the FETs, diodes and clamps, by MPN, in four kinds. A FET row gives VDS and VGS; a diode row VRRM; a TVS row `vrwm`, its standoff voltage, judged at a default `derate` of 1.0 because a TVS is specified there; a Zener used as a clamp a `vz` row, recorded as a clamp and not held to a rating (see the check). `derate` is the share of the rating allowed: 0.8 when left out for a FET or diode and never more, 1.0 for a TVS; a clamp row has none. `pins` gives the pads, as the netlist numbers them, when the symbol's pin names do not read as one FET (G, D, S) or one diode (A, K); `elements` lists the pads of each diode or FET in a part that holds several (a dual diode, a dual FET), each judged on its own against the row's rating; a row gives `pins` or `elements`, not both. A bipolar transistor is written as a FET row, `vds` its VCEO, `vgs` its VEBO, `pins` `{"g": base, "d": collector, "s": emitter}`. A row is the designer's statement: a rectifier written as a TVS or a clamp is judged as one, and `numbers` records the kind. `{}` says there is nothing to rate. It also reads `STRESS_SCENARIOS` (as in `circuit`). |
 | `SEMI_NOT_JUDGED` | `{ref: reason}` | Optional: parts declared out of the semiconductor check's reach (a bridge rectifier, a diode array, an RGB LED), each with the reason, which `numbers` records under `declared not judged`. A reference that is not in the design fails by name. A declared part whose MPN has a `SEMI_VRATED` row is judged anyway. Missing or `{}` means none. |
-| `SEMI_HIGH_Z` | `[(ref, pad)]` | Optional: pads the designer states draw and source nothing at DC (an idle controller pin, a connector pin with nothing plugged in), so the semiconductor check's left-out rule passes over them, as a pin listed in a `FAULT_STATES` condition is in the fault-state check. It is the designer's claim: a pad named here that really drives a net hides that drive. Recorded under `high-z pads`. A reference not in the design, or a pad it has no net on, fails by name. Missing or `[]` means none. |
+| `SEMI_HIGH_Z` | `[(ref, pad)]` | Optional: pads the designer states draw and source nothing at DC (an idle controller pin, a connector pin with nothing plugged in), so the semiconductor check's left-out rule passes over them, as a pin listed in a `FAULT_STATES` condition is in the fault-state check. It is the designer's claim, and it holds in every `STRESS_SCENARIOS` row: a pad named here that really drives a net in any row hides that drive, so a connector pin is high-impedance only if nothing is ever plugged into it in the conditions the rows describe. It exempts the pads it names, not the rest of their part. Recorded under `high-z pads`. A reference not in the design, or a pad it has no net on, fails by name. Missing or `[]` means none. |
 
 `test_each_regulator_on_a_shared_enable_has_its_own_link[net]` (one per key; each case
 looks at the whole table) fails naming each regulator whose enable pad is wired straight
@@ -1121,15 +1121,21 @@ each listed pin that:
   that has more than 1 V across it in reverse on those nets (no Zener or TVS sold breaks
   down below that): whether it conducts is not known. `dc.build(nl, extended=True)` puts
   there every Zener and TVS it models and every two-pad `Diode` or `Power_Protection`
-  part, whose kind it cannot know; a scenario that models a Zener or TVS by hand must
-  add its reference too (`circuit.forward_only.add("D1")`), and the left-out message says
-  so. If the part breaks down, model its breakdown as `circuit.D(cathode net, anode net,
-  vz, ref="D2.breakdown")` (the one element `extended` lets a scenario add to a part it
-  built) or fix the net it clamps; if it only blocks, a `SEMI_VRATED` row of kind `vrrm`
-  (read when that table is defined) says so, and the part needs nothing more while its
-  reverse voltage stays at or under that VRRM. A `vz` or `vrwm` row says it breaks down.
-  So a Zener from a rail into a judged pin cannot pass silently from any library once the
-  check's advice is followed;
+  part, whose kind it cannot know. A scenario that models a Zener or TVS by hand, in any
+  form without its breakdown (a forward diode, an open element), must add its reference
+  too (`circuit.forward_only.add("D1")`), and the left-out message says so: a hand model
+  not listed there is taken at its word, and a Zener in it can pass silently. If the
+  part breaks down, model its breakdown as `circuit.D(cathode net, anode net, vz,
+  ref="D2.breakdown")` (for a part held open, from the net at the higher voltage to the
+  other), the one element `extended` lets a scenario add to a part it built, or fix the
+  net it clamps. One `.breakdown` element is allowed per part, and its presence ends the
+  question in both polarities, so a bidirectional part's other direction is then not
+  asked about. If the part only blocks, a `SEMI_VRATED` row of kind `vrrm` (read when that
+  table is defined) says so, and it needs nothing more while its reverse voltage stays at
+  or under that VRRM; above it the message names the VRRM and the voltage. A `vz` or
+  `vrwm` row says it breaks down. A `Device:D_Zener` or `Device:D_TVS` symbol already
+  says it breaks down, so a `vrrm` row does not exempt it (the semiconductor check fails
+  such a row by name and asks for `vz` or `vrwm`);
 - is outside its window;
 - reads its level only because of the 1 nS leak: the level moves by more than 50 mV
   when the leak is made 1000 times smaller, which happens when the pin is held through
@@ -1186,7 +1192,14 @@ needs no crossed `elements`. A part held this way has no diode element in the ci
 so it conducts nothing in the model and its absolute voltage is the real one; a part
 that does conduct in the model has a diode element, which confirms its polarity, so its
 forward drop is never judged. The record says which: `"polarity": "reverse"` or
-`"either way"`. A
+`"either way"` (null when no scenario gave a reading).
+
+A circuit element never confirms polarity for a part whose pins are named A1 and A2.
+A diode element of a judged part that the solution shows conducting with more than 1 V
+above its forward drop across it (only possible between two fixed nets: no part carries
+that current) fails by name as an unphysical model. A bidirectional part is modelled by
+hand as an open element, `circuit.R(net, net, 1e12, ref="D1.open")`, never as
+`circuit.D`, and the not-modelled message says so. A
 clamp (`vz`) is not held to a rating: it fails when the model shows more than `vz` plus
 5 % across it, because the DC model has no breakdown, so such a solve is not the
 board's; the message says to fix the clamped net at its clamped voltage in that

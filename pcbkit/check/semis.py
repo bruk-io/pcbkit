@@ -379,12 +379,26 @@ def _row_elements(nl: Netlist, ref: str, row: Mapping[str, Any]) -> Plan:
     return Plan(row_kind(row), elements)
 
 
+# Device symbols the solver models as parts that break down (Zeners and TVSs).
+BREAKDOWN_SYMBOLS = ("Device:D_Zener", "Device:D_TVS")
+
+
+def breaks_down_by_symbol(nl: Netlist, ref: str) -> bool:
+    """Return True for a ``Device`` Zener or TVS: the symbol the solver models it by."""
+    return nl.kind(ref).startswith(BREAKDOWN_SYMBOLS)
+
+
 def plan_part(nl: Netlist, ref: str, row: Mapping[str, Any] | None) -> Plan:
     """Return how ``ref`` is judged: from its row's pads, else from its pin names."""
     if row is not None and "pins" in row and "elements" in row:
         return Plan(None, problem='its row gives both "pins" and "elements": give one')
     if row is not None and ("pins" in row or "elements" in row):
         return _row_elements(nl, ref, row)
+    if row is not None and "vrrm" in row and breaks_down_by_symbol(nl, ref):
+        return Plan(
+            None,
+            problem="its symbol says it breaks down, but its row is a vrrm row",
+        )
     pins = read_pins(nl, ref)
     if pins.kind is None:
         return Plan(None, problem=pins.problem)
@@ -402,6 +416,10 @@ def _hint(nl: Netlist, ref: str, plan: Plan, row: Mapping[str, Any] | None) -> s
     """Return what to write when a part cannot be judged: the way out that applies."""
     declare = ", or declare it in SEMI_NOT_JUDGED with the reason"
     problem = str(plan.problem)
+    if "says it breaks down" in problem:
+        return (
+            "write a vz row (a Zener used as a clamp) or a vrwm row (a TVS)" + declare
+        )
     if row is not None and ("pins" in row or "elements" in row):
         return "correct the row" + declare
     if "but its row is a" in problem:
@@ -502,16 +520,22 @@ def _polarity_known(
 ) -> bool:
     """Return True if the anode is certain, so the reverse voltage alone counts.
 
-    It is certain when the part is not a TVS row and is not held as ``<ref>.open``, and
-    either both pads' pin names read plainly as its anode and cathode (A and K, not A1
-    and A2) or the circuit's own diode element for the part runs from the element's
-    anode net to its cathode net. Otherwise the part is judged on the absolute voltage.
+    It is certain when the part is not a TVS row, is not held as ``<ref>.open`` and its
+    pads are not named A1 and A2 (a bidirectional part), and either both pads' pin names
+    read plainly as its anode and cathode (A and K) or the circuit's own diode element
+    for the part runs from the element's anode net to its cathode net. Otherwise the
+    part is judged on the absolute voltage.
     """
     if plan.kind == TVS:
         return False
     if any(r == f"{ref}.open" for *_x, r in circuit.res):
         return False
     names = nl.functions(ref)
+    if any(
+        re.fullmatch(r"A\d+", names.get(pad, "").strip().upper())
+        for pad in (element["a"], element["k"])
+    ):
+        return False  # a bidirectional part: no element can say which way round
     if names.get(element["a"], "").strip().upper() in ("A", "ANODE") and names.get(
         element["k"], ""
     ).strip().upper() in ("K", "CATHODE"):
@@ -522,6 +546,36 @@ def _polarity_known(
         for a, c, *_x, r in circuit.diodes
         if r and str(r).split(".", 1)[0] == ref and not str(r).endswith(".breakdown")
     )
+
+
+# A diode element showing this much more than its forward drop conducts more current
+# than any part could: only two fixed nets across it can do that.
+UNPHYSICAL_EXCESS_V = 1.0
+
+
+def _unphysical(ref: str, solution: Any) -> str:
+    """Return why a diode element of ``ref`` cannot be the board, or "".
+
+    A conducting diode element with far more than its forward drop across it (more
+    than ``UNPHYSICAL_EXCESS_V`` above ``vf``) is held between two fixed nets: the
+    model forces a current no part carries, so its voltages are not the board's.
+    """
+    circuit = solution.c
+    states = circuit.state.get("diodes", []) if isinstance(circuit.state, dict) else []
+    for k, (a, c, vf, _ron, r) in enumerate(circuit.diodes):
+        if not r or str(r).split(".", 1)[0] != ref:
+            continue
+        forward = solution[a] - solution[c]
+        on = states[k] if k < len(states) else forward > vf
+        if on and forward > vf + UNPHYSICAL_EXCESS_V:
+            return (
+                f"its diode element {r} conducts with {forward:.2f} V across it, far "
+                f"more than its {vf:g} V forward drop, which only a diode between two "
+                "fixed nets can show, so the model is not the board; model a "
+                "bidirectional part as an open element (circuit.R(net, net, 1e12, "
+                f"ref='{ref}.open')), never as circuit.D"
+            )
+    return ""
 
 
 def _observe(
@@ -555,7 +609,8 @@ def _observe(
             f"STRESS_SCENARIOS[{index}]: {why}, so the voltage across it is not the "
             f"board's; add it in circuits.scenario with ref {ref!r} (circuit.D(anode "
             f"net, cathode net, vf, ref={ref!r}) for a diode, a circuit.fets entry for "
-            "a FET)",
+            "a FET; a bidirectional part as an open element, circuit.R(net, net, "
+            f"1e12, ref='{ref}.open'), never as circuit.D)",
         )
         return
     wrong = _against_the_circuit(nl, ref, plan, circuit)
@@ -564,6 +619,13 @@ def _observe(
             "direction",
             f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: {wrong}; correct "
             "the row's pins",
+        )
+        return
+    unphysical = _unphysical(ref, solution)
+    if unphysical:
+        seen.once(
+            "unphysical",
+            f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: {unphysical}",
         )
         return
     floating = _pad_list(nl, ref, plan, lambda n: not solution.floating(n))
@@ -655,7 +717,8 @@ def _verdict(
             label = "|V(K) - V(A)|" if either else LABELS[name]
             polarity = {}
             if FAMILY[kind] == DIODE:
-                polarity = {"polarity": "either way" if either else "reverse"}
+                shown_polarity = "either way" if either else "reverse"
+                polarity = {"polarity": None if v is None else shown_polarity}
             if kind == CLAMP:
                 limit = None if rated is None else rated * (1 + CLAMP_TOLERANCE)
                 quantities[name] = {
@@ -703,7 +766,7 @@ def blocking_ratings(nl: Netlist, table: Mapping[str, Any]) -> dict[str, float]:
     for ref in nl.parts:
         mpn = mpn_of(nl, ref)
         row = table.get(mpn) if mpn else None
-        if row is not None and "vrrm" in row:
+        if row is not None and "vrrm" in row and not breaks_down_by_symbol(nl, ref):
             found[ref] = float(row["vrrm"])
     return found
 

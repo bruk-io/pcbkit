@@ -195,3 +195,46 @@ def test_a_keyword_the_scenario_would_ignore_fails_by_name(tmp_path: Path) -> No
     )
     assert entry["numbers"]["pins"] == {"U2 pad 3": [None, 0, 0.4, "unsolved"]}
     assert result.outcome(f"{CHECK}[input_high]") == "passed"
+
+
+EXTENDED = check_toy.CIRCUITS.replace("build(nl)", "build(nl, extended=True)")
+
+
+def blocking_board() -> Toy:
+    """Add a Diode-library part from VIN (K) into EN (A): 5 V reverse across it."""
+    toy = board()
+    toy.add(
+        "D7", "1N4148", "Diode:1N4148", {"1": ("VIN", "K"), "2": ("EN", "A")},
+        MPN="DIODE-1",
+    )  # fmt: skip
+    return toy
+
+
+def run_blocking(tmp_path: Path, name: str, extra: str) -> Run:
+    """Run the fault states on the blocking board with ``extra`` specs."""
+    root = check_toy.write_project(
+        tmp_path / name, blocking_board(), ["power"], SPECS + TABLE + extra, EXTENDED
+    )
+    return run(root, "test_faults")
+
+
+def test_a_library_diode_on_a_judged_pin_needs_its_kind_stated(tmp_path: Path) -> None:
+    """No SEMI_VRATED at all: the part of unknown kind fails by name."""
+    entry = run_blocking(tmp_path, "none", "").entry(f"{CHECK}[logic_absent]")
+    assert entry["outcome"] == "failed"
+    assert "D7 is modelled forward only (no breakdown) and has 5.00 V across it" in (
+        said(entry)
+    )
+
+
+def test_a_vrrm_row_says_the_library_diode_blocks(tmp_path: Path) -> None:
+    """A vrrm row of 100 V: the pin passes; one of 3 V is named as too low."""
+    result = run_blocking(
+        tmp_path, "ok", '\nSEMI_VRATED = {"DIODE-1": {"vrrm": 100}}\n'
+    )
+    assert result.done.returncode == 0, result.done.stdout
+    entry = run_blocking(
+        tmp_path, "low", '\nSEMI_VRATED = {"DIODE-1": {"vrrm": 3}}\n'
+    ).entry(f"{CHECK}[logic_absent]")
+    assert entry["outcome"] == "failed"
+    assert "its vrrm row's VRRM (3 V) is under the 5.00 V across it" in said(entry)

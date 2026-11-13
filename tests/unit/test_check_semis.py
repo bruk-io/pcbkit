@@ -208,7 +208,9 @@ def test_a_diode_dc_does_not_model_fails_until_the_scenario_models_it() -> None:
         "STRESS_SCENARIOS[0]: dc.build does not model this symbol (dc.build(nl, "
         "extended=True) models more), so the voltage across it is not the board's; "
         "add it in circuits.scenario with ref 'D4' (circuit.D(anode net, cathode net, "
-        "vf, ref='D4') for a diode, a circuit.fets entry for a FET)"
+        "vf, ref='D4') for a diode, a circuit.fets entry for a FET; a bidirectional "
+        "part as an open element, circuit.R(net, net, 1e12, ref='D4.open'), never as "
+        "circuit.D)"
     ]
     assert report.parts["D4"]["vr"]["v"] is None
 
@@ -1189,3 +1191,133 @@ def test_a_vrrm_row_lets_a_blocking_library_diode_sit_on_a_judged_parts_nets() -
     report = semis.judge(nl, table, list(tries))
     assert any("D2 cannot be judged" in p and "D10 is modelled forward" in p
                for p in report.problems)  # fmt: skip
+
+
+# --- narrow review ------------------------------------------------------------------
+
+
+def bidir_esd(
+    names: tuple[str, str], row: dict[str, Any], model: str
+) -> semis.SemiReport:
+    """Judge the reviewer's p_pol: a custom bidirectional ESD part on VBUS (6 V)."""
+    toy = Toy()
+    toy.add(
+        "D1",
+        "ESD",
+        "MyLib:ESD_BIDIR",
+        {"1": ("VBUS", names[0]), "2": ("GND", names[1])},
+        MPN="ESD-5",
+    )
+    check_toy.resistor(toy, "R1", "10k", "VBUS", "GND")
+    nl = netlist(toy)
+    c = build(nl, extended=True).fix("GND", 0).fix("VBUS", 6.0)
+    if model == "diode":
+        c.D("VBUS", "GND", 0.7, ref="D1")
+    else:
+        c.R("VBUS", "GND", 1e12, ref="D1.open")
+    return semis.judge(nl, read({"ESD-5": row}), [(0, c.solve(), None)])
+
+
+ESD_ROW = {"vrrm": 5.5, "pins": {"a": "1", "k": "2"}}
+
+
+def test_a_hand_diode_never_confirms_polarity_for_pins_named_a1_and_a2() -> None:
+    """p_pol, with VBUS fed through 10 ohm so the hand diode is physical."""
+    toy = Toy()
+    toy.add(
+        "D1",
+        "ESD",
+        "MyLib:ESD_BIDIR",
+        {"1": ("VBUS", "A1"), "2": ("GND", "A2")},
+        MPN="ESD-5",
+    )
+    check_toy.resistor(toy, "R1", "10", "+6V", "VBUS")
+    nl = netlist(toy)
+    c = build(nl, extended=True).fix("GND", 0).fix("+6V", 6.0)
+    c.D("VBUS", "GND", 0.7, ref="D1")
+    report = semis.judge(nl, read({"ESD-5": ESD_ROW}), [(0, c.solve(), None)])
+    assert report.parts["D1"]["vr"]["polarity"] == "either way"
+
+
+def test_a_part_with_no_reading_records_no_polarity() -> None:
+    """Stopped as unphysical: no voltage, so no claim about its polarity."""
+    report = bidir_esd(("1", "2"), ESD_ROW, "diode")
+    assert report.parts["D1"]["vr"]["v"] is None
+    assert report.parts["D1"]["vr"]["polarity"] is None
+
+
+@pytest.mark.parametrize("names", [("A1", "A2"), ("~", "~"), ("1", "2")])
+def test_a_diode_element_conducting_far_past_its_drop_is_unphysical(
+    names: tuple[str, str],
+) -> None:
+    """A diode across two fixed nets shows 6 V forward: the model is not the board."""
+    report = bidir_esd(names, ESD_ROW, "diode")
+    assert (
+        "D1 cannot be judged in STRESS_SCENARIOS[0]: its diode element D1 conducts "
+        "with 6.00 V across it, far more than its 0.7 V forward drop, which only a "
+        "diode between two fixed nets can show, so the model is not the board; model "
+        "a bidirectional part as an open element (circuit.R(net, net, 1e12, "
+        "ref='D1.open')), never as circuit.D"
+    ) in report.problems
+
+
+@pytest.mark.parametrize("names", [("A1", "A2"), ("~", "~"), ("1", "2")])
+def test_a_bidirectional_part_modelled_open_is_judged_either_way(
+    names: tuple[str, str],
+) -> None:
+    """The way out: open, judged at 6 V against 0.8 of 5.5 V."""
+    report = bidir_esd(names, ESD_ROW, "open")
+    assert report.problems == [
+        "D1 |V(K) - V(A)| reaches 6.00 V in STRESS_SCENARIOS[0], over 0.8 of its "
+        "5.5 V rating (4.40 V)"
+    ]
+
+
+def test_an_ordinary_forward_diode_is_not_unphysical() -> None:
+    """The LED through its resistor conducts at its drop: no complaint."""
+    assert judge(board(), {**TABLE}).problems == []
+
+
+def test_the_not_modelled_message_says_how_to_model_a_bidirectional_part() -> None:
+    """Advise an open element, never circuit.D, for a bidirectional part."""
+    toy = board()
+    toy.add("D4", "D", "MyLib:Diode", {"1": ("+5V", "K"), "2": ("GND", "A")}, MPN="D-1")
+    (problem,) = judge(toy, {**TABLE, "D-1": {"vrrm": 100.0}}).problems
+    assert problem.endswith(
+        "a circuit.fets entry for a FET; a bidirectional part as an open element, "
+        "circuit.R(net, net, 1e12, ref='D4.open'), never as circuit.D)"
+    )
+
+
+@pytest.mark.parametrize("symbol", ["Device:D_Zener", "Device:D_TVS"])
+def test_a_vrrm_row_on_a_device_zener_or_tvs_fails_by_name(symbol: str) -> None:
+    """Its symbol says it breaks down: ask for vz or vrwm."""
+    toy = board()
+    toy.add("D9", "Z", symbol, {"1": ("+5V", "K"), "2": ("GND", "A")}, MPN="Z")
+    nl = netlist(toy)
+    tries = []
+    for index, level in enumerate((3.3, 0.0)):
+        c = build(nl, extended=True)
+        c.fix("GND", 0.0).fix("+12V", 12.0).fix("+5V", 5.0).fix("GPIO", level)
+        tries.append((index, c.solve(), None))
+    report = semis.judge(nl, {**TABLE, "Z": {"vrrm": 100.0}}, tries)
+    assert report.problems == [
+        f"D9 ({symbol}) cannot be judged: its symbol says it breaks down, but its row "
+        "is a vrrm row; write a vz row (a Zener used as a clamp) or a vrwm row (a "
+        "TVS), or declare it in SEMI_NOT_JUDGED with the reason"
+    ]
+    assert "D9" not in semis.blocking_ratings(nl, {"Z": {"vrrm": 100.0}})
+
+
+def test_an_unlisted_pad_of_a_part_with_a_high_z_pad_is_still_named() -> None:
+    """SEMI_HIGH_Z exempts the pads it names, not their whole part."""
+    toy = board()
+    toy.add(
+        "U9",
+        "MCU",
+        "MCU:MCU",
+        {"1": ("LOAD", "PA0"), "2": ("NODE9", "PA1"), "3": ("+3V3", "VDD")},
+    )
+    check_toy.resistor(toy, "R9", "10k", "NODE9", "LOAD")
+    report = semis.judge(netlist(toy), TABLE, attempts(toy), None, [("U9", "1")])
+    assert "the DC model leaves out U9 pad 2 (MCU:MCU) on NODE9" in report.problems[0]

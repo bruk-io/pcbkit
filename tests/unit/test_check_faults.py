@@ -803,3 +803,59 @@ def test_a_listed_pad_of_a_partly_modelled_part_is_not_named() -> None:
     }
     listed = judge(toy, [("U2", "3", OFF), ("K1", "3", (-1.0, 1.0))], extra=coil)
     assert listed.not_modelled == {}
+
+
+# --- narrow review ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rail_pad", ["1", "2"])
+def test_an_open_bidirectional_part_is_asked_about_with_the_rail_on_either_pad(
+    rail_pad: str,
+) -> None:
+    """An A1/A2 part held open: its reverse voltage counts with the rail on either."""
+    toy = Toy()
+    toy.add("U1", "REG", "Regulator:REG", {"1": ("EN", "EN"), "2": ("GND", "GND")})
+    other = "2" if rail_pad == "1" else "1"
+    toy.add(
+        "D1",
+        "ESD",
+        "Power_Protection:ESD",
+        {rail_pad: ("+12V", f"A{rail_pad}"), other: ("EN", f"A{other}")},
+    )
+    check_toy.resistor(toy, "R1", "100k", "EN", "GND")
+    nl = netlist(toy)
+    c = build(nl, extended=True).fix("GND", 0.0).fix("+12V", 12.0)
+    (problem,) = faults.judge(nl, c, c.solve(), [("U1", "1", OFF)]).problems
+    assert "D1 is modelled forward only (no breakdown) and has 12.00 V across it" in (
+        problem
+    )
+    assert "circuit.D(the net at the higher voltage, the other net, vz" in problem
+
+
+def test_a_vrrm_below_the_reverse_voltage_is_named() -> None:
+    """Say the row's VRRM is under the voltage across the part."""
+    toy = zener_from_library("Diode:BZX84Cxx")
+    (problem,) = judge_zener(toy, ratings={"D1": 10.0}).problems
+    assert "its vrrm row's VRRM (10 V) is under the 12.00 V across it" in problem
+
+
+def test_an_unlisted_pad_of_a_partly_modelled_part_is_still_named() -> None:
+    """Listing K1 pad 3 does not exempt K1 pad 4."""
+    toy = board()
+    toy.add(
+        "K1",
+        "RELAY",
+        "Relay:X",
+        {
+            "1": ("EN", "~"),
+            "2": ("GND", "~"),
+            "3": ("COM", "~"),
+            "4": ("NO", "~"),
+        },
+    )
+
+    def coil(c: Circuit) -> None:
+        c.R("EN", "GND", 70.0, ref="K1")
+
+    listed = judge(toy, [("U2", "3", OFF), ("K1", "3", (-1.0, 1.0))], extra=coil)
+    assert listed.not_modelled == {"U2 pad 3": ["K1 pad 4 (Relay:X) on NO"]}

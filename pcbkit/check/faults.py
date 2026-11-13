@@ -371,23 +371,40 @@ def unclamped(
         if part in skip or part + BREAKDOWN_SUFFIX in refs:
             continue
         reverse = None
+        held_open = False
         for a, c, *_rest, ref in circuit.diodes:
             if ref == part and {a, c} & on:
                 reverse = solved[c] - solved[a]
         for a, b, _r, ref in circuit.res:
             if ref == part + ".open" and {a, b} & on:
                 reverse = abs(solved[a] - solved[b])
+                held_open = True
         if part in blocking and reverse is not None and reverse <= blocking[part]:
             continue
         if reverse is not None and reverse > BREAKDOWN_FLOOR_V:
-            found.append(
+            nets = (
+                "the net at the higher voltage, the other net"
+                if held_open
+                else "cathode net, anode net"
+            )
+            text = (
                 f"{part} is modelled forward only (no breakdown) and has "
                 f"{reverse:.2f} V across it in reverse, so whether it conducts is not "
                 "known; if it breaks down (a Zener or TVS), model its breakdown "
-                "(circuit.D(cathode net, anode net, vz, "
-                f"ref='{part}{BREAKDOWN_SUFFIX}')) or fix the net it clamps; if it "
-                "blocks, a SEMI_VRATED row of kind vrrm says it blocks up to its VRRM"
+                f"(circuit.D({nets}, vz, ref='{part}{BREAKDOWN_SUFFIX}')) or fix the "
+                "net it clamps; "
             )
+            if part in blocking:
+                text += (
+                    f"its vrrm row's VRRM ({blocking[part]:g} V) is under the "
+                    f"{reverse:.2f} V across it"
+                )
+            else:
+                text += (
+                    "if it blocks, a SEMI_VRATED row of kind vrrm says it blocks up "
+                    "to its VRRM"
+                )
+            found.append(text)
     return found
 
 

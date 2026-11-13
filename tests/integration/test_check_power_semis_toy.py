@@ -258,3 +258,9 @@ def test_a_stress_keyword_the_scenario_would_ignore_fails_by_name(
         "the one named): name it in scenario's signature"
     )
     assert entry["numbers"] == {"ignored keywords": {"1": ["hot"]}}
+
+
+def test_an_ordinary_led_board_has_no_unphysical_diode(tmp_path: Path) -> None:
+    """The control's diodes all conduct at their drop: nothing called unphysical."""
+    entry = go(tmp_path, "phys", board()).entry(CHECK)
+    assert entry["outcome"] == "passed"
