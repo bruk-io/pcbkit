@@ -62,6 +62,7 @@ from typing import Any
 
 from pcbkit.check.faults import (
     element_nets,
+    fet_states,
     left_out,
     level_nets,
     unclamped,
@@ -78,6 +79,7 @@ from pcbkit.check.tables import (
     Ref,
     Shape,
     Text,
+    Tuple,
     Volts,
 )
 
@@ -113,6 +115,7 @@ TABLES: dict[str, Shape] = {
         ),
     ),
     "SEMI_NOT_JUDGED": DictOf(Ref(), Text("reason")),
+    "SEMI_HIGH_Z": ListOf(Tuple(Ref(), Pad())),
 }
 
 FET = "fet"
@@ -201,8 +204,19 @@ class SemiReport:
     parts: dict[str, dict[str, Any]] = field(default_factory=dict)
     not_judged: dict[str, str] = field(default_factory=dict)
     declared: dict[str, str] = field(default_factory=dict)
+    high_z: list[str] = field(default_factory=list)
+    fet_gates: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     unsolved: list[int] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+
+
+@dataclass
+class _Context:
+    """Hold what every part is judged against: high-impedance pads, blocking parts."""
+
+    high_z: set[tuple[str, str]] = field(default_factory=set)
+    blocking: dict[str, float] = field(default_factory=dict)
+    fet_gates: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 @dataclass
@@ -210,6 +224,7 @@ class _Seen:
     """What the scenarios showed of one part: worst readings and what stopped them."""
 
     worst: dict[tuple[int, str], tuple[float, int]] = field(default_factory=dict)
+    either_way: set[tuple[int, str]] = field(default_factory=set)
     problems: list[str] = field(default_factory=list)
     kinds: set[str] = field(default_factory=set)
 
@@ -383,18 +398,35 @@ def plan_part(nl: Netlist, ref: str, row: Mapping[str, Any] | None) -> Plan:
     return Plan(kind, [pins.pads])
 
 
-def _hint(nl: Netlist, ref: str) -> str:
-    """Return what to write when a part's pins cannot be read."""
-    names = {
-        f.strip().upper().rstrip("0123456789") for f in wired_pads(nl, ref).values()
-    }
-    text = 'give its SEMI_VRATED row "pins"'
-    if names == {"B", "C", "E"} or names == {"BASE", "COLLECTOR", "EMITTER"}:
-        text += (
-            ' (a bipolar transistor is written as a FET row: "vds" its VCEO, "vgs" '
-            'its VEBO, "pins" {"g": base pad, "d": collector pad, "s": emitter pad})'
+def _hint(nl: Netlist, ref: str, plan: Plan, row: Mapping[str, Any] | None) -> str:
+    """Return what to write when a part cannot be judged: the way out that applies."""
+    declare = ", or declare it in SEMI_NOT_JUDGED with the reason"
+    problem = str(plan.problem)
+    if row is not None and ("pins" in row or "elements" in row):
+        return "correct the row" + declare
+    if "but its row is a" in problem:
+        kind = (
+            "a FET row (vds, vgs)"
+            if "read as a fet" in problem
+            else ("a diode row (vrrm, vrwm or vz)")
         )
-    return text
+        return f"write {kind} for it" + declare
+    funcs = [f.strip().upper() for f in wired_pads(nl, ref).values()]
+    names = {f.rstrip("0123456789") for f in funcs}
+    if names == {"B", "C", "E"} or names == {"BASE", "COLLECTOR", "EMITTER"}:
+        return (
+            'give its SEMI_VRATED row "pins" (a bipolar transistor is written as a FET '
+            'row: "vds" its VCEO, "vgs" its VEBO, "pins" {"g": base pad, "d": '
+            'collector pad, "s": emitter pad})' + declare
+        )
+    numbered = any(f != f.rstrip("0123456789") for f in funcs)
+    several = "different nets" in problem or (numbered and not names <= {"A"})
+    if several or len(funcs) > 3:
+        return (
+            'list each diode or FET of it in its SEMI_VRATED row\'s "elements"'
+            + declare
+        )
+    return 'give its SEMI_VRATED row "pins"' + declare
 
 
 def _static_candidates(nl: Netlist, table: Mapping[str, Any]) -> set[str]:
@@ -465,22 +497,65 @@ def _against_the_circuit(nl: Netlist, ref: str, plan: Plan, circuit: Any) -> str
     return ""
 
 
+def _polarity_known(
+    nl: Netlist, ref: str, plan: Plan, element: Mapping[str, str], circuit: Any
+) -> bool:
+    """Return True if the anode is certain, so the reverse voltage alone counts.
+
+    It is certain when the part is not a TVS row and is not held as ``<ref>.open``, and
+    either both pads' pin names read plainly as its anode and cathode (A and K, not A1
+    and A2) or the circuit's own diode element for the part runs from the element's
+    anode net to its cathode net. Otherwise the part is judged on the absolute voltage.
+    """
+    if plan.kind == TVS:
+        return False
+    if any(r == f"{ref}.open" for *_x, r in circuit.res):
+        return False
+    names = nl.functions(ref)
+    if names.get(element["a"], "").strip().upper() in ("A", "ANODE") and names.get(
+        element["k"], ""
+    ).strip().upper() in ("K", "CATHODE"):
+        return True
+    an, kn = nl.net(ref, element["a"]), nl.net(ref, element["k"])
+    return any(
+        (a, c) == (an, kn)
+        for a, c, *_x, r in circuit.diodes
+        if r and str(r).split(".", 1)[0] == ref and not str(r).endswith(".breakdown")
+    )
+
+
 def _observe(
-    nl: Netlist, ref: str, plan: Plan, index: int, solution: Any, seen: _Seen
+    nl: Netlist,
+    ref: str,
+    plan: Plan,
+    index: int,
+    solution: Any,
+    seen: _Seen,
+    context: _Context,
 ) -> None:
     """Judge one part in one solved scenario, now, before the next is solved."""
     circuit = solution.c
     held = element_nets(circuit).get(ref, set())
     left = _pad_list(nl, ref, plan, lambda n: n in held)
     if left:
+        if getattr(circuit, "_built", None) is not None:
+            why = (
+                "dc.build(extended=True) does not model this symbol (it models the "
+                "Device symbols and the two-pad Diode and Power_Protection parts the "
+                "docs list)"
+            )
+        else:
+            why = (
+                "dc.build does not model this symbol (dc.build(nl, extended=True) "
+                "models more)"
+            )
         seen.once(
             "model",
             f"{ref} ({nl.kind(ref)}) is not modelled on {', '.join(left)} in "
-            f"STRESS_SCENARIOS[{index}]: dc.build does not model this symbol, so the "
-            "voltage across it is not the board's; build with dc.build(nl, "
-            "extended=True), which models more symbols, or add it in "
-            f"circuits.scenario with ref {ref!r} (circuit.D(anode net, cathode net, "
-            f"vf, ref={ref!r}) for a diode, a circuit.fets entry for a FET)",
+            f"STRESS_SCENARIOS[{index}]: {why}, so the voltage across it is not the "
+            f"board's; add it in circuits.scenario with ref {ref!r} (circuit.D(anode "
+            f"net, cathode net, vf, ref={ref!r}) for a diode, a circuit.fets entry for "
+            "a FET)",
         )
         return
     wrong = _against_the_circuit(nl, ref, plan, circuit)
@@ -502,19 +577,25 @@ def _observe(
         )
         return
     nets = {str(nl.net(ref, p)) for e in plan.elements for p in e.values()}
-    lnets = sorted({n for net in nets for n in level_nets(circuit, net)}, key=natkey)
-    missing = left_out(nl, circuit, lnets, set())
+    lnets_list = sorted(
+        {n for net in nets for n in level_nets(circuit, net)}, key=natkey
+    )
+    lnets = set(lnets_list)
+    missing = left_out(nl, circuit, lnets_list, context.high_z)
     if missing:
         seen.once(
             "left out",
             f"{ref} cannot be judged in STRESS_SCENARIOS[{index}]: the DC model "
             f"leaves out {', '.join(missing)}, on the nets that set its pads' levels; "
-            "fix those nets in the scenario, or model what drives them with its "
-            "reference",
+            "fix those nets in the scenario, model what drives them with its "
+            "reference, or, for a pad that draws and sources nothing at DC, list it in "
+            "SEMI_HIGH_Z",
         )
         return
-    guessed = undecided_fets(circuit, solution, None, lnets)
-    guessed += unclamped(circuit, solution, lnets, skip={ref})
+    guessed = undecided_fets(circuit, solution, None, lnets_list)
+    guessed += unclamped(
+        circuit, solution, lnets_list, skip={ref}, blocking=context.blocking
+    )
     if guessed:
         seen.once(
             "gate",
@@ -522,6 +603,10 @@ def _observe(
             + "; ".join(guessed),
         )
         return
+    for fet, state in fet_states(circuit, solution, lnets | nets).items():
+        record = {"scenario": index, **state}
+        if record not in context.fet_gates.setdefault(fet, []):
+            context.fet_gates[fet].append(record)
     family = FAMILY[plan.kind or FET]
     for number, element in enumerate(plan.elements):
         for name, plus, minus, absolute in QUANTITIES[family]:
@@ -529,8 +614,11 @@ def _observe(
                 solution[nl.net(ref, element[plus])]
                 - solution[nl.net(ref, element[minus])]
             )
-            v = abs(v) if absolute else v
             key = (number, name)
+            if not absolute and not _polarity_known(nl, ref, plan, element, circuit):
+                absolute = True
+                seen.either_way.add(key)
+            v = abs(v) if absolute else v
             if key not in seen.worst or v > seen.worst[key][0]:
                 seen.worst[key] = (v, index)
 
@@ -563,6 +651,11 @@ def _verdict(
             v, index = seen.worst.get((number, name), (None, None))
             rated = row.get(RATING_KEY[(kind, name)]) if row is not None else None
             shown = None if v is None else round(v, 3)
+            either = (number, name) in seen.either_way
+            label = "|V(K) - V(A)|" if either else LABELS[name]
+            polarity = {}
+            if FAMILY[kind] == DIODE:
+                polarity = {"polarity": "either way" if either else "reverse"}
             if kind == CLAMP:
                 limit = None if rated is None else rated * (1 + CLAMP_TOLERANCE)
                 quantities[name] = {
@@ -570,6 +663,7 @@ def _verdict(
                     "vz": rated,
                     "limit_v": None if limit is None else round(limit, 4),
                     "scenario": index,
+                    **polarity,
                 }
                 if v is not None and limit is not None and v > limit:
                     problems.append(
@@ -587,10 +681,11 @@ def _verdict(
                 "rated": rated,
                 "limit_v": None if limit is None else round(limit, 4),
                 "scenario": index,
+                **polarity,
             }
             if v is not None and limit is not None and v > limit:
                 problems.append(
-                    f"{who} {LABELS[name]} reaches {v:.2f} V in STRESS_SCENARIOS"
+                    f"{who} {label} reaches {v:.2f} V in STRESS_SCENARIOS"
                     f"[{index}], over {target:g} of its {rated:g} V rating "
                     f"({limit:.2f} V)"
                 )
@@ -602,18 +697,31 @@ def _verdict(
     return entry, problems
 
 
+def blocking_ratings(nl: Netlist, table: Mapping[str, Any]) -> dict[str, float]:
+    """Return ``{ref: VRRM}`` for each part whose row says it blocks (kind ``vrrm``)."""
+    found = {}
+    for ref in nl.parts:
+        mpn = mpn_of(nl, ref)
+        row = table.get(mpn) if mpn else None
+        if row is not None and "vrrm" in row:
+            found[ref] = float(row["vrrm"])
+    return found
+
+
 def judge(
     nl: Netlist,
     table: Mapping[str, Any],
     attempts: Iterable[tuple[int, Any, Exception | None]],
     declared: Mapping[str, str] | None = None,
+    high_z: Iterable[tuple[str, str]] | None = None,
 ) -> SemiReport:
     """Judge every semiconductor over the stress scenarios; return the record.
 
     ``attempts`` is what ``stress.stress_attempts`` yields: ``(index, solution or
     None, error or None)`` per ``STRESS_SCENARIOS`` row; each solution is judged as it
     arrives (its circuit is ``solution.c``), so a project whose scenarios share one
-    circuit is judged on each one's own state. ``declared`` is ``SEMI_NOT_JUDGED``.
+    circuit is judged on each one's own state. ``declared`` is ``SEMI_NOT_JUDGED`` and
+    ``high_z`` is ``SEMI_HIGH_Z``.
     """
     report = SemiReport()
     declared = dict(declared or {})
@@ -627,6 +735,16 @@ def judge(
             report.problems.append(
                 f"SEMI_NOT_JUDGED names {ref}, which is not in the design"
             )
+    context = _Context(blocking=blocking_ratings(nl, table))
+    for ref, pad in high_z or ():
+        where = f"SEMI_HIGH_Z names {ref} pad {pad}"
+        if ref not in nl.parts:
+            report.problems.append(f"{where}: {ref} is not in the design")
+        elif nl.net(ref, pad) is None:
+            report.problems.append(f"{where}: {ref} has no pad {pad} on a net")
+        else:
+            context.high_z.add((ref, str(pad)))
+            report.high_z.append(f"{ref} pad {pad}")
     skipped = {r for r in declared if r in nl.parts and row_of(r) is None}
     report.declared = {r: declared[r] for r in sorted(skipped, key=natkey)}
     static = _static_candidates(nl, table) - skipped
@@ -647,11 +765,12 @@ def judge(
                 plans[ref] = plan_part(nl, ref, row_of(ref))
                 seen[ref] = _Seen()
             if plans[ref].kind is not None:
-                _observe(nl, ref, plans[ref], index, solution, seen[ref])
+                _observe(nl, ref, plans[ref], index, solution, seen[ref], context)
         solved.append(index)
     for ref in static - set(plans):
         plans[ref] = plan_part(nl, ref, row_of(ref))
         seen[ref] = _Seen()
+    report.fet_gates = context.fet_gates
     judged = sorted(plans, key=natkey)
     if judged and not solved:
         report.problems.append(
@@ -662,8 +781,7 @@ def judge(
         plan, row = plans[ref], row_of(ref)
         if plan.kind is None:
             why = f"{ref} ({nl.kind(ref)}) cannot be judged: {plan.problem}"
-            if row is None or not ("pins" in row or "elements" in row):
-                why += f"; {_hint(nl, ref)}"
+            why += f"; {_hint(nl, ref, plan, row)}"
             report.not_judged[ref] = why
             report.problems.append(why)
             continue

@@ -86,7 +86,19 @@ def test_the_control_passes_and_records_every_judged_part(tmp_path: Path) -> Non
         "vds": {"v": 5.5, "rated": 60, "limit_v": 48.0, "scenario": 1},
         "vgs": {"v": 3.297, "rated": 20, "limit_v": 16.0, "scenario": 0},
     }
-    assert parts["D2"]["vr"] == {"v": 5.5, "rated": 40, "limit_v": 32.0, "scenario": 1}
+    assert parts["D2"]["vr"] == {
+        "v": 5.5,
+        "rated": 40,
+        "limit_v": 32.0,
+        "scenario": 1,
+        "polarity": "reverse",
+    }
+    assert entry["numbers"]["fet gates"]["Q1"][0] == {
+        "scenario": 0,
+        "vgs": 3.297,
+        "vth": 2.0,
+        "on": True,
+    }
     assert parts["D1"]["kind"] == "diode"
 
 
@@ -245,3 +257,4 @@ def test_a_stress_keyword_the_scenario_would_ignore_fails_by_name(
         "would land in **kwargs, or nowhere, so the operating point solved may not be "
         "the one named): name it in scenario's signature"
     )
+    assert entry["numbers"] == {"ignored keywords": {"1": ["hot"]}}

@@ -153,6 +153,7 @@ TABLE_GROUP = {
     "FAULT_STATES": "power",
     "SEMI_VRATED": "power",
     "SEMI_NOT_JUDGED": "power",
+    "SEMI_HIGH_Z": "power",
     "SUPPLY_NETS": "power",
     "I2C_EXPECTED": "bringup",
 }

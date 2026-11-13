@@ -11,6 +11,9 @@ group's table, read here too). What the project gives, in ``specs.py``:
   missing rating).
 * ``SEMI_NOT_JUDGED`` (optional): ``{ref: reason}``, parts declared out of this check's
   reach (a bridge, an array); judged anyway when their MPN has a row.
+* ``SEMI_HIGH_Z`` (optional): ``[(ref, pad)]``, pads the designer states draw and source
+  nothing at DC, so the left-out rule passes over them (as a listed pin in
+  ``FAULT_STATES``); each must be in the design.
 * ``STRESS_SCENARIOS``, and ``circuits.scenario`` in ``circuits.py``.
 
 ``pcbkit.check.semis`` says which parts are judged and when each fails.
@@ -36,33 +39,47 @@ def test_semiconductor_voltage_derated(
     (``vds`` and ``vgs`` for a FET, ``vr`` for a diode; ``rated`` and ``limit_v`` null
     without a row, ``v`` null when no scenario gave a reading); ``not judged``, ``{ref:
     reason}``, for a part whose pins cannot be read; ``declared not judged``, ``{ref:
-    reason}`` from ``SEMI_NOT_JUDGED``, for the parts left out as declared; and
-    ``unsolved scenarios`` when a ``STRESS_SCENARIOS`` row cannot be solved, before any
-    failure is raised. A ``STRESS_SCENARIOS`` keyword that is not a named parameter of
+    reason}`` from ``SEMI_NOT_JUDGED``, for the parts left out as declared; and ``high-z
+    pads`` (the ``SEMI_HIGH_Z`` pads taken), ``fet gates`` (``{fet: [{"scenario", "vgs",
+    "vth", "on"}]}`` for every FET whose state a verdict leaned on) and ``unsolved
+    scenarios`` when a ``STRESS_SCENARIOS`` row cannot be solved, before any failure is
+    raised. A ``STRESS_SCENARIOS`` keyword that is not a named parameter of
     ``circuits.scenario`` fails first, naming it.
     """
     table = tables.read(specs, "SEMI_VRATED")
     declared = (
         tables.read(specs, "SEMI_NOT_JUDGED") if "SEMI_NOT_JUDGED" in specs else {}
     )
-    ignored = [
-        f"STRESS_SCENARIOS[{index}]: circuits.scenario has no parameter named "
-        + ", ".join(repr(k) for k in names)
-        + " (it would land in **kwargs, or nowhere, so the operating point solved may "
-        "not be the one named): name it in scenario's signature"
+    high_z = tables.read(specs, "SEMI_HIGH_Z") if "SEMI_HIGH_Z" in specs else []
+    unnamed = {
+        index: names
         for index, names in enumerate(
             faults.ignored_keywords(circuits.scenario, row)
             for row in specs.STRESS_SCENARIOS
         )
         if names
-    ]
-    assert not ignored, "; ".join(ignored)
-    report = semis.judge(nl, table, stress_attempts(nl, specs, circuits), declared)
+    }
+    if unnamed:
+        record("ignored keywords", unnamed)
+    assert not unnamed, "; ".join(
+        f"STRESS_SCENARIOS[{index}]: circuits.scenario has no parameter named "
+        + ", ".join(repr(k) for k in names)
+        + " (it would land in **kwargs, or nowhere, so the operating point solved may "
+        "not be the one named): name it in scenario's signature"
+        for index, names in unnamed.items()
+    )
+    report = semis.judge(
+        nl, table, stress_attempts(nl, specs, circuits), declared, high_z
+    )
     record("semiconductor voltage", report.parts)
     if report.not_judged:
         record("not judged", report.not_judged)
     if report.declared:
         record("declared not judged", report.declared)
+    if report.high_z:
+        record("high-z pads", report.high_z)
+    if report.fet_gates:
+        record("fet gates", report.fet_gates)
     if report.unsolved:
         record("unsolved scenarios", report.unsolved)
     assert not report.problems, "; ".join(report.problems)
