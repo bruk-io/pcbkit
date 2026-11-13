@@ -886,3 +886,61 @@ Measured on the reviewer's two generic boards (`extended=True`, the new rows):
 - Nothing on either board is left with no honest way out. The new F-B1 rule is what
   costs lines: an IC on a rail a judged part reaches must be fixed or modelled, and an
   IC modelled by its reference must account for its other free pads too.
+
+## Second review of A and F (2026-11-12)
+
+The second independent review (`/tmp/wp17/af-review-2.md`) accepted the solver change
+(old and new compared exactly; every board that solved before solves identically),
+accepted check A with follow-ups, and rejected check F on one false pass that the F-m2
+fix had introduced: a bidirectional TVS judged in one polarity only (a `Device:D_TVS`
+with pins A1/A2 and a row whose `a` was on the rail read -24 V and passed). Every earlier
+finding was confirmed fixed, and the reviewer got three generic boards to green blind
+with nothing left without an honest way out. All findings are fixed, each with a test
+shown failing first and a plant. Decisions:
+
+- **Polarity.** A diode is judged on its reverse voltage alone only where its polarity is
+  certain: its pins read plainly as A and K, or its row's `a` and `k` agree with the
+  scenario's own diode element for it. Every `vrwm` row, any part held as `<ref>.open`,
+  and any part whose pins are A1/A2 or unnamed with nothing confirming them is judged on
+  the absolute voltage, so a bidirectional part needs no crossed `elements`. Such a part
+  has no diode element in the model, so a forward drop is never judged by this.
+- **FET thresholds.** Documented in the A, F and `extended` docs with the reviewer's two
+  examples (a logic-level FET at 1.65 V read as off; a high-threshold FET at 2.5 V read as
+  on), and the way out `build(nl, nfet_vth=..., pfet_vth=...)`. Both checks record, for
+  every FET a verdict leaned on, its Vgs, the threshold used and its state (`fet gates`).
+  No margin rule now.
+- **Zeners and TVSs from any library.** `extended` models every two-pad `Diode` or
+  `Power_Protection` part whose pins are A/K (forward) or A1/A2 (open) as of unknown
+  kind and lists it in `circuit.forward_only`; nothing is read from symbol names or
+  descriptions. A and F fail such a part with more than 1 V reverse on a judged net
+  unless the designer states its kind: a `SEMI_VRATED` row of kind `vrrm` says it blocks
+  (up to its VRRM; A reads the table when it is defined), `vz` or `vrwm` says it breaks
+  down and needs a breakdown element or its net fixed. A scenario that models a Zener or
+  TVS by hand adds it to `circuit.forward_only`, and the left-out message says so.
+- **Gate walk.** The level walk goes from a FET's drain and source to its gate, never
+  from the gate to them; a pin on the drain net still has the gate judged.
+- **`SEMI_HIGH_Z = [(ref, pad)]`** (optional): pads the designer states draw and source
+  nothing at DC, exempt from F's left-out rule as a listed pin is in A, recorded, each
+  refused by name if not in the design. A listed pad of a partly modelled part is no
+  longer named either (found on board 3: a relay whose coil is modelled).
+- **Minors:** hints name `elements`, the row kind a part needs, and `SEMI_NOT_JUDGED`;
+  the `extended` advice appears only when it is off; F records `ignored keywords` before
+  failing on them; the circuits.py row shows named keywords; direct edits of
+  `circuit.res`/`diodes`/`fets` are documented as unguarded.
+- `dc.py`'s default behaviour is unchanged: the round's only code change is inside the
+  extended branch, and the toy's `circuit` and `esp32s3` results are byte-identical.
+
+Measured on the reviewer's three boards (before this round, after):
+
+- Board 1: A 1 line, 1 line. F 5 scenario lines and 3 rows, 4 lines and 3 rows (the
+  `Diode`-library TVS is modelled by `extended` now; the hand model is refused by the
+  double-model guard, as intended).
+- Board 2: A 0, 0. F 4 lines and 1 row with crossed `elements`, 4 lines and 1 row with
+  the natural single `pins` (`{"vrwm": 5.5, "pins": {"a": "1", "k": "2"}}`).
+- Board 3: A 3 lines, 3 lines. F 14 scenario lines, 3 rows and 1 `SEMI_NOT_JUDGED`, 12
+  lines, 3 rows, 1 `SEMI_NOT_JUDGED` and 1 `SEMI_HIGH_Z` line of seven idle pads in place
+  of the made-up idle I2C levels and gigaohm relay contacts.
+
+**Later slice (not built):** a per-row VGS(th) range in `SEMI_VRATED` (`"vgs_th": (min,
+max)`), so a FET whose gate sits inside the range is "undecided" like a floating gate,
+in A and F; the recorded `fet gates` are what it would read.
