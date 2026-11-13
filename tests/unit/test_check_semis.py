@@ -1321,3 +1321,22 @@ def test_an_unlisted_pad_of_a_part_with_a_high_z_pad_is_still_named() -> None:
     check_toy.resistor(toy, "R9", "10k", "NODE9", "LOAD")
     report = semis.judge(netlist(toy), TABLE, attempts(toy), None, [("U9", "1")])
     assert "the DC model leaves out U9 pad 2 (MCU:MCU) on NODE9" in report.problems[0]
+
+
+def test_an_unlisted_pad_of_a_partly_modelled_part_with_a_high_z_pad_is_named() -> None:
+    """U9 modelled on LOAD; pad 2 high-Z; its pad 3, on a free net, is still named."""
+    toy = board()
+    toy.add(
+        "U9",
+        "MCU",
+        "MCU:MCU",
+        {"1": ("LOAD", "PA0"), "2": ("NODE9", "PA1"), "3": ("NODE10", "PA2")},
+    )
+
+    def model(c: Circuit, _index: int) -> None:
+        c.R("LOAD", "GND", 1e7, ref="U9")
+
+    nl = netlist(toy)
+    report = semis.judge(nl, TABLE, attempts(toy, model), None, [("U9", "2")])
+    assert "the DC model leaves out U9 pad 3 (MCU:MCU) on NODE10" in report.problems[0]
+    assert "U9 pad 2" not in report.problems[0]
