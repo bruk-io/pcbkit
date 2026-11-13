@@ -115,6 +115,7 @@ class FaultReport:
 
     pins: dict[str, list[Any]] = field(default_factory=dict)
     not_modelled: dict[str, list[str]] = field(default_factory=dict)
+    fet_gates: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
 
 
@@ -160,30 +161,41 @@ def element_nets(circuit: Any) -> dict[str, set[str]]:
 
 
 def _neighbours(circuit: Any) -> dict[str, set[str]]:
-    """Return the nets each net shares an element with, whatever the element's state."""
+    """Return the nets whose level can move each net's, whatever the elements' state.
+
+    A resistor or a diode joins its two nets both ways. A FET joins its drain and
+    source both ways and each of them to its gate, but not its gate to them: the gate's
+    level decides whether the channel conducts, while nothing on the drain or source
+    moves the gate's level in the DC model.
+    """
     adj: dict[str, set[str]] = {}
 
-    def join(nets: Iterable[str | None]) -> None:
-        real = [n for n in nets if n]
-        for n in real:
-            adj.setdefault(n, set()).update(m for m in real if m != n)
+    def join(a: str | None, b: str | None) -> None:
+        if a and b and a != b:
+            adj.setdefault(a, set()).add(b)
 
     for a, b, *_rest in circuit.res:
-        join((a, b))
+        join(a, b)
+        join(b, a)
     for a, c, *_rest in circuit.diodes:
-        join((a, c))
+        join(a, c)
+        join(c, a)
     for f in circuit.fets:
-        join((f["g"], f["d"], f["s"]))
+        join(f["d"], f["s"])
+        join(f["s"], f["d"])
+        join(f["d"], f["g"])
+        join(f["s"], f["g"])
     return adj
 
 
 def level_nets(circuit: Any, net: str) -> list[str]:
     """Return the nets that set ``net``'s level: it and those reached through elements.
 
-    The walk goes through every element of the circuit (a resistor, a diode or a FET's
-    three terminals, conducting or not) and stops at a net the scenario fixes, which is
-    not included. A fixed ``net`` gives an empty list: its level is what the scenario
-    says.
+    The walk goes through every element of the circuit, conducting or not: both ways
+    through a resistor or a diode, both ways between a FET's drain and source, and from
+    its drain or source to its gate (never from the gate to them). It stops at a net the
+    scenario fixes, which is not included. A fixed ``net`` gives an empty list: its
+    level is what the scenario says.
     """
     fixed = circuit.fixed
     adj = _neighbours(circuit)
@@ -312,16 +324,43 @@ def undecided_fets(
     return found
 
 
+def fet_states(circuit: Any, solved: Any, nets: Iterable[str]) -> dict[str, Any]:
+    """Return ``{fet: {"vgs", "vth", "on"}}`` for each FET with a terminal on ``nets``.
+
+    These are the FETs whose state a verdict on ``nets`` leans on; the record lets a
+    review see a gate near its threshold (the model has one threshold per FET).
+    """
+    on = set(nets)
+    found: dict[str, Any] = {}
+    states = circuit.state.get("fets", []) if isinstance(circuit.state, dict) else []
+    for k, f in enumerate(circuit.fets):
+        if not f.get("g") or not ({f["g"], f["d"], f["s"]} & on):
+            continue
+        found[str(f.get("ref") or f"FET {k + 1}")] = {
+            "vgs": round(float(solved[f["g"]] - solved[f["s"]]), 3),
+            "vth": f["vth"],
+            "on": bool(states[k]) if k < len(states) else None,
+        }
+    return found
+
+
 def unclamped(
-    circuit: Any, solved: Any, nets: Iterable[str], skip: Iterable[str] = ()
+    circuit: Any,
+    solved: Any,
+    nets: Iterable[str],
+    skip: Iterable[str] = (),
+    blocking: Mapping[str, float] | None = None,
 ) -> list[str]:
     """Return a sentence for each forward-only part on ``nets`` that may break down.
 
     ``circuit.forward_only`` lists the parts ``dc.build(extended=True)`` holds with no
     breakdown (Zeners and TVSs). One with an element on ``nets``, no ``<ref>.breakdown``
     element, and more than ``BREAKDOWN_FLOOR_V`` across it in reverse may conduct on the
-    board where the model says it does not. ``skip`` names parts judged elsewhere.
+    board where the model says it does not. ``skip`` names parts judged elsewhere, and
+    ``blocking`` maps a part the designer states blocks (a ``SEMI_VRATED`` row of kind
+    ``vrrm``) to its VRRM: it needs no breakdown model up to that voltage.
     """
+    blocking = dict(blocking or {})
     on = set(nets)
     refs = {r for *_x, r in circuit.res} | {r for *_x, r in circuit.diodes}
     found = []
@@ -335,12 +374,16 @@ def unclamped(
         for a, b, _r, ref in circuit.res:
             if ref == part + ".open" and {a, b} & on:
                 reverse = abs(solved[a] - solved[b])
+        if part in blocking and reverse is not None and reverse <= blocking[part]:
+            continue
         if reverse is not None and reverse > BREAKDOWN_FLOOR_V:
             found.append(
                 f"{part} is modelled forward only (no breakdown) and has "
                 f"{reverse:.2f} V across it in reverse, so whether it conducts is not "
-                "known; model its breakdown (circuit.D(cathode net, anode net, vz, "
-                f"ref='{part}{BREAKDOWN_SUFFIX}')), or fix the net it clamps"
+                "known; if it breaks down (a Zener or TVS), model its breakdown "
+                "(circuit.D(cathode net, anode net, vz, "
+                f"ref='{part}{BREAKDOWN_SUFFIX}')) or fix the net it clamps; if it "
+                "blocks, a SEMI_VRATED row of kind vrrm says it blocks up to its VRRM"
             )
     return found
 
@@ -378,12 +421,14 @@ def judge(
     solved: Any,
     pins: Sequence[Pin],
     recheck: Any = None,
+    blocking: Mapping[str, float] | None = None,
 ) -> FaultReport:
     """Judge each listed pin of one condition; return the record and the problems.
 
     ``circuit`` is the condition's circuit and ``solved`` its solution. ``recheck`` is
     the solution of the same circuit with a much smaller leak (``low_leak_solution``),
-    or None to leave that test out.
+    or None to leave that test out. ``blocking`` maps a forward-only part the designer
+    states blocks to its VRRM (``unclamped``).
     """
     report = FaultReport()
     if not pins:
@@ -422,6 +467,9 @@ def judge(
                 )
             continue
         lnets = level_nets(circuit, net)
+        gates = fet_states(circuit, solved, lnets)
+        if gates:
+            report.fet_gates[key] = gates
         missing = left_out(nl, circuit, lnets, listed)
         if missing:
             report.not_modelled[key] = missing
@@ -452,11 +500,13 @@ def judge(
                 + ". Model each in circuits.scenario (an element whose ref is the "
                 "part's reference), fix the net it drives, or, for a pad that is "
                 "high-impedance in this condition, list it in this condition's pins "
-                "(listing a pad claims it draws no current and drives nothing)"
+                "(listing a pad claims it draws no current and drives nothing). A "
+                "Zener or TVS modelled by hand forward only must also be added to "
+                "circuit.forward_only"
             )
             continue
         guessed = undecided_fets(circuit, solved, recheck, lnets)
-        guessed += unclamped(circuit, solved, lnets)
+        guessed += unclamped(circuit, solved, lnets, blocking=blocking)
         if guessed:
             report.problems.extend(f"{where}: {text}" for text in guessed)
             continue

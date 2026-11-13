@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from pcbkit.check import faults, tables
+from pcbkit.check import faults, semis, tables
 from pcbkit.check.netlist import Netlist
 from pcbkit.check.plugin import ProjectModule, spec_params
 
@@ -47,8 +47,11 @@ def test_fault_state_pins(
     Records ``pins``, ``{"U2 pad 5": [V, min, max, state]}`` (state ``driven``,
     ``fixed``, ``floating``, ``no net`` or ``unsolved``; V is null when there is no net
     or no solution), and ``not modelled``, ``{"U2 pad 5": ["U1 pad 3 (lib:part) on
-    EN"]}``, the pads on the pin's nets the model leaves out, when there are any, before
-    any failure is raised.
+    EN"]}``, the pads on the pin's nets the model leaves out, and ``fet gates``,
+    ``{"U2 pad 5": {fet: {"vgs", "vth", "on"}}}`` for each FET whose state the verdict
+    on a pin leaned on, when there are any, before any failure is raised. A
+    ``SEMI_VRATED`` row of kind ``vrrm``, when that table is defined, says a part
+    ``extended`` holds forward only blocks up to its VRRM.
     """
     row = tables.read(specs, "FAULT_STATES")[condition]
     pins = row["pins"]
@@ -89,8 +92,15 @@ def test_fault_state_pins(
             f"condition {condition}: the solve with a smaller leak, which shows a "
             f"level held only by the solver's leak, failed: {type(err).__name__}: {err}"
         ) from None
-    report = faults.judge(nl, circuit, solved, pins, recheck)
+    blocking = (
+        semis.blocking_ratings(nl, tables.read(specs, "SEMI_VRATED"))
+        if "SEMI_VRATED" in specs
+        else {}
+    )
+    report = faults.judge(nl, circuit, solved, pins, recheck, blocking)
     record("pins", report.pins)
     if report.not_modelled:
         record("not modelled", report.not_modelled)
+    if report.fet_gates:
+        record("fet gates", report.fet_gates)
     assert not report.problems, f"condition {condition}: " + "; ".join(report.problems)

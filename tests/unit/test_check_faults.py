@@ -253,7 +253,8 @@ def test_a_diode_dc_does_not_model_beside_a_pull_down_cannot_be_judged() -> None
         "on EN. Model each in circuits.scenario (an element whose ref is the part's "
         "reference), fix the net it drives, or, for a pad that is high-impedance in "
         "this condition, list it in this condition's pins (listing a pad claims it "
-        "draws no current and drives nothing)"
+        "draws no current and drives nothing). A Zener or TVS modelled by hand forward "
+        "only must also be added to circuit.forward_only"
     ]
 
 
@@ -410,7 +411,8 @@ def test_the_left_out_message_says_listing_claims_high_impedance() -> None:
     assert problem.endswith(
         "or, for a pad that is high-impedance in this condition, list it in this "
         "condition's pins (listing a pad claims it draws no current and drives "
-        "nothing)"
+        "nothing). A Zener or TVS modelled by hand forward only must also be added to "
+        "circuit.forward_only"
     )
 
 
@@ -620,9 +622,10 @@ def test_a_forward_only_zener_reverse_biased_on_the_pins_nets_cannot_be_judged()
     report = faults.judge(nl, c, c.solve(), [("U2", "3", OFF)])
     assert report.problems == [
         "U2 pad 3 (EN): D2 is modelled forward only (no breakdown) and has 24.00 V "
-        "across it in reverse, so whether it conducts is not known; model its "
-        "breakdown (circuit.D(cathode net, anode net, vz, ref='D2.breakdown')), or "
-        "fix the net it clamps"
+        "across it in reverse, so whether it conducts is not known; if it breaks down "
+        "(a Zener or TVS), model its breakdown (circuit.D(cathode net, anode net, vz, "
+        "ref='D2.breakdown')) or fix the net it clamps; if it blocks, a SEMI_VRATED "
+        "row of kind vrrm says it blocks up to its VRRM"
     ]
 
 
@@ -662,3 +665,121 @@ def test_a_resistor_with_a_value_and_a_not_fitted_mark_cannot_be_judged() -> Non
         "U2 pad 3": ["R1 pad 1 (Device:R) on EN: its value '100k DNP' also marks it "
                      "not fitted; write the value alone or the mark alone"]
     }  # fmt: skip
+
+
+# --- second review ------------------------------------------------------------------
+
+
+def zener_from_library(lib: str) -> Toy:
+    """Return the reviewer's p4: a 5.1 V Zener from +12V (K) into EN (A)."""
+    toy = Toy()
+    toy.add("U1", "REG", "Regulator:REG", {"1": ("EN", "EN"), "2": ("GND", "GND")})
+    toy.add("D1", "BZX84C5V1", lib, {"1": ("+12V", "K"), "2": ("EN", "A")})
+    check_toy.resistor(toy, "R1", "100k", "EN", "GND")
+    return toy
+
+
+def judge_zener(
+    toy: Toy, hand: bool = False, ratings: dict[str, float] | None = None
+) -> faults.FaultReport:
+    """Judge the Zener board with extended, the part modelled by hand if asked."""
+    nl = netlist(toy)
+    c = build(nl, extended=not hand)
+    c.fix("GND", 0.0).fix("+12V", 12.0)
+    if hand:
+        c.D("EN", "+12V", 0.7, ref="D1")
+        c.forward_only.add("D1")
+    return faults.judge(nl, c, c.solve(), [("U1", "1", OFF)], None, ratings)
+
+
+def test_a_diode_library_zener_into_a_pin_cannot_pass_with_extended() -> None:
+    """``extended`` models it forward and does not know its kind: it fails by name."""
+    (problem,) = judge_zener(zener_from_library("Diode:BZX84Cxx")).problems
+    assert problem.startswith(
+        "U1 pad 1 (EN): D1 is modelled forward only (no breakdown) and has 12.00 V "
+        "across it in reverse"
+    )
+    assert "a SEMI_VRATED row of kind vrrm says it blocks" in problem
+
+
+def test_a_vrrm_row_says_the_part_blocks_up_to_its_rating() -> None:
+    """A blocking diode rated 100 V with 12 V across it: no breakdown asked for."""
+    toy = zener_from_library("Diode:BZX84Cxx")
+    assert judge_zener(toy, ratings={"D1": 100.0}).problems == []
+    (problem,) = judge_zener(toy, ratings={"D1": 10.0}).problems
+    assert "D1 is modelled forward only" in problem
+
+
+def test_a_hand_modelled_zener_added_to_forward_only_cannot_pass() -> None:
+    """Without extended the designer adds it to ``circuit.forward_only``, as told.
+
+    The same part modelled by hand with ``extended`` on is refused as a double model.
+    """
+    (problem,) = judge_zener(zener_from_library("Diode:BZX84Cxx"), hand=True).problems
+    assert "D1 is modelled forward only" in problem
+
+
+def test_the_left_out_message_says_to_list_a_hand_modelled_zener() -> None:
+    """The advice includes ``circuit.forward_only``."""
+    toy = board()
+    toy.add("U1", "MCU", "MCU:MCU", {"1": ("EN", "IO1"), "2": ("GND", "GND")})
+    (problem,) = judge(toy).problems
+    assert (
+        "A Zener or TVS modelled by hand forward only must also be added to "
+        "circuit.forward_only" in problem
+    )
+
+
+def test_a_gate_pin_does_not_walk_to_the_drain_side() -> None:
+    """Judging a FET's gate net: an IC on its drain net cannot move the gate level."""
+    toy = Toy()
+    toy.add("U1", "DRV", "Driver:X", {"1": ("GATE", "OUT"), "2": ("GND", "GND")})
+    check_toy.resistor(toy, "R1", "100k", "GATE", "GND")
+    toy.add(
+        "Q1",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("GATE", "G"), "2": ("GND", "S"), "3": ("LOAD", "D")},
+    )
+    toy.add("U2", "IC", "Load:IC", {"1": ("LOAD", "VDD"), "2": ("GND", "GND")})
+    nl = netlist(toy)
+    c = build(nl).fix("GND", 0.0)
+    report = faults.judge(nl, c, c.solve(), [("U1", "1", OFF)])
+    assert report.problems == []
+    assert faults.level_nets(c, "GATE") == ["GATE"]
+
+
+def test_a_pin_on_the_drain_net_still_needs_the_gate_judged() -> None:
+    """From the drain the walk reaches the gate, so a floating gate still fails."""
+    toy = Toy()
+    regulator(toy)
+    check_toy.resistor(toy, "R1", "100k", "EN", "+3V3")
+    toy.add(
+        "Q1",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("QG", "G"), "2": ("GND", "S"), "3": ("EN", "D")},
+    )
+    toy.add("U5", "DRV", "Driver:X", {"1": ("QG", "OUT"), "2": ("GND", "GND")})
+    report = judge(toy, [("U2", "3", ON)])
+    assert report.not_modelled == {"U2 pad 3": ["U5 pad 1 (Driver:X) on QG"]}
+
+
+def test_the_fets_the_verdict_leaned_on_are_recorded() -> None:
+    """Vgs, the threshold used and the state, for each FET on the pin's nets."""
+    toy = Toy()
+    regulator(toy)
+    check_toy.resistor(toy, "R1", "100k", "EN", "+3V3")
+    check_toy.resistor(toy, "R2", "100k", "+3V3", "QG")
+    check_toy.resistor(toy, "R3", "100k", "QG", "GND")
+    toy.add(
+        "Q1",
+        "2N7002",
+        "Transistor_FET:2N7002",
+        {"1": ("QG", "G"), "2": ("GND", "S"), "3": ("EN", "D")},
+    )
+    report = judge(toy, [("U2", "3", ON)])
+    assert report.fet_gates == {
+        "U2 pad 3": {"Q1": {"vgs": 1.65, "vth": 2.0, "on": False}}
+    }
+    assert report.problems == []
