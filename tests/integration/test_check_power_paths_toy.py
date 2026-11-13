@@ -2,11 +2,11 @@
 
 The generic toy board (``tests/check_toy.py``) gets a power tree: a USB input and a
 battery input (through a reverse-protection P-FET) diode-ORed into ``VIN``, a
-regulator from ``VIN`` to ``+3V3``, a ferrite to ``+3V3A`` and a level shifter powered
-from ``VIN`` and ``+3V3``. ``POWER_PATHS`` and ``SUPPLY_NETS`` go into its specs. The real command
-line runs in a child pytest with ``fake_nl`` serving the netlist, so no KiCad is
-needed. The control passes; each planted mistake turns exactly its check red, with the
-message that says why.
+regulator from ``VIN`` to ``+3V3``, a ferrite to ``+3V3A`` and a level shifter
+powered from ``VIN`` and ``+3V3``. ``POWER_PATHS`` and ``SUPPLY_NETS`` go into its
+specs. The real command line runs in a child pytest with ``fake_nl`` serving the
+netlist, so no KiCad is needed. The control passes; each planted mistake turns exactly
+its check red, with the message that says why.
 """
 
 from __future__ import annotations
