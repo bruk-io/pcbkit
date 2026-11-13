@@ -986,3 +986,63 @@ Plants that survive the reviewer's set, and why they need no test:
   the level nets is its gate:* with the one-way walk a gate is reached either from its
   own drain or source (which are then on the level nets too) or because the pin is on the
   gate net, where the FET's state cannot move the pin (equivalent).
+
+## Power paths (B) built (2026-11-12)
+
+Check B is in the `power` group, gate `sch`: `pcbkit/check/power_paths.py` (engine,
+`TABLES` holds `POWER_PATHS`, moved out of `tables.PROPOSED` unchanged),
+`pcbkit/check/builtin/test_power_paths.py` (`test_power_path[from->to]`,
+`test_no_unlisted_power_path`, `test_power_path_parts_are_modelled`), its
+`BUILTIN_GROUPS` row, three rows in the frozen gate table, its docs row and prose in the
+`power` block, `tests/unit/test_check_power_paths.py` and
+`tests/integration/test_check_power_paths_toy.py`. `links.py` changed in one way only:
+`_is_test_point` is public as `is_test_point`; no enable-link test changed.
+
+- **`SUPPLY_NETS` and `nets`:** the judged nets must be exactly the nets of
+  `SUPPLY_NETS` other than the ground net (`GROUND_NET`, or `GND` when that is not
+  defined and the design has it). A judged net missing from `SUPPLY_NETS`, a supply
+  missing from `nets`, or the ground net in `nets` fails all three checks by name. The
+  weaker rule (judged nets a subset of supplies) let a rail declared for the enable
+  links but left out of `nets` be back-fed silently. Cost: a second ground such as
+  `AGND` is judged like a rail, and each IC between it and a rail needs `{"U1": []}`.
+  The walk stops at exactly the same nets as the enable-link walk.
+- **Fail safe:** every part conducts unless it is on a closed list. Not walked (and
+  failed by name when it reaches two judged nets, on them or joined to them at
+  `max_ohm` or less either way): letters `U`, `IC`, `A`, connectors, test points. Open:
+  two-pad `C`. Walked by pinout: a part whose pins read as one FET (drain to source both
+  ways); everything else as `links.arcs` walks it (packs, DIP switches, two-pad A/K
+  diodes anode to cathode; all pads joined otherwise). Other `Q` parts join all pads.
+  `parts` overrides all of it and is trusted.
+- **Resistance:** a resistor weighs its value (an unreadable one 0 ohm, a not-fitted one
+  as fitted), everything else 0. A pair's resistance is the effective resistance of
+  every route the directed walk finds, solved as resistors (sparse LU), so parallel
+  routes combine; each element counts once however many ways it conducts. Every pair
+  current can flow between is recorded with its ohms, near misses included.
+- **Ordered pairs:** a part that conducts both ways between two judged rails (ferrite,
+  fuse, sense resistor, FET) needs a row each way. The toy board (USB and battery
+  inputs diode-ORed into `VIN`, a reverse-protection FET on the connector side, a
+  regulator to `+3V3`, a ferrite to `+3V3A`, a level shifter on two rails) writes one
+  `nets` line, five rows and two `parts` lines.
+
+Where the plan was wrong:
+
+- **Plant 1 cannot be caught as written.** The plan's own FET rule (the channel
+  undirected, covering the body diode) makes a drain and source swap the same graph;
+  a test shows the swap leaves every record the same. The plant used instead puts the
+  FET's drain on another rail.
+- **"A part not modelled with pins on two judged nets"** missed a regulator whose
+  output reaches the rail through a ferrite or inductor; the rule now counts a pad
+  joined to a rail at `max_ohm` or less.
+- **"Removing the named parts' edges leaves none"** is kept, and a named part on no
+  power path between the two nets now fails too.
+
+Known false pass, documented and tested: a path through two or more parts that are not
+walked, joined by a net that is not judged (a regulator into a load switch through an
+unjudged `VOUT_RAW`), is not seen unless one is declared or a row names it (the row then
+fails as not found, naming both). Joining every not-walked part's pads would close it
+but would flag every mixed-voltage interface. Also not modelled: Zener and TVS
+breakdown, and a two-pad part lettered `C` is a capacitor whatever its symbol.
+
+Measured: a generated 2,960-part board (60 ICs, 2,500 resistors, five rails) runs the
+unlisted check in 0.4 s and the unmodelled check in 0.6 s (527 s before the per-rail
+sparse solve).
